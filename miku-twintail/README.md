@@ -27,6 +27,15 @@
 | [prototype/index.html](prototype/index.html) | 採点ロジックと髪物理の検証用モック（単体 HTML、依存なし） |
 | [app/](app/) | P1: TextAlive App API 接続版（Vite。課題曲の実ビート・実歌詞・実ボーカル音量で動作、サビで自動判定） |
 
+## 遊ぶ（公開デモ）
+
+- **TextAlive 接続版（実曲で動く本命）**: https://pyororin.github.io/MagicalMirai-games001/miku-twintail/
+- 検証モック（擬似曲・依存なし）: https://pyororin.github.io/MagicalMirai-games001/miku-twintail/prototype/
+
+遊び方: ♪再生 → ミクが歌っている間（VOCAL 点灯中）にドラッグしてツインテールを 2 本描く。
+描いている間に歌われた歌詞が髪になり、タップ中はコードトーンの合いの手が鳴る。
+タップ・リリースが拍に合うと「ハリ・ツヤ」が上がり、サビ突入でミク度が自動判定される。
+
 ## モックの動かし方
 
 ```

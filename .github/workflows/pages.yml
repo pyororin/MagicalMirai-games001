@@ -5,7 +5,7 @@ name: Deploy app to GitHub Pages
 # 他企画のディレクトリを保持するため destination_dir でサブディレクトリに配置する。
 on:
   push:
-    branches: [claude/magical-miku-contest-proposal-r37lcw]
+    branches: [main, claude/magical-miku-contest-proposal-r37lcw]
     paths:
       - "miku-twintail/**"
       - ".github/workflows/pages.yml"

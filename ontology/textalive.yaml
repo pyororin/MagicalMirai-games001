@@ -1,0 +1,106 @@
+# TextAlive App API / Songle の知見（マジカルミライ プロコン向け）
+# スキーマは ontology/README.md を参照
+domain: textalive-app-api
+
+concepts:
+  - id: player
+    what: >
+      textalive-app-api の Player クラスが全機能のエントリーポイント。
+      new Player({ app: { token }, mediaElement, ... }) で初期化し、
+      addListener のイベント（onAppReady → onVideoReady → onTimerReady）で準備が進む。
+    depends_on: [app-token, required-domains]
+
+  - id: app-token
+    what: >
+      developer.textalive.jp で開発者登録・アプリ登録して発行するトークン。
+      クライアント側に埋め込む前提の公開トークン（公式サンプルもソースに直書き）。
+      アプリの URL 登録と紐づくため、公開先 URL が変わったら登録も更新する。
+
+  - id: required-domains
+    what: >
+      TextAlive アプリが実行時に通信するホスト一覧。ネットワーク制限環境
+      （社内プロキシ・sandbox・コンテンツブロッカー）ではすべての許可が必要。
+      - api.textalive.jp  … トークン検証、楽曲データ解決(cards/resolve)、歌詞ライセンス(etc/license)
+      - api.songle.jp     … Songle API 本体(v2/api.js, song.json)。音楽地図・再生同期の基盤
+      - songle.jp         … 歌詞パーサ(lyric_parsers/*.js) と piapro 曲の音源配信(/songs/*/u)。api.songle.jp とは別ホスト扱い
+      欠けたときの症状は pitfalls を参照。
+
+  - id: song-load
+    what: >
+      onAppReady で app.songUrl が空のときだけ createFromSongUrl(曲URL, { video: 版数ID }) を呼ぶ。
+      app.songUrl がある（クエリパラメタ or ホスト指定）ときは自動読み込みされるので呼ばない。
+      課題曲は毎年、piapro URL + 版数ID（beatId/chordId/repetitiveSegmentId/lyricId/lyricDiffId）で公表される。
+    depends_on: [player]
+
+  - id: host-managed
+    what: >
+      TextAlive ホスト（App Debugger・審査環境）接続時は app.managed が true。
+      再生・シーク UI はホストが持つため自前 UI を隠す。シーク・曲差し替えに追従できるよう、
+      描画は position 起点の純関数にし、内部状態を最小にする。
+    depends_on: [player]
+
+  - id: optional-data
+    what: >
+      ボーカル音量 getVocalAmplitude() と感情値 getValenceArousal() は、
+      Player 初期化オプション vocalAmplitudeEnabled / valenceArousalEnabled を
+      true にしておかないと使えない（後から有効化できない）。
+      音量の正規化には getMaxVocalAmplitude() を使う。
+    depends_on: [player]
+
+  - id: dev-song
+    what: >
+      動作確認済みの開発用デフォルト曲（公式サンプル textalive-app-basic と同一）。
+      マジカルミライ 2025 課題曲「ロンリーラン / 海風太陽」
+      songUrl: https://piapro.jp/t/CyPO/20250128183915
+      video: { beatId: 4694280, chordId: 2830735, repetitiveSegmentId: 2946483, lyricId: 67815, lyricDiffId: 20659 }
+    verified: 2026-08-30 (miku-twintail / typing-game 両企画)
+
+pitfalls:
+  - id: card-data-resolver-unavailable
+    symptom: >
+      画面が「読み込み中」のまま進まず、コンソールに
+      "Card data resolver is unavailable" が出る。
+    cause: >
+      Player 初期化時の api.textalive.jp への接続が失敗したまま
+      createFromSongUrl が呼ばれた（ライブラリ内の card マネージャ未初期化）。
+      ネットワーク到達性（ドメイン未許可・ブロッカー）が典型原因。コードのバグではないことが多い。
+    solution: >
+      required-domains の 3 ホストへの到達性を確認する。加えてライブラリ読み込みを
+      unpkg 依存にしない（バージョン未固定でブロッカーの影響も受けやすい）。
+      npm でバンドルするか、検証済みバージョンを vendor/ に同梱して同一オリジン配信する。
+    detection: >
+      createFromSongUrl に .catch を付け、window の error / unhandledrejection を拾い、
+      15 秒のウォッチドッグで 3 ホストへ fetch 疎通チェックして画面に表示する
+      （実装例: miku-twintail/app/src/main.js の「起動診断」）。
+    verified: 2026-08-30 (miku-twintail / typing-game)
+
+  - id: songle-jp-missing
+    symptom: >
+      曲名・アーティスト名（メタデータ）までは表示されるのに、再生しても
+      position が進まない・音が鳴らない。songle.jp/songs/*/u への読み込み失敗。
+    cause: >
+      songle.jp（ベアドメイン）が未許可。api.songle.jp を許可しただけでは足りない。
+      piapro 曲の音源そのものと歌詞パーサは songle.jp から配信される。
+    solution: songle.jp を api.songle.jp とは別エントリとして許可する。
+    verified: 2026-08-30 (miku-twintail)
+
+  - id: silent-load-failure
+    symptom: エラーが何も表示されず「読み込み中」で停止。原因調査に時間がかかる。
+    cause: >
+      createFromSongUrl の Promise 拒否や初期化中の例外が既定では画面に出ない。
+    solution: >
+      起動診断をテンプレとして最初から入れる（.catch + unhandledrejection + ウォッチドッグ疎通チェック）。
+      新規アプリでは最初のコミットから入れておくこと。
+    verified: 2026-08-30 (miku-twintail)
+
+  - id: cards-resolve-redirect
+    symptom: 独自プロキシ/中継層を挟むと cards/resolve の後で読み込みが止まる。
+    cause: api.textalive.jp/cards/resolve は 302 リダイレクトを返す。中継層がリダイレクトを追従しないと途切れる。
+    solution: 中継層ではリダイレクト追従（redirect: follow）で最終レスポンスを返す。
+    verified: 2026-08-30 (miku-twintail, sandbox 中継テスト)
+
+  - id: webaudio-user-gesture
+    symptom: 効果音・自前生成音が鳴らない（エラーも出ないことがある）。
+    cause: ブラウザの自動再生制限。AudioContext はユーザー操作（クリック/タップ）内で生成/resume が必要。
+    solution: 最初の pointerdown / ボタン押下で AudioContext を生成し resume する。
+    verified: 2026-08-30 (miku-twintail)
