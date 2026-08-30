@@ -48,6 +48,7 @@
     box-shadow:0 0 0 3px var(--night), 0 0 0 4px var(--edge)}
   .screen:focus{outline:none}
   .screen.playing{position:fixed;inset:0;z-index:60;margin:0;border:0;border-radius:0;height:100dvh;
+    padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);
     touch-action:none;user-select:none;-webkit-user-select:none}
   /* CRT の走査線。ドット絵と喧嘩しない強さに落とす */
   .screen::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:5;
@@ -111,13 +112,25 @@
   .overlay{position:absolute;inset:0;display:grid;place-items:center;
     background:color-mix(in oklab, var(--night) 88%, transparent);backdrop-filter:blur(3px);
     text-align:center;padding:20px;z-index:8;overflow:auto}
-  .overlay h2{font-family:var(--pixel);font-size:clamp(18px,4.2vw,28px);margin:0 0 10px;letter-spacing:.06em}
+  .overlay h2{font-family:var(--pixel);font-size:clamp(18px,4.2vw,28px);margin:0 0 10px;letter-spacing:.22em;
+    color:var(--key);text-shadow:3px 3px 0 var(--night)}
   .overlay p{color:var(--dim);margin:0 auto 14px;max-width:46ch;font-size:14px}
-  .overlay .result{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 auto 16px;max-width:460px}
-  @media (max-width:460px){ .overlay .result{grid-template-columns:repeat(2,1fr)} }
-  .overlay .result div{background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:8px 6px}
-  .overlay .result span{display:block;font-family:var(--pixel);font-size:11px;color:var(--dim);letter-spacing:.08em}
-  .overlay .result b{font-family:var(--pixel);font-size:19px;font-variant-numeric:tabular-nums}
+  /* リザルト:カード並びをやめ、ドット絵の成績表にする */
+  .result{max-width:420px;margin:0 auto 14px;text-align:left;font-family:var(--pixel)}
+  .result .rank{display:flex;align-items:center;gap:14px;margin:0 0 12px}
+  .result .stamp{width:84px;height:84px;display:grid;place-items:center;flex:0 0 auto;
+    font-size:44px;line-height:1;color:var(--night);background:var(--hot);
+    box-shadow:0 0 0 4px var(--night), 0 0 0 8px var(--hot);
+    animation:stamp .5s cubic-bezier(.2,1.6,.4,1)}
+  @keyframes stamp{0%{transform:scale(2.4) rotate(-12deg);opacity:0}60%{opacity:1}100%{transform:none;opacity:1}}
+  .result .score{font-size:13px;color:var(--dim);letter-spacing:.1em}
+  .result .score b{display:block;font-size:30px;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:.04em}
+  .result .bar{display:flex;height:14px;margin:0 0 10px;box-shadow:0 0 0 2px var(--edge)}
+  .result .bar i{display:block;height:100%}
+  .result table{width:100%;border-collapse:collapse;font-size:13px}
+  .result td{padding:3px 0;color:var(--dim);letter-spacing:.08em}
+  .result td+td{text-align:right;color:var(--ink);font-variant-numeric:tabular-nums}
+  .result td .chip{display:inline-block;width:9px;height:9px;margin-right:7px;vertical-align:-1px}
   .overlay .err{color:var(--bad);font-family:var(--pixel);font-size:13px;max-width:52ch;margin:0 auto 14px;word-break:break-all;white-space:pre-line;text-align:left}
   .keyhint{font-family:var(--pixel);font-size:11px;color:var(--dim);letter-spacing:.08em;line-height:1.9;margin:10px 0 0}
 
@@ -154,7 +167,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 11</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 12</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -185,6 +198,11 @@
     <label class="label" for="vol">音量</label>
     <input type="range" id="vol" min="0" max="100" step="5" value="80" aria-label="音量">
     <span class="label val" id="volVal">80</span>
+    <span style="width:10px"></span>
+    <label class="label" for="offset">判定ずれ</label>
+    <input type="range" id="offset" min="-150" max="150" step="5" value="0" aria-label="判定オフセット">
+    <span class="label val" id="offsetVal">0ms</span>
+    <button class="ghost" id="autoCal" title="直前のプレイの平均デルタを反映します">自動</button>
     <span class="label" id="speedNote" style="color:var(--dim);opacity:.7"></span>
   </div>
 
@@ -222,8 +240,12 @@
         <div class="result" id="ovResult" hidden></div>
         <button id="startBtn" disabled>スタート</button>
         <p class="keyhint">
-          画面のどこでも タップ / スライド上下左右 で入力(指を離した瞬間に確定)<br>
-          PC は Space=タップ ・ 矢印キー=上下左右
+          <b style="color:var(--key)">←</b> い段 ・
+          <b style="color:var(--good)">↑</b> う段 ・
+          <b style="color:var(--hot)">●</b> あ段 ・
+          <b style="color:var(--warn)">→</b> え段 ・
+          <b style="color:var(--dim)">↓</b> お段<br>
+          画面のどこでも タップ / スライドで入力(指を離した瞬間に確定)。PC は Space と矢印キー
         </p>
       </div>
     </div>
@@ -256,7 +278,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 11;
+  var BUILD = 12;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -427,13 +449,17 @@
     g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
     o.connect(g); g.connect(a.destination); o.start(t); o.stop(t+dur+0.02);
   }
-  var SE_SWEEP={c:1, l:0.72, u:1.5, r:1.32, d:0.6};
-  function seInput(dir){ blip(dir==="c"?880:740, 0.075, "square", 0.16, SE_SWEEP[dir]||1); }
-  function seJudge(g){
-    if(g==="JUST"){ blip(1568,0.10,"triangle",0.2); blip(2093,0.12,"triangle",0.12,1.02); }
-    else if(g==="GREAT"||g==="GOOD"){ blip(1318,0.09,"triangle",0.15); }
+  /* レーンごとに音階を割り当てる(ヨナ抜き五音音階)。打鍵そのものが旋律になり、
+     方向が音でも区別できる。上フリックほど高い音にして直感と合わせる。 */
+  var SE_PITCH={d:523.25, l:587.33, c:659.25, r:783.99, u:880.00};   // ド レ ミ ソ ラ
+  function seInput(dir){ blip((SE_PITCH[dir]||659.25)*0.5, 0.055, "square", 0.10); }
+  function seJudge(g,dir){
+    var f=SE_PITCH[dir]||659.25;
+    if(g==="JUST"){ blip(f,0.10,"triangle",0.20); blip(f*2,0.13,"triangle",0.10,1.02); }
+    else if(g==="GREAT"){ blip(f,0.09,"triangle",0.16); }
+    else if(g==="GOOD"){ blip(f,0.08,"triangle",0.12); }
     else if(g==="MISS"){ blip(150,0.16,"sawtooth",0.16,0.5); }
-    else if(g==="LATE"||g==="TYPED"){ blip(660,0.07,"triangle",0.1); }
+    else if(g==="LATE"||g==="TYPED"){ blip(f*0.75,0.07,"triangle",0.09); }
   }
 
   /* ============ はちゅねミク(ドット絵。表情+口パク) ============ */
@@ -485,18 +511,19 @@
   var el={};
   ["screen","kNow","kNext","field","notes","judge","delta","score","combo","progress","pauseBtn",
    "overlay","ovTitle","ovText","ovErr","ovResult","startBtn","songmeta","songUrl","loadSong","songPick",
-   "cross","lead","leadVal","speed","speedVal","vol","volVal","speedNote"]
+   "cross","lead","leadVal","speed","speedVal","vol","volVal","speedNote","offset","offsetVal","autoCal"]
     .forEach(function(id){ el[id]=document.getElementById(id); });
 
   var difficulty="NORMAL", player=null, videoPhrases=null, state=null;
 
   /* ============ 再生速度・音量・先読み ============ */
-  var speedRate=1, volume=80, leadMs=2000;
+  var speedRate=1, volume=80, leadMs=2000, offsetMs=0, lastAvgDelta=null;
   function mediaAudio(){ return document.querySelector("#media audio"); }
   function loadPrefs(){
     try{
       var s=localStorage.getItem("daken.speed"), v=localStorage.getItem("daken.volume"),
-          l=localStorage.getItem("daken.lead");
+          l=localStorage.getItem("daken.lead"), o=localStorage.getItem("daken.offset");
+      if(o) offsetMs=Math.min(150,Math.max(-150,parseInt(o,10)));
       if(s) speedRate=Math.min(1,Math.max(.5,parseFloat(s)));
       if(v!==null) volume=Math.min(100,Math.max(0,parseInt(v,10)));
       if(l) leadMs=Math.min(3000,Math.max(1200,parseInt(l,10)));
@@ -507,6 +534,7 @@
       localStorage.setItem("daken.speed",String(speedRate));
       localStorage.setItem("daken.volume",String(volume));
       localStorage.setItem("daken.lead",String(leadMs));
+      localStorage.setItem("daken.offset",String(offsetMs));
     }catch(e){}
   }
   function applySpeed(){
@@ -531,11 +559,22 @@
     el.lead.value=String(leadMs);
     el.leadVal.textContent=(leadMs/1000).toFixed(1)+"秒";
   }
+  function applyOffset(){
+    el.offset.value=String(offsetMs);
+    el.offsetVal.textContent=(offsetMs>0?"+":"")+offsetMs+"ms";
+    el.autoCal.disabled = (lastAvgDelta==null);
+  }
   loadPrefs();
   el.speed.addEventListener("input",function(){ speedRate=(+el.speed.value)/100; applySpeed(); savePrefs(); });
   el.vol.addEventListener("input",function(){ volume=+el.vol.value; applyVolume(); savePrefs(); });
   el.lead.addEventListener("input",function(){ leadMs=+el.lead.value; applyLead(); savePrefs(); });
-  applyLead();
+  el.offset.addEventListener("input",function(){ offsetMs=+el.offset.value; applyOffset(); savePrefs(); });
+  el.autoCal.addEventListener("click",function(){
+    if(lastAvgDelta==null) return;
+    offsetMs=Math.max(-150,Math.min(150,Math.round((offsetMs+lastAvgDelta)/5)*5));
+    applyOffset(); savePrefs();
+  });
+  applyLead(); applyOffset();
 
   /* ============ 譜面(全ノートを1本の時間軸で持つ) ============ */
   function selectIdx(notes,diff){
@@ -563,7 +602,8 @@
     return {notes:notes, phrases:phrases, idx:0, pi:0, score:0, combo:0, maxCombo:0, deltas:[],
             counts:{JUST:0,GREAT:0,GOOD:0,TYPED:0,LATE:0,MISS:0}, running:false, effects:[], voices:[]};
   }
-  function now(){ return player&&player.timer ? player.timer.position : 0; }
+  /* 端末ごとの入力・音声遅延を吸収するオフセット。判定にも描画にも同じ時計を使う */
+  function now(){ return (player&&player.timer ? player.timer.position : 0) - offsetMs; }
   function target(){ return state && state.idx<state.notes.length ? state.notes[state.idx] : null; }
 
   /* ============================================================
@@ -664,12 +704,13 @@
     dot(0,horizon,cw,ch-horizon,PAL.night2);
 
     // 客席のペンライト(拍で明滅。サビでは倍の密度で光る)
-    var lights=Math.floor(cw/(G*10)), lit=chorusNow?0.55:0.3;
+    var fever=(state&&state.combo>=12)?1:0;
+    var lights=Math.floor(cw/(G*10)), lit=(chorusNow?0.55:0.3)+fever*0.35;
     for(var i=0;i<lights;i++){
       var x=i*G*10+G*2;
       var phase=(i*7+(beatNow?beatNow.position:0)*3)%10;
       var on = phase/10 < lit+beatPulse*0.35;
-      var h=G*(2+(i%3));
+      var h=G*(2+(i%3))+(fever?Math.round(beatPulse*G):0);
       dot(x, horizon-h-G*(i%4), G, h, on ? DIR_COL[LANE_ORDER[i%5]].base : PAL.grid);
     }
     // 天井のトラスと吊りライト
@@ -760,6 +801,60 @@
     ctx.restore();
   }
 
+  /* 待機中もステージを動かし続ける(アトラクトモード)。
+     デモのノーツが5方向を順に落ちてくるので、押す前に遊び方が伝わる。 */
+  var attractOn=false, attractT0=0;
+  function drawAttract(){
+    if(!attractOn) return;
+    if(!cw||!ch){                       // レイアウト確定前でもループを止めない
+      resizeCanvas();
+      requestAnimationFrame(drawAttract);
+      return;
+    }
+    var t=performance.now()-attractT0;
+    beatPulse=Math.max(0,1-((t%600)/600)*1.6);
+    beatNow={startTime:0,duration:600,position:1+Math.floor(t/600)%4,length:4};
+    ctx.clearRect(0,0,cw,ch);
+    drawStage(t);
+    var jy=judgeY(), fw=fieldW(), x0=fieldX0(), laneW=fw/5;
+    for(var i=0;i<5;i++){
+      ctx.fillStyle = (i===2) ? "oklch(26% 0.05 300 / .55)" : "oklch(24% 0.04 275 / .45)";
+      ctx.fillRect(Math.round(x0+i*laneW), 0, Math.round(laneW), jy);
+      dot(x0+i*laneW, 0, G, jy, PAL.grid);
+    }
+    dot(x0+fw, 0, G, jy, PAL.grid);
+    drawSpeakers(jy);
+    // デモノーツ:5方向を順番に落とす
+    var size=Math.min(laneW*0.72, ch*0.15, 60), cyc=1400;
+    for(var k=0;k<3;k++){
+      var age=(t - k*cyc/1.2) % (cyc*5);
+      if(age<0) continue;
+      var idx=Math.floor(((t/cyc)|0)+k)%5, dir=LANE_ORDER[idx];
+      var prog=(age%cyc)/cyc;
+      if(prog<0.9) drawNote({kana:"ミク"[k%2]||"ミ", dir:dir, lane:idx},
+                            laneX(idx), prog/0.9*jy, size, false);
+    }
+    drawMikuOnStage(jy);
+    // ロゴ
+    ctx.save();
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillStyle=PAL.shade;
+    ctx.font='bold '+Math.round(Math.min(cw*0.14,64))+'px '+PIXEL_FONT;
+    ctx.fillText("打鍵ミライ", cw/2+G, ch*0.30+G);
+    ctx.fillStyle=PAL.ink;
+    ctx.fillText("打鍵ミライ", cw/2, ch*0.30);
+    ctx.restore();
+    if(attractOn) requestAnimationFrame(drawAttract);
+  }
+  function startAttract(){
+    if(attractOn) return;
+    attractOn=true; attractT0=performance.now();
+    requestAnimationFrame(drawAttract);
+  }
+  function stopAttract(){ attractOn=false; }
+  window.DAKEN_ATTRACT={start:startAttract, stop:stopAttract,
+    peek:function(){ return {attractOn:attractOn, cw:cw, ch:ch, t:attractT0}; }};
+
   function drawField(){
     if(!cw||!ch) return;
     var t=now(), jy=judgeY(), fw=fieldW(), x0=fieldX0(), laneW=fw/5, i;
@@ -783,6 +878,24 @@
     });
 
     drawSpeakers(jy);
+
+    // 最初のノーツが来るまでのカウントイン
+    var first=state.notes[state.idx];
+    if(first){
+      var until=first.time-t;
+      if(until>0 && until<4000 && state.idx===0){
+        var beats=Math.ceil(until/((beatNow&&beatNow.duration)||500));
+        ctx.save();
+        ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillStyle=PAL.ink;
+        ctx.font=Math.round(Math.min(cw*0.16,72))+'px '+PIXEL_FONT;
+        ctx.globalAlpha=Math.min(0.8,until/600);
+        ctx.fillText(String(Math.min(9,beats)), fieldX0()+fieldW()/2, ch*0.42);
+        ctx.font=Math.round(Math.min(cw*0.05,20))+'px '+PIXEL_FONT;
+        ctx.fillText("READY", fieldX0()+fieldW()/2, ch*0.42+Math.min(cw*0.13,58));
+        ctx.restore();
+      }
+    }
 
     // ノーツ
     var size=Math.min(laneW*0.72, ch*0.15, 60);
@@ -843,14 +956,14 @@
   }
 
   /* ============ 判定 ============ */
-  function showJudge(g,delta){
+  function showJudge(g,delta,dir){
     el.judge.className="judge "+g;
     el.judge.textContent=g;
     void el.judge.offsetWidth;
     el.judge.classList.add("show");
     el.delta.textContent = (g==="MISS") ? "" : (g==="TYPED") ? "先行入力" :
       (delta>=0?"+":"")+Math.round(delta)+" ms";
-    seJudge(g); mikuReact(g);
+    seJudge(g,dir); mikuReact(g);
   }
   function applyJudgement(i,commitTime){
     var n=state.notes[i];
@@ -871,14 +984,14 @@
       state.voices=state.voices||[];
       state.voices.push({kana:n.kana, lane:n.lane, at:performance.now()});
     }
-    showJudge(r.grade,r.delta);
+    showJudge(r.grade,r.delta,n.dir);
   }
   function flashMiss(dir){
     if(!state) return;
     state.combo=0; el.combo.textContent=0;
     el.screen.classList.remove("fever");
     if(dir) state.effects.push({lane:LANE_OF[dir], dir:dir, at:performance.now(), color:"MISS"});
-    showJudge("MISS",0);
+    showJudge("MISS",0,dir);
   }
 
   /** 入力(方向)を1つ受け取る。フリックは指を離した時点で呼ばれる */
@@ -955,25 +1068,30 @@
   function finish(){
     state.running=false;
     exitPlayLayout();
+    startAttract();
     try{ player.requestPause(); }catch(e){}
     var c=state.counts;
     var avg = state.deltas.length ?
       Math.round(state.deltas.reduce(function(a,b){return a+b;},0)/state.deltas.length) : null;
+    lastAvgDelta=avg; applyOffset();
     el.ovTitle.textContent="RESULT";
     var speedNote = speedRate<1 ? "速度 "+speedRate.toFixed(2)+"× の練習プレイです(等速ではありません)。" : "";
     el.ovText.textContent = speedNote + (avg==null ? "" :
       "平均デルタ "+(avg>=0?"+":"")+avg+" ms(正なら遅れ気味。大きい場合はキャリブレーションが必要)");
     el.ovResult.hidden=false;
+    var rows=[["JUST",c.JUST,"var(--hot)"],["GREAT",c.GREAT,"var(--key)"],["GOOD",c.GOOD,"var(--good)"],
+              ["TYPED",c.TYPED,"var(--dim)"],["LATE",c.LATE,"var(--warn)"],["MISS",c.MISS,"var(--bad)"]];
+    var total=rows.reduce(function(a,r){ return a+r[1]; },0) || 1;
     el.ovResult.innerHTML=
-      '<div><span>RANK</span><b style="color:var(--hot)">'+rank()+'</b></div>'+
-      '<div><span>SCORE</span><b>'+state.score+'</b></div>'+
-      '<div><span>MAX COMBO</span><b style="color:var(--warn)">'+state.maxCombo+'</b></div>'+
-      '<div><span>JUST</span><b style="color:var(--hot)">'+c.JUST+'</b></div>'+
-      '<div><span>GREAT</span><b style="color:var(--key)">'+c.GREAT+'</b></div>'+
-      '<div><span>GOOD</span><b style="color:var(--good)">'+c.GOOD+'</b></div>'+
-      '<div><span>TYPED</span><b style="color:var(--dim);opacity:.7">'+c.TYPED+'</b></div>'+
-      '<div><span>LATE</span><b style="color:var(--warn)">'+c.LATE+'</b></div>'+
-      '<div><span>MISS</span><b style="color:var(--bad)">'+c.MISS+'</b></div>';
+      '<div class="rank"><div class="stamp">'+rank()+'</div>'+
+        '<div class="score">SCORE<b>'+state.score+'</b>'+
+          'MAX COMBO '+state.maxCombo+' / '+total+'ノーツ</div></div>'+
+      '<div class="bar">'+rows.map(function(r){
+          return r[1] ? '<i style="width:'+(r[1]/total*100).toFixed(1)+'%;background:'+r[2]+'"></i>' : '';
+        }).join('')+'</div>'+
+      '<table>'+rows.map(function(r){
+          return '<tr><td><span class="chip" style="background:'+r[2]+'"></span>'+r[0]+'</td><td>'+r[1]+'</td></tr>';
+        }).join('')+'</table>';
     el.startBtn.textContent="もう一度";
     el.startBtn.disabled=false;
     el.overlay.style.display="grid";
@@ -996,6 +1114,7 @@
   function pauseGame(reason){
     if(!state||!state.running) return;
     state.running=false; paused=true;
+    startAttract();
     try{ player.requestPause(); }catch(e){}
     el.ovTitle.textContent="PAUSE";
     el.ovText.textContent=reason||"一時停止しました。";
@@ -1005,6 +1124,7 @@
     el.overlay.style.display="grid";
   }
   function resume(){
+    stopAttract();
     paused=false; state.running=true;
     enterPlayLayout();
     el.overlay.style.display="none";
@@ -1028,6 +1148,7 @@
     el.screen.classList.remove("fever");
     el.overlay.style.display="none";
     el.kNow.dataset.pi="";
+    stopAttract();
     state.running=true;
     state.seekPending=true; state.seekDeadline=performance.now()+4000;
     enterPlayLayout();
@@ -1269,7 +1390,7 @@
       window.DAKEN_DEBUG={phrases:videoPhrases, readings:data, cursor:cursor, player:player};
       state=buildState();
       window.DAKEN_STATE=state;                     // 検証用フック
-      resizeCanvas(); renderKaraoke(); drawField();
+      resizeCanvas(); renderKaraoke(); startAttract();
     });
   }
 
@@ -1293,9 +1414,9 @@
       },
       onTimerReady:function(){
         applySpeed(); applyVolume();
-        el.ovTitle.textContent="準備完了";
+        el.ovTitle.textContent="READY";
         el.ovText.textContent="かなが上から降ってきます。判定ラインに重なる瞬間に、"+
-          "そのノーツの横位置と同じ方向で入力してください(左から ← ↑ ● → ↓)。";
+          "そのノーツの横位置と同じ方向で入力してください。";
         el.startBtn.disabled=false;
       },
       // 準備段階で onPlay が飛ぶことがあるため、プレイ中以外はオーバーレイを閉じない
