@@ -1,12 +1,14 @@
-name: Deploy GitHub Pages
+name: Deploy app to GitHub Pages
 
-# GITHUB_TOKEN では Pages サイトの新規作成ができないため、
-# 自動有効化が働く gh-pages ブランチへの配置方式を採用している。
+# このリポジトリの Pages は gh-pages ブランチ配信（typing-game 案のワークフローが確立した方式）。
+# GITHUB_TOKEN では Pages サイトの新規作成ができないため actions/deploy-pages は使わない。
+# 他企画のディレクトリを保持するため destination_dir でサブディレクトリに配置する。
 on:
   push:
-    branches:
-      - main
-      - claude/magical-miku-typing-game-na507c
+    branches: [main, claude/magical-miku-contest-proposal-r37lcw]
+    paths:
+      - "miku-twintail/**"
+      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:
@@ -21,12 +23,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: miku-twintail/app/package-lock.json
+      - run: npm ci
+        working-directory: miku-twintail/app
+      - run: npm run build
+        working-directory: miku-twintail/app
       - name: Collect static files
         run: |
-          mkdir -p _site
-          rsync -a --exclude 'node_modules' --exclude '.git' --exclude '.github' --exclude '_site' ./ _site/
-          touch _site/.nojekyll
+          mkdir -p _site/prototype
+          cp -r miku-twintail/app/dist/* _site/
+          cp miku-twintail/prototype/index.html _site/prototype/
       - uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./_site
+          destination_dir: miku-twintail
