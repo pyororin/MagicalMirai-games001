@@ -136,8 +136,14 @@ pitfalls:
       createFromSongUrl に .catch を付け、window の error / unhandledrejection を拾い、
       15 秒のウォッチドッグで 3 ホストへ疎通チェックして画面に表示する
       （実装例: miku-twintail/app/src/main.js の「起動診断」）。
-      疎通は OK なのに読み込みだけ失敗する → この 302 問題。疎通自体が失敗 → ドメイン遮断。
-    verified: 2026-08-30 (miku-twintail: 302 を再現するテストで全6曲のフォールバック成功 / typing-game: 原因特定)
+      さらに fetch/axios をラップして「失敗した通信の URL と HTTP ステータス」を
+      画面に出すと原因が一意に絞れる（実装例: typing-game/prototype/textalive.html）。
+      注意: redirect:"manual" の応答は正常でも status 0 に見えるため「HTTP 0」を即異常と判断しない。
+    verified: 2026-08-30 (miku-twintail / typing-game)
+    note: >
+      同じ症状に原因が 2 系統ある。ネットワーク到達性（上記）と、
+      クライアント/サーバーのリダイレクト不一致（cards-resolve-302-mismatch）。
+      ドメインが全て到達可能なのに出るなら後者を疑う。
 
   - id: cors-probe-false-positive
     symptom: >
@@ -185,7 +191,8 @@ pitfalls:
   - id: cards-resolve-redirect
     symptom: 独自プロキシ/中継層を挟むと cards/resolve の後で読み込みが止まる。
     cause: api.textalive.jp/cards/resolve は 302 リダイレクトを返す。中継層がリダイレクトを追従しないと途切れる。
-    solution: 中継層ではリダイレクト追従（redirect: follow）で最終レスポンスを返す。
+    solution: >
+      中継層ではリダイレクト追従（redirect follow）で最終レスポンスを返す。
     verified: 2026-08-30 (miku-twintail, sandbox 中継テスト)
 
   - id: webaudio-user-gesture
@@ -193,3 +200,82 @@ pitfalls:
     cause: ブラウザの自動再生制限。AudioContext はユーザー操作（クリック/タップ）内で生成/resume が必要。
     solution: 最初の pointerdown / ボタン押下で AudioContext を生成し resume する。
     verified: 2026-08-30 (miku-twintail)
+
+  - id: cards-resolve-302-mismatch
+    symptom: >
+      ドメイン到達性・トークン・CORS がすべて正常なのに
+      createFromSongUrl が即座に "Card data resolver is unavailable" で失敗する。
+      診断すると /cards/resolve が「HTTP 0」と記録される。
+    cause: >
+      クライアント v0.5.2 は /cards/resolve に 200 JSON を期待するが、
+      サーバーは 302 リダイレクトを返す（サーバー側の挙動にクライアント最新版が未追従）。
+      ライブラリは fetch(..., {redirect:"manual"}) で呼ぶため 302 は status 0 になり、
+      status!==200 → {status:"unavailable"} → 例外、という経路をたどる。
+      ブラウザから直接叩く場合に顕在化する（中継層がリダイレクトを追従する構成では起きない）。
+    solution: |
+      失敗時に自前でリダイレクトを追従し、確定したカード URL を createFromCardUrl に渡す。
+        player.createFromSongUrl(url, opts).catch(e => {
+          if (!String(e).includes("Card data resolver")) throw e;
+          return fetch("https://api.textalive.jp/cards/resolve?url=" + encodeURIComponent(url),
+                       { redirect: "follow", headers: { "x-ta-app-token": APP_TOKEN } })
+            .then(r => { if (!r.ok || !r.url) throw e; return player.createFromCardUrl(r.url, opts); });
+        });
+      重要: resolve のリダイレクト先はトークンヘッダの有無で変わる。
+      ヘッダ有り → 相対 /cards/{id}（api ホストの JSON・CORS 有り・200）。
+      ヘッダ無し → https://textalive.jp/cards/{id}（人間向けページ）。必ずトークンを付ける。
+
+      別解（曲が固定なら、より確実）: カード URL を開発時に解決して定数に持ち、
+      失敗時は createFromCardUrl(既知のカードURL) を呼ぶ。実行時のリダイレクト追従も
+      CORS プリフライトも不要になる。課題曲 6 曲のカード URL は contest-songs-2025 に記録済み。
+      事前解決コマンド:
+        curl -sS -o /dev/null -w "%{redirect_url}" \
+          "https://api.textalive.jp/cards/resolve?url=<URLエンコードした曲URL>" \
+          -H "x-ta-app-token: <トークン>"
+      実装例: miku-twintail/app/src/main.js の loadSong。
+    detection: >
+      curl -si -H "x-ta-app-token: $TOKEN" \
+        "https://api.textalive.jp/cards/resolve?url=<encoded>" | head -5
+      で 302 と location を確認する。
+    verified: 2026-08-30 (typing-game、302 を再現した E2E で修正を確認)
+    refs: [typing-game/prototype/textalive.html]
+
+  - id: token-header-name
+    symptom: 自前で API を叩くと {"error":"invalid TextAlive token"} が返る。
+    cause: ヘッダ名の誤り。x-textalive-app-token ではなく x-ta-app-token が正しい。
+    solution: |
+      ヘッダは x-ta-app-token。トークン有効性は次で確認できる。
+      curl -s -H "x-ta-app-token: $TOKEN" https://api.textalive.jp/ | jq .app
+      app.data.name にアプリ名が返れば有効（app.error があれば無効）。
+    verified: 2026-08-30 (typing-game)
+
+  - id: invalid-token-degrades-silently
+    symptom: トークンが無効でも例外が出ず、後段で無関係に見えるエラーになる。
+    cause: >
+      ライブラリはトークン検証に失敗すると console.warn
+      （「トークンが正しく指定されていないため動作しません」）を出すだけで劣化続行する。
+    solution: 初期化直後に console を確認する。上記 curl で事前検証する。
+    verified: 2026-08-30 (typing-game、ライブラリ実装を確認)
+
+  - id: no-reading-data-for-kanji
+    symptom: 歌詞の文字を「かな」として扱いたいのに、漢字の読みが取れない。
+    cause: >
+      TextAlive の文字単位データ（char.text）は表示文字であり、読み（かな）は API から提供されない。
+      実測（ロンリーラン）では表示 386 文字中かなは 284 文字（74%）。
+    solution: >
+      読みが必要なら形態素解析による事前生成が要る。かなだけ扱う設計なら
+      カタカナは charCode - 0x60 でひらがなへ正規化し、拗音（きゃ等）は
+      前後の文字を結合して 1 音節にまとめる。
+    detection: 実データのかな比率と文字間隔は onVideoReady 後に video.firstPhrase を辿って集計できる。
+    verified: 2026-08-30 (typing-game、実データ 34 フレーズで計測)
+    refs: [typing-game/prototype/src/romaji.ts]
+
+  - id: char-interval-can-be-51ms
+    symptom: 文字単位タイミングで判定を作ると、速い箇所で隣の文字を誤判定する。
+    cause: >
+      歌の文字間隔は等間隔ではなく、実測で最小 51ms まで詰まる
+      （中央値 330ms、90%ile 1053ms）。固定の判定ウィンドウでは隣と食い合う。
+    solution: >
+      判定ウィンドウを隣接ノートとの中間点でクランプする。
+      実測では間隔 200ms 未満の箇所が 250 中 41 あり、クランプは必須。
+    verified: 2026-08-30 (typing-game、ロンリーランで計測)
+    refs: [typing-game/prototype/src/judge.ts]
