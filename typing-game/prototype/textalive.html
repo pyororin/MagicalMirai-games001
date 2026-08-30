@@ -172,7 +172,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 13</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 14</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -283,7 +283,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 13;
+  var BUILD = 14;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -347,7 +347,10 @@
     return {grade:"MISS",delta:d};
   }
   function comboMult(c){ return Math.min(1+Math.floor(c/10)*0.1,2); }
-  var SUSTAIN={EASY:2.0,NORMAL:4.0,HARD:Infinity};   // 1かな=1操作なので「操作/秒」
+  var SUSTAIN={EASY:2.0,NORMAL:4.0,HARD:8.0};        // 1かな=1操作なので「操作/秒」
+  // HARD でも 8操作/秒(125ms間隔)が上限。実測で最小48msの箇所があり、
+  // それは指が物理的に追いつかないため落とす(理論値挑戦であって不可能ではない、に寄せる)
+  var LEAD_DEFAULT={EASY:2500,NORMAL:2000,HARD:1600};
 
   /* ============ 読みデータ(事前生成、data/readings/) ============ */
   function toHira(s){
@@ -469,50 +472,99 @@
     else if(g==="LATE"||g==="TYPED"){ blip(f*0.75,0.07,"triangle",0.09); }
   }
 
-  /* ============ はちゅねミク(ドット絵。表情+口パク) ============ */
+  /* ============================================================
+     はちゅねミク:32x40 の全身ドット絵。表情・口・腕のポーズを持ち、
+     拍で跳ね、入力方向へツインテールがなびく。
+     スプライトは変化があったときだけ描き直し、揺れは描画側で足す。
+     ============================================================ */
   var mikuCv=document.getElementById("miku"), mikuCtx=mikuCv.getContext("2d");
-  var P={ hair:"#39C5BB", hair2:"#2A9E96", skin:"#FBE3D4",
-          eye:"#1E3A5F", eyeHi:"#EAF6FF", mouth:"#8E2B47", tongue:"#FF7FA8", blush:"#FFB3C7" };
-  var mikuExpr="normal", mikuExprUntil=0, mikuMouth=0;
-  function px(x,y,w,h,color){ mikuCtx.fillStyle=color; mikuCtx.fillRect(x,y,w,h); }
+  mikuCv.width=32; mikuCv.height=40;
+  var MK={
+    hair:"#39C5BB", hair2:"#2A9E96", hair3:"#1F7C76", skin:"#FBE3D4", skin2:"#E9C4B2",
+    eye:"#1E3A5F", eyeHi:"#EAF6FF", mouth:"#8E2B47", tongue:"#FF7FA8", blush:"#FFB3C7",
+    shirt:"#EDF1FF", shirt2:"#A9B4D6", tie:"#39C5BB", skirt:"#2B3566", skirt2:"#1E2749",
+    leg:"#39424F", boot:"#2A9E96", line:"#141A33"
+  };
+  var mikuExpr="normal", mikuExprUntil=0, mikuMouth=0, mikuPose="idle", mikuKey="";
+  function mp(x,y,w,h,c){ mikuCtx.fillStyle=c; mikuCtx.fillRect(x,y,w,h); }
   function drawMiku(){
-    mikuCtx.clearRect(0,0,24,24);
-    px(1,7,3,15,P.hair); px(20,7,3,15,P.hair);
-    px(1,20,3,2,P.hair2); px(20,20,3,2,P.hair2);
-    px(2,22,2,1,P.hair2); px(20,22,2,1,P.hair2);
-    px(3,6,2,3,P.hair2);  px(19,6,2,3,P.hair2);
-    px(6,1,12,3,P.hair); px(5,2,14,3,P.hair);
-    px(4,4,16,2,P.hair);
-    px(5,6,14,12,P.skin);
-    px(5,5,14,1,P.hair2);
-    px(4,6,1,11,P.hair2); px(19,6,1,11,P.hair2);
-    px(5,18,14,1,P.hair2);
-    px(5,6,14,2,P.hair); px(8,8,3,1,P.hair); px(14,8,3,1,P.hair);
-    px(6,13,2,1,P.blush); px(16,13,2,1,P.blush);
-    var e=mikuExpr;
-    if(e==="ok"){
-      px(7,11,1,1,P.eye); px(8,10,2,1,P.eye); px(10,11,1,1,P.eye);
-      px(14,11,1,1,P.eye); px(15,10,2,1,P.eye); px(17,11,1,1,P.eye);
-    } else if(e==="miss"){
-      px(7,10,1,1,P.eye); px(8,11,1,1,P.eye); px(7,12,1,1,P.eye);
-      px(17,10,1,1,P.eye); px(16,11,1,1,P.eye); px(17,12,1,1,P.eye);
-      px(9,10,1,1,P.eye); px(15,10,1,1,P.eye);
+    var key=mikuExpr+"/"+mikuMouth+"/"+mikuPose;
+    if(key===mikuKey) return;                 // 変化が無ければ描き直さない
+    mikuKey=key;
+    mikuCtx.clearRect(0,0,32,40);
+
+    // ツインテール(左右)。房を3段に分けて陰影を付ける
+    mp(4,6,4,12,MK.hair);   mp(24,6,4,12,MK.hair);
+    mp(4,18,4,6,MK.hair2);  mp(24,18,4,6,MK.hair2);
+    mp(5,24,3,4,MK.hair2);  mp(24,24,3,4,MK.hair2);
+    mp(5,28,3,2,MK.hair3);  mp(24,28,3,2,MK.hair3);
+    mp(4,5,4,2,MK.hair3);   mp(24,5,4,2,MK.hair3);   // 結び目
+
+    // 頭
+    mp(10,2,12,3,MK.hair);
+    mp(9,3,14,3,MK.hair);
+    mp(9,6,14,10,MK.skin);
+    mp(9,5,14,1,MK.hair2);
+    mp(8,6,1,9,MK.hair2); mp(23,6,1,9,MK.hair2);
+    mp(9,16,14,1,MK.skin2);
+    mp(9,6,14,2,MK.hair);                    // 前髪
+    mp(12,8,3,1,MK.hair); mp(17,8,3,1,MK.hair);
+    mp(10,12,2,1,MK.blush); mp(20,12,2,1,MK.blush);
+
+    // 目
+    if(mikuExpr==="ok"){
+      mp(11,10,1,1,MK.eye); mp(12,9,2,1,MK.eye); mp(14,10,1,1,MK.eye);
+      mp(18,10,1,1,MK.eye); mp(19,9,2,1,MK.eye); mp(21,10,1,1,MK.eye);
+    } else if(mikuExpr==="miss"){
+      mp(11,9,1,1,MK.eye); mp(12,10,1,1,MK.eye); mp(11,11,1,1,MK.eye);
+      mp(21,9,1,1,MK.eye); mp(20,10,1,1,MK.eye); mp(21,11,1,1,MK.eye);
+      mp(13,9,1,1,MK.eye); mp(19,9,1,1,MK.eye);
     } else {
-      px(7,10,3,4,P.eye); px(15,10,3,4,P.eye);
-      px(8,10,1,1,P.eyeHi); px(16,10,1,1,P.eyeHi);
+      mp(11,9,3,4,MK.eye); mp(19,9,3,4,MK.eye);
+      mp(12,9,1,1,MK.eyeHi); mp(20,9,1,1,MK.eyeHi);
     }
-    var m=mikuMouth;
-    if(m<=0){ px(11,15,3,1,P.mouth); }
-    else if(m===1){ px(11,15,3,2,P.mouth); px(11,15,3,1,P.tongue); }
-    else { px(10,14,5,4,P.mouth); px(11,16,3,1,P.tongue); }
+    // 口
+    if(mikuMouth<=0){ mp(15,14,2,1,MK.mouth); }
+    else if(mikuMouth===1){ mp(15,14,3,2,MK.mouth); mp(15,14,3,1,MK.tongue); }
+    else { mp(14,13,5,4,MK.mouth); mp(15,15,3,1,MK.tongue); }
+
+    // 首と肩
+    mp(15,17,3,1,MK.skin2);
+    mp(11,18,10,7,MK.shirt);
+    mp(11,18,10,1,MK.tie);                    // 襟
+    mp(15,19,2,4,MK.tie);                     // ネクタイ
+    mp(11,24,10,1,MK.shirt2);
+
+    // 腕(ポーズで変える)。袖は本体より一段暗くして白いシャツから浮かせる
+    if(mikuPose==="up"){                      // ヒット:両手を上げる
+      mp(8,11,2,8,MK.shirt2); mp(22,11,2,8,MK.shirt2);
+      mp(8,10,2,1,MK.line);   mp(22,10,2,1,MK.line);
+      mp(8,8,2,2,MK.skin);    mp(22,8,2,2,MK.skin);
+    } else if(mikuPose==="down"){              // ミス:うなだれる
+      mp(9,20,2,7,MK.shirt2); mp(21,20,2,7,MK.shirt2);
+      mp(9,27,2,2,MK.skin);   mp(21,27,2,2,MK.skin);
+    } else {                                   // 通常
+      mp(9,19,2,6,MK.shirt2); mp(21,19,2,6,MK.shirt2);
+      mp(9,25,2,2,MK.skin);   mp(21,25,2,2,MK.skin);
+    }
+
+    // スカート・脚・ブーツ
+    mp(10,25,12,4,MK.skirt);
+    mp(9,28,14,2,MK.skirt2);
+    mp(13,30,2,5,MK.leg); mp(17,30,2,5,MK.leg);
+    mp(12,35,4,3,MK.boot); mp(16,35,4,3,MK.boot);
+    mp(12,38,4,1,MK.line); mp(16,38,4,1,MK.line);
   }
   function mikuReact(g){
     mikuExpr = (g==="MISS") ? "miss" : "ok";
-    mikuExprUntil = performance.now() + 600;
+    mikuPose = (g==="MISS") ? "down" : "up";
+    mikuExprUntil = performance.now() + 520;
     drawMiku();
   }
   drawMiku();
-  window.DAKEN_MIKU=function(expr,mouth){ mikuExpr=expr; mikuMouth=mouth|0; drawMiku(); };
+  window.DAKEN_MIKU=function(expr,mouth,pose){
+    mikuExpr=expr; mikuMouth=mouth|0; mikuPose=pose||"idle"; mikuKey=""; drawMiku();
+  };
 
   /* ============ 要素 ============ */
   var el={};
@@ -586,7 +638,6 @@
   /* ============ 譜面(全ノートを1本の時間軸で持つ) ============ */
   function selectIdx(notes,diff){
     var ops=SUSTAIN[diff];
-    if(ops===Infinity) return notes.map(function(_,i){return i;});
     var gap=1000/ops, out=[], last=-Infinity;
     notes.forEach(function(n,i){
       if(i===0 || n.time-last>=gap){ out.push(i); last=n.time; }
@@ -787,13 +838,18 @@
   /* ---- はちゅねミク:ステージ上で拍に合わせて跳ね、入力方向へ髪がなびく ---- */
   var mikuSway=0, mikuSwayDir="c";
   function drawMikuOnStage(jy){
-    var scale=Math.max(3, Math.round((ch*0.16)/24/1))*1;    // 24px スプライトの拡大率
-    var w=24*scale, h=24*scale;
-    var x=Math.round((fieldX0()+fieldW()+ (cw-fieldX0()-fieldW())/2 - w/2)/G)*G;
-    if(cw-fieldX0()-fieldW() < w+G*4) x=Math.round((cw-w-G*2)/G)*G;   // 狭い画面では右端に寄せる
+    /* 置き場所: レーン帯の外側に余白があればそこ(大きめ)、
+       無ければ判定ラインより下の帯に収まる大きさで右下へ。ノーツを隠さないことを優先。 */
+    var marginW=cw-(fieldX0()+fieldW()), below=ch-jy-G*2;
+    var inMargin=marginW > 32*3+G*4;
+    var scale = inMargin ? Math.max(3, Math.min(6, Math.floor(Math.min(marginW/34, ch*0.45/40))))
+                         : Math.max(2, Math.min(4, Math.floor(below/40)));
+    var w=32*scale, h=40*scale;
     var idle=(Math.sin(performance.now()/620)+1)/2;
     var bounce=Math.round((beatPulse*2+idle*0.6)*G);
-    var y=Math.round((ch-h-G*2)/G)*G - bounce;
+    var x = inMargin ? Math.round((fieldX0()+fieldW()+(marginW-w)/2)/G)*G
+                     : Math.round((cw-w-G*2)/G)*G;
+    var y = Math.round((inMargin ? ch-h-G*3 : Math.max(jy+G, ch-h-G*2))/G)*G - bounce;
     ctx.save();
     ctx.imageSmoothingEnabled=false;
     if(mikuSway>0){                                          // フリック方向へ残像
@@ -1060,8 +1116,12 @@
       if(t>=P.chars[i].startTime && t<P.chars[i].endTime){ singing=true; break; }
     }
     var m = amp>0.5?2 : amp>0.18?1 : (singing ? ((Math.floor(t/110)%2)+1) : 0);
-    var expr = (performance.now()<mikuExprUntil) ? mikuExpr : "normal";
-    if(m!==mikuMouth || expr!==mikuExpr){ mikuMouth=m; mikuExpr=expr; drawMiku(); }
+    var live=performance.now()<mikuExprUntil;
+    var expr = live ? mikuExpr : "normal";
+    var pose = live ? mikuPose : "idle";
+    if(m!==mikuMouth || expr!==mikuExpr || pose!==mikuPose){
+      mikuMouth=m; mikuExpr=expr; mikuPose=pose; drawMiku();
+    }
 
     var last=state.notes[state.notes.length-1];
     if((dur>0 && t>=dur-200) || (state.idx>=state.notes.length && t>last.time+1500)){ finish(); return; }
@@ -1258,6 +1318,7 @@
   Array.prototype.forEach.call(document.querySelectorAll("[data-diff]"),function(b){
     b.addEventListener("click",function(){
       difficulty=b.getAttribute("data-diff");
+      leadMs=LEAD_DEFAULT[difficulty]||2000; applyLead(); savePrefs();   // 難易度ごとの見やすさに合わせる
       Array.prototype.forEach.call(document.querySelectorAll("[data-diff]"),function(o){
         o.setAttribute("aria-pressed", String(o===b));
       });
