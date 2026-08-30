@@ -33,6 +33,7 @@ const player = new Player({
 });
 
 let ready = false, maxAmp = 1;
+window.textAlivePlayer = player;   // デバッグ・自動テスト用
 
 player.addListener({
   onAppReady(app) {
