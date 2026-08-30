@@ -176,7 +176,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 16</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 17</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -289,7 +289,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 16;
+  var BUILD = 17;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -1330,9 +1330,11 @@
   /* ============ 入力:タップ / スライド上下左右 の5種類だけ ============ */
   (function(){
     /* 入力面は画面全体。細い帯を狙わせると、スマホでは指が外れて
-       「フリックが効かない」状態になるため。 */
+       「フリックが効かない」状態になるため。
+       速い箇所は両手の親指を交互に使うので、指ごとに独立して受け付ける
+       (指1本ぶんしか見ないと、交互に置いた2本目が丸ごと無視される)。 */
     var surface=el.screen, cross=el.cross;
-    var sx=0, sy=0, active=false, THRESH=22;
+    var pointers={}, mouseActive=false, msx=0, msy=0, THRESH=22;
     function ignore(e){
       if(!state||!state.running) return true;                       // 開始前はページ操作を優先
       var t=e.target;
@@ -1359,36 +1361,60 @@
       for(var i=0;i<cells.length;i++)
         cells[i].classList.toggle("sel", cells[i].getAttribute("data-dir")===dir);
     }
-    function pt(e){ return e.touches&&e.touches.length?e.touches[0]:(e.changedTouches?e.changedTouches[0]:e); }
-    function down(e){
+    function rectOf(){ return surface.getBoundingClientRect(); }
+
+    surface.addEventListener("touchstart",function(e){
       if(ignore(e)) return;
       e.preventDefault();
-      var rect=surface.getBoundingClientRect(), p=pt(e);
-      sx=p.clientX; sy=p.clientY; active=true;
-      renderCross(p.clientX-rect.left, p.clientY-rect.top);
-      highlight("c");
-    }
-    function move(e){
-      if(!active) return;
+      var r=rectOf();
+      for(var i=0;i<e.changedTouches.length;i++){
+        var t=e.changedTouches[i];
+        pointers[t.identifier]={sx:t.clientX, sy:t.clientY};
+        renderCross(t.clientX-r.left, t.clientY-r.top);
+        highlight("c");
+      }
+    },{passive:false});
+    surface.addEventListener("touchmove",function(e){
+      if(!Object.keys(pointers).length) return;
       e.preventDefault();
-      var p=pt(e);
-      highlight(resolveDir(p.clientX-sx, p.clientY-sy));
-    }
-    function up(e){
-      if(!active) return;
+      for(var i=0;i<e.changedTouches.length;i++){
+        var t=e.changedTouches[i], p=pointers[t.identifier];
+        if(p) highlight(resolveDir(t.clientX-p.sx, t.clientY-p.sy));
+      }
+    },{passive:false});
+    function endTouch(e){
+      if(!Object.keys(pointers).length) return;
       e.preventDefault();
-      active=false;
-      cross.classList.remove("show");
-      var p=pt(e);
-      sendDir(resolveDir(p.clientX-sx, p.clientY-sy));   // 離した瞬間に確定+SE
+      for(var i=0;i<e.changedTouches.length;i++){
+        var t=e.changedTouches[i], p=pointers[t.identifier];
+        if(!p) continue;
+        delete pointers[t.identifier];
+        sendDir(resolveDir(t.clientX-p.sx, t.clientY-p.sy));   // 指を離した瞬間に確定+SE
+      }
+      if(!Object.keys(pointers).length) cross.classList.remove("show");
     }
-    surface.addEventListener("touchstart",down,{passive:false});
-    surface.addEventListener("touchmove",move,{passive:false});
-    surface.addEventListener("touchend",up,{passive:false});
-    surface.addEventListener("mousedown",down);
-    surface.addEventListener("mousemove",move);
-    surface.addEventListener("mouseup",up);
-    surface.addEventListener("mouseleave",function(){ active=false; cross.classList.remove("show"); });
+    surface.addEventListener("touchend",endTouch,{passive:false});
+    surface.addEventListener("touchcancel",function(e){
+      for(var i=0;i<e.changedTouches.length;i++) delete pointers[e.changedTouches[i].identifier];
+      if(!Object.keys(pointers).length) cross.classList.remove("show");
+    },{passive:false});
+
+    // マウス(PC の確認用)は従来どおり1本だけ
+    surface.addEventListener("mousedown",function(e){
+      if(ignore(e)) return;
+      var r=rectOf();
+      msx=e.clientX; msy=e.clientY; mouseActive=true;
+      renderCross(e.clientX-r.left, e.clientY-r.top); highlight("c");
+    });
+    surface.addEventListener("mousemove",function(e){
+      if(mouseActive) highlight(resolveDir(e.clientX-msx, e.clientY-msy));
+    });
+    surface.addEventListener("mouseup",function(e){
+      if(!mouseActive) return;
+      mouseActive=false; cross.classList.remove("show");
+      sendDir(resolveDir(e.clientX-msx, e.clientY-msy));
+    });
+    surface.addEventListener("mouseleave",function(){ mouseActive=false; cross.classList.remove("show"); });
   })();
 
   var KEY_DIR={" ":"c","Spacebar":"c","Enter":"c",
