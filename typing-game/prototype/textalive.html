@@ -103,16 +103,64 @@
   /* はちゅねはフィールドの canvas に直接描くので、この要素はスプライト置き場 */
   #miku{position:absolute;width:0;height:0;opacity:0;pointer-events:none}
 
-  /* 触った位置に出る方向ガイド(いま何を選んでいるかの確認用) */
-  .cross{position:absolute;width:0;height:0;pointer-events:none;opacity:0;transition:opacity .06s;z-index:4}
+  /* 触った位置に出る方向ガイド。スマホの明るい環境でも読めるよう、
+     文字の矢印(←↑→↓)ではなく SVG の太い矢印で描く。
+     セルは指の下に隠れないよう中心から離し、選択中は拡大して強調する。 */
+  .cross{position:absolute;width:0;height:0;pointer-events:none;opacity:0;transition:opacity .08s;z-index:4}
   .cross.show{opacity:1}
-  .cross .cell{position:absolute;width:46px;height:46px;margin:-23px 0 0 -23px;display:grid;place-items:center;
-    font-family:var(--pixel);font-size:20px;background:color-mix(in oklab, var(--panel) 92%, transparent);border:1px solid var(--line);
-    border-radius:8px;color:var(--dim)}
-  .cross .cell.c{left:0;top:0} .cross .cell.l{left:-54px;top:0} .cross .cell.u{left:0;top:-54px}
-  .cross .cell.r{left:54px;top:0} .cross .cell.d{left:0;top:54px}
-  .cross .cell.tgt{border-color:var(--hot);color:var(--hot)}
-  .cross .cell.sel{background:var(--key);color:var(--night);border-color:var(--key)}
+  .cross .cell{position:absolute;width:56px;height:56px;margin:-28px 0 0 -28px;
+    display:grid;place-items:center;border-radius:12px;
+    background:color-mix(in oklab, var(--night) 82%, transparent);
+    border:2px solid var(--line);
+    box-shadow:0 2px 10px color-mix(in oklab, var(--night) 70%, transparent);
+    transition:transform .07s ease-out, background .07s, border-color .07s;
+    color:var(--dim)}
+  .cross .cell svg{width:30px;height:30px;display:block}
+  .cross .cell.c{left:0;top:0} .cross .cell.l{left:-66px;top:0} .cross .cell.u{left:0;top:-66px}
+  .cross .cell.r{left:66px;top:0} .cross .cell.d{left:0;top:66px}
+  /* 次に打つべき方向:点滅する枠で「ここを狙う」ことを示す */
+  .cross .cell.tgt{border-color:var(--hot);color:var(--hot);
+    background:color-mix(in oklab, var(--hot) 22%, color-mix(in oklab, var(--night) 82%, transparent));
+    animation:tgtPulse .9s ease-in-out infinite alternate}
+  @keyframes tgtPulse{from{box-shadow:0 0 0 0 color-mix(in oklab,var(--hot) 55%,transparent)}
+                      to{box-shadow:0 0 0 7px color-mix(in oklab,var(--hot) 0%,transparent)}}
+  /* いま指が指している方向:塗りつぶし+拡大で、離す前に確実に分かる */
+  .cross .cell.sel{background:var(--key);color:var(--night);border-color:var(--key);
+    transform:scale(1.18)}
+  .cross .cell.tgt.sel{background:var(--hot);border-color:var(--hot);color:var(--night);animation:none}
+  /* 指の起点からのびるスライド線。セルの上に重ねて、どちらへ
+     どれだけ滑らせたかが指の下でも分かるようにする。 */
+  .cross .trail{position:absolute;left:0;top:0;height:6px;margin-top:-3px;transform-origin:0 50%;
+    border-radius:3px;z-index:2;
+    background:linear-gradient(90deg,
+      color-mix(in oklab,var(--key) 35%,transparent), var(--key));
+    box-shadow:0 0 8px color-mix(in oklab,var(--key) 60%,transparent);
+    opacity:0;transition:opacity .06s}
+  .cross.sliding .trail{opacity:1}
+
+  /* 入力の結果を、指を離した位置のすぐそばに出す吹き出し。
+     左右どちらの指でも隠れないよう、指の「上」に出す(下は手のひらで隠れる)。 */
+  .flickfb{position:absolute;width:0;height:0;pointer-events:none;z-index:6;opacity:0}
+  .flickfb.show{animation:fbPop .62s ease-out forwards}
+  @keyframes fbPop{
+    0%{opacity:0;transform:translateY(6px) scale(.86)}
+    14%{opacity:1;transform:translateY(0) scale(1.06)}
+    70%{opacity:1;transform:translateY(-10px) scale(1)}
+    100%{opacity:0;transform:translateY(-20px) scale(1)}}
+  .flickfb .bubble{position:absolute;left:0;top:-84px;transform:translateX(-50%);
+    display:flex;align-items:center;gap:7px;white-space:nowrap;
+    padding:7px 11px;border-radius:11px;font-family:var(--pixel);
+    background:color-mix(in oklab, var(--night) 86%, transparent);
+    border:2px solid var(--line);
+    box-shadow:0 3px 12px color-mix(in oklab, var(--night) 70%, transparent)}
+  .flickfb .bubble svg{width:22px;height:22px;flex:0 0 auto}
+  .flickfb .kana{font-size:22px;line-height:1;letter-spacing:.04em}
+  .flickfb .verdict{font-size:13px;letter-spacing:.1em}
+  .flickfb .want{font-size:12px;letter-spacing:.06em;opacity:.85}
+  .flickfb.ok .bubble{border-color:var(--key);color:var(--key)}
+  .flickfb.just .bubble{border-color:var(--hot);color:var(--hot)}
+  .flickfb.ng .bubble{border-color:var(--bad);color:var(--bad)}
+  .flickfb.free .bubble{border-color:var(--dim);color:var(--dim)}
 
   .overlay{position:absolute;inset:0;display:grid;place-items:center;
     background:color-mix(in oklab, var(--night) 88%, transparent);backdrop-filter:blur(3px);
@@ -176,7 +224,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 18</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 19</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -241,6 +289,7 @@
     </div>
 
     <div class="cross" id="cross"></div>
+    <div class="flickfb" id="flickfb"></div>
 
     <div class="overlay" id="overlay">
       <div>
@@ -289,7 +338,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 18;
+  var BUILD = 19;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -301,7 +350,28 @@
     "ぁぃぅぇぉ","ゔ"
   ];
   var DIRS = ["c","l","u","r","d"];                 // あ段, い段, う段, え段, お段
-  var DIR_ICON = {c:"●", l:"←", u:"↑", r:"→", d:"↓"};
+  var DIR_ICON = {c:"●", l:"←", u:"↑", r:"→", d:"↓"};   // テキスト用(歌詞ガイド等)
+
+  /* 方向アイコンの SVG。スマホの明るい環境だと文字の矢印(←↑→↓)は細くて
+     つぶれるため、太い矢印を SVG で描く。currentColor 指定なので、
+     セル側の color をそのまま拾う(選択時の反転にも追従する)。
+     24x24 の座標系で、上向きを基準に rotate で 4 方向をまかなう。 */
+  var ARROW_ROT = {u:0, r:90, d:180, l:270};
+  function dirSvg(dir, size){
+    var s = size||24;
+    if(dir==="c"){
+      // タップ(あ段)は矢印ではなく二重丸。方向ではないことが一目で分かる形にする
+      return '<svg viewBox="0 0 24 24" width="'+s+'" height="'+s+'" aria-hidden="true">'+
+        '<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2.4"/>'+
+        '<circle cx="12" cy="12" r="3.6" fill="currentColor"/></svg>';
+    }
+    return '<svg viewBox="0 0 24 24" width="'+s+'" height="'+s+'" aria-hidden="true">'+
+      '<g transform="rotate('+(ARROW_ROT[dir]||0)+' 12 12)">'+
+      '<path d="M12 3.5 L20.5 12.2 H15.6 V20.5 H8.4 V12.2 H3.5 Z" '+
+      'fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>'+
+      '</g></svg>';
+  }
+  var DIR_NAME = {c:"タップ", l:"ひだり", u:"うえ", r:"みぎ", d:"した"};
   // レーンは左から ← ↑ ● → ↓(タップが中央)
   var LANE_ORDER = ["l","u","c","r","d"];
   var LANE_OF = {l:0,u:1,c:2,r:3,d:4};
@@ -468,7 +538,17 @@
   /* レーンごとに音階を割り当てる(ヨナ抜き五音音階)。打鍵そのものが旋律になり、
      方向が音でも区別できる。上フリックほど高い音にして直感と合わせる。 */
   var SE_PITCH={d:523.25, l:587.33, c:659.25, r:783.99, u:880.00};   // ド レ ミ ソ ラ
-  function seInput(dir){ blip((SE_PITCH[dir]||659.25)*0.5, 0.055, "square", 0.10); }
+  /* 指を離した瞬間に鳴らす「フリック音」。方向を音でも伝えるため、
+     スライド方向にピッチを動かす(上=上がる/下=下がる/左右=軽く開く)。
+     タップだけは掃引なしの短いクリックにして、区別できるようにする。
+     判定音(seJudge)より前に鳴るので、当たり外れに関係なく操作の手応えが返る。 */
+  var SE_SWEEP={u:1.7, d:0.6, l:0.82, r:1.22, c:1};
+  function seInput(dir){
+    var f=(SE_PITCH[dir]||659.25)*0.75;
+    if(dir==="c"){ blip(f, 0.045, "square", 0.13); return; }
+    blip(f, 0.085, "triangle", 0.15, SE_SWEEP[dir]||1);
+    blip(f*2, 0.05, "square", 0.05, SE_SWEEP[dir]||1);   // 倍音を薄く足して抜けを良くする
+  }
   function seJudge(g,dir){
     var f=SE_PITCH[dir]||659.25;
     if(g==="JUST"){ blip(f,0.10,"triangle",0.20); blip(f*2,0.13,"triangle",0.10,1.02); }
@@ -576,7 +656,7 @@
   var el={};
   ["screen","kNow","kNext","field","notes","judge","delta","score","combo","progress","pauseBtn",
    "overlay","ovTitle","ovText","ovErr","ovResult","startBtn","songmeta","songUrl","loadSong","songPick",
-   "cross","lead","leadVal","speed","speedVal","vol","volVal","speedNote","offset","offsetVal","autoCal","share","tutorial"]
+   "cross","flickfb","lead","leadVal","speed","speedVal","vol","volVal","speedNote","offset","offsetVal","autoCal","share","tutorial"]
     .forEach(function(id){ el[id]=document.getElementById(id); });
 
   var difficulty="NORMAL", player=null, videoPhrases=null, state=null;
@@ -1069,6 +1149,41 @@
     }
   }
 
+  /* ============ 指のそばに出す入力フィードバック ============
+     画面中央の judge 表示だけだと「自分が何を入力したか」が分からない。
+     指を離した位置のすぐ上に、入力した方向・かな・正誤を出す。
+     - 上に出すのは、指と手のひらで隠れるのが下側だから(左右どちらの手でも同じ)
+     - 画面端では左右にずらして、はみ出して読めなくなるのを防ぐ
+     lastTouch には最後に離した座標を入れておき、キーボード入力時は
+     画面下部中央にフォールバックする。 */
+  var lastTouch=null;
+  function showFlickFeedback(dir, kind, kana, wantDir){
+    var fb=el.flickfb; if(!fb) return;
+    var rect=el.screen.getBoundingClientRect();
+    var x, y;
+    if(lastTouch){ x=lastTouch.x; y=lastTouch.y; }
+    else { x=rect.width/2; y=rect.height*0.72; }        // キーボード時の既定位置
+    // 端で吹き出しが切れないように寄せる(吹き出し幅の半分ぶん余裕を見る)
+    var margin=92;
+    x=Math.max(margin, Math.min(rect.width-margin, x));
+    y=Math.max(96, y);                                   // 上に出すぶんの余白を確保
+    fb.style.left=x+"px"; fb.style.top=y+"px";
+
+    var cls={ok:"ok", just:"just", ng:"ng", free:"free"}[kind]||"free";
+    var label={ok:"OK", just:"JUST!", ng:"ちがう", free:"からうち"}[kind]||"";
+    var html='<div class="bubble">'+dirSvg(dir,22);
+    if(kana) html+='<span class="kana">'+kana+"</span>";
+    html+='<span class="verdict">'+label+"</span>";
+    // 間違えたときは「本当はどれだったか」を並べて出す(次の判断材料になる)
+    if(kind==="ng" && wantDir)
+      html+='<span class="want">→ '+DIR_NAME[wantDir]+"</span>";
+    html+="</div>";
+    fb.innerHTML=html;
+    fb.className="flickfb "+cls;
+    void fb.offsetWidth;                                 // アニメーションを毎回頭から
+    fb.classList.add("show");
+  }
+
   /* ============ 判定 ============ */
   function showJudge(g,delta,dir){
     el.judge.className="judge "+g;
@@ -1099,6 +1214,7 @@
       state.voices.push({kana:n.kana, lane:n.lane, at:performance.now()});
     }
     showJudge(r.grade,r.delta,n.dir);
+    return r.grade;                               // 呼び出し側のフィードバック表示に使う
   }
   function flashMiss(dir){
     if(!state) return;
@@ -1111,12 +1227,17 @@
   /** 入力(方向)を1つ受け取る。フリックは指を離した時点で呼ばれる */
   function sendDir(dir){
     if(!state||!state.running) return;
-    seInput(dir);
+    seInput(dir);                                 // 離した瞬間の手応え(方向で音が変わる)
     mikuSway=1; mikuSwayDir=dir;                 // 入力方向へ髪がなびく
     var n=target();
-    if(!n) return;
-    if(n.dir!==dir){ flashMiss(dir); return; }     // 方向違いはノーツを消費しない
-    applyJudgement(state.idx, now());
+    // 打つべきノーツが無いときの空打ちも、無反応にせず「からうち」と伝える
+    if(!n){ showFlickFeedback(dir,"free",null,null); return; }
+    if(n.dir!==dir){                              // 方向違いはノーツを消費しない
+      showFlickFeedback(dir,"ng",null,n.dir);
+      flashMiss(dir); return;
+    }
+    var r=applyJudgement(state.idx, now());
+    showFlickFeedback(dir, (r&&r==="JUST")?"just":"ok", n.kana, null);
     state.idx++;
   }
 
@@ -1360,11 +1481,13 @@
       var n=target(), html="";
       DIRS.forEach(function(dir){
         var tgt = (n && n.dir===dir) ? " tgt" : "";
-        html+='<div class="cell '+dir+tgt+'" data-dir="'+dir+'">'+DIR_ICON[dir]+"</div>";
+        html+='<div class="cell '+dir+tgt+'" data-dir="'+dir+'">'+dirSvg(dir,30)+"</div>";
       });
+      html+='<div class="trail"></div>';
       cross.style.left=x+"px"; cross.style.top=y+"px";
       cross.innerHTML=html;
       cross.classList.add("show");
+      cross.classList.remove("sliding");
     }
     function resolveDir(dx,dy){
       var ax=Math.abs(dx), ay=Math.abs(dy);
@@ -1376,6 +1499,16 @@
       var cells=cross.querySelectorAll(".cell");
       for(var i=0;i<cells.length;i++)
         cells[i].classList.toggle("sel", cells[i].getAttribute("data-dir")===dir);
+    }
+    /* 指の動きを線で見せる。どれだけ滑らせたかが分かると、
+       しきい値に届いているかを離す前に判断できる。 */
+    function updateTrail(dx,dy){
+      var tr=cross.querySelector(".trail"); if(!tr) return;
+      var dist=Math.min(Math.hypot(dx,dy), 78);
+      if(dist<6){ cross.classList.remove("sliding"); return; }
+      cross.classList.add("sliding");
+      tr.style.width=dist+"px";
+      tr.style.transform="rotate("+Math.atan2(dy,dx)+"rad)";
     }
     function rectOf(){ return surface.getBoundingClientRect(); }
 
@@ -1395,16 +1528,23 @@
       e.preventDefault();
       for(var i=0;i<e.changedTouches.length;i++){
         var t=e.changedTouches[i], p=pointers[t.identifier];
-        if(p) highlight(resolveDir(t.clientX-p.sx, t.clientY-p.sy));
+        if(!p) continue;
+        var dx=t.clientX-p.sx, dy=t.clientY-p.sy;
+        highlight(resolveDir(dx,dy));
+        updateTrail(dx,dy);
       }
     },{passive:false});
     function endTouch(e){
       if(!Object.keys(pointers).length) return;
       e.preventDefault();
+      var r=rectOf();
       for(var i=0;i<e.changedTouches.length;i++){
         var t=e.changedTouches[i], p=pointers[t.identifier];
         if(!p) continue;
         delete pointers[t.identifier];
+        // フィードバックは「指を置いた位置」に出す。離した位置だと
+        // 大きく滑らせたとき画面外に寄ってしまい読めなくなる。
+        lastTouch={x:p.sx-r.left, y:p.sy-r.top};
         sendDir(resolveDir(t.clientX-p.sx, t.clientY-p.sy));   // 指を離した瞬間に確定+SE
       }
       if(!Object.keys(pointers).length) cross.classList.remove("show");
@@ -1423,11 +1563,15 @@
       renderCross(e.clientX-r.left, e.clientY-r.top); highlight("c");
     });
     surface.addEventListener("mousemove",function(e){
-      if(mouseActive) highlight(resolveDir(e.clientX-msx, e.clientY-msy));
+      if(!mouseActive) return;
+      var dx=e.clientX-msx, dy=e.clientY-msy;
+      highlight(resolveDir(dx,dy)); updateTrail(dx,dy);
     });
     surface.addEventListener("mouseup",function(e){
       if(!mouseActive) return;
       mouseActive=false; cross.classList.remove("show");
+      var r=rectOf();
+      lastTouch={x:msx-r.left, y:msy-r.top};
       sendDir(resolveDir(e.clientX-msx, e.clientY-msy));
     });
     surface.addEventListener("mouseleave",function(){ mouseActive=false; cross.classList.remove("show"); });
@@ -1449,7 +1593,11 @@
   window.addEventListener("keyup",function(e){
     if(formFocused(e)) return;
     var d=KEY_DIR[e.key];
-    if(d && keyHeld[e.key]){ e.preventDefault(); keyHeld[e.key]=false; sendDir(d); }
+    if(d && keyHeld[e.key]){
+      e.preventDefault(); keyHeld[e.key]=false;
+      lastTouch=null;                       // キーボード時は画面下部中央に出す
+      sendDir(d);
+    }
   },true);
 
   /* ============ 難易度・選曲 ============ */
