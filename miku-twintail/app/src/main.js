@@ -11,18 +11,23 @@ import { Player } from "textalive-app-api";
 
 const TOKEN = "VQRxHB1a0q8fVvnm";
 
-// 開発用のデフォルト曲: マジカルミライ 2025 課題曲「ロンリーラン / 海風太陽」
-// （公式サンプル textalive-app-basic と同じ楽曲・版数。ホスト接続時は app.songUrl が優先される）
-const DEV_SONG = {
-  url: "https://piapro.jp/t/CyPO/20250128183915",
-  video: {
-    beatId: 4694280,
-    chordId: 2830735,
-    repetitiveSegmentId: 2946483,
-    lyricId: 67815,
-    lyricDiffId: 20659,
+// 選曲リスト。version が判明している曲は版数を固定して読み込む
+// （ontology/textalive.yaml の dev-song / song-load を参照）。
+// ホストから曲が指定されているとき（app.songUrl）はそちらが優先され、この一覧は使わない。
+const SONGS = [
+  {
+    title: "ロンリーラン / 海風太陽",
+    url: "https://piapro.jp/t/CyPO/20250128183915",
+    video: {
+      beatId: 4694280,
+      chordId: 2830735,
+      repetitiveSegmentId: 2946483,
+      lyricId: 67815,
+      lyricDiffId: 20659,
+    },
   },
-};
+];
+const DEV_SONG = SONGS[0];
 
 // ---- TextAlive Player ----------------------------------------------------------
 const player = new Player({
@@ -35,6 +40,17 @@ const player = new Player({
 let ready = false, maxAmp = 1;
 window.textAlivePlayer = player;   // デバッグ・自動テスト用
 
+// 楽曲の読み込み。曲を替えるたびに描いた髪と採点結果を捨てる
+function loadSong(song) {
+  ready = false;
+  ropes.length = 0;
+  result.textContent = "";
+  document.getElementById("meta").textContent = "読み込み中……";
+  for (const b of document.querySelectorAll("#control button")) b.disabled = true;
+  player.createFromSongUrl(song.url, song.video ? { video: song.video } : undefined)
+    .catch(e => showDiag("楽曲読み込みに失敗: " + (e && e.message ? e.message : e)));
+}
+
 player.addListener({
   onAppReady(app) {
     if (!app.managed) {
@@ -42,10 +58,10 @@ player.addListener({
       document.getElementById("play").onclick = () => player.video && player.requestPlay();
       document.getElementById("pause").onclick = () => player.video && player.requestPause();
       document.getElementById("rewind").onclick = () => player.video && player.requestMediaSeek(0);
+      buildSongPicker();
     }
-    if (!app.songUrl)
-      player.createFromSongUrl(DEV_SONG.url, { video: DEV_SONG.video })
-        .catch(e => showDiag("楽曲読み込みに失敗: " + (e && e.message ? e.message : e)));
+    // ホスト（App Debugger・審査環境）が曲を指定しているときは自動読み込みに任せる
+    if (!app.songUrl) loadSong(DEV_SONG);
   },
   onVideoReady() {
     document.getElementById("meta").textContent =
@@ -56,7 +72,37 @@ player.addListener({
     ready = true;
     for (const b of document.querySelectorAll("#control button")) b.disabled = false;
   },
+  // ホストから曲を差し替えられたとき（app.managed 時）も状態を作り直す
+  onAppMediaChange() {
+    ready = false;
+    ropes.length = 0;
+    result.textContent = "";
+    document.getElementById("meta").textContent = "読み込み中……";
+  },
 });
+
+// 選曲 UI（ホスト未接続時のみ。ホスト接続時は曲の主導権がホストにある）
+function buildSongPicker() {
+  const sel = document.getElementById("song");
+  for (const [i, s] of SONGS.entries()) {
+    const o = document.createElement("option");
+    o.value = String(i); o.textContent = s.title;
+    sel.appendChild(o);
+  }
+  const other = document.createElement("option");
+  other.value = "other"; other.textContent = "他の曲を URL で指定……";
+  sel.appendChild(other);
+  sel.onchange = () => {
+    if (sel.value === "other") {
+      const url = prompt("TextAlive で利用できる楽曲の URL（piapro / YouTube など）", "");
+      if (!url) { sel.value = "0"; return; }
+      loadSong({ title: url, url });        // 版数未指定＝最新の解析結果で読み込む
+    } else {
+      loadSong(SONGS[Number(sel.value)]);
+    }
+  };
+  document.getElementById("songwrap").hidden = false;
+}
 
 // ---- 楽曲データ層（モックの擬似層と同じインタフェースを実データで提供） --------
 const posMs = () => (player.timer ? player.timer.position : 0);
