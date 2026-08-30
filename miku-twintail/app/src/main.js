@@ -43,7 +43,9 @@ player.addListener({
       document.getElementById("pause").onclick = () => player.video && player.requestPause();
       document.getElementById("rewind").onclick = () => player.video && player.requestMediaSeek(0);
     }
-    if (!app.songUrl) player.createFromSongUrl(DEV_SONG.url, { video: DEV_SONG.video });
+    if (!app.songUrl)
+      player.createFromSongUrl(DEV_SONG.url, { video: DEV_SONG.video })
+        .catch(e => showDiag("楽曲読み込みに失敗: " + (e && e.message ? e.message : e)));
   },
   onVideoReady() {
     document.getElementById("meta").textContent =
@@ -70,6 +72,32 @@ const findCharText = ms => {
   const c = player.video && player.video.findChar(ms);
   return c ? c.text : null;
 };
+
+// ---- 起動診断（「読み込み中」で止まったとき、原因を画面に出す） -----------------
+const diag = [];
+function showDiag(msg) {
+  if (!diag.includes(msg)) diag.push(msg);
+  document.getElementById("result").textContent =
+    "【診断】\n" + diag.join("\n") + "\nこの表示を開発者に伝えてください";
+}
+window.addEventListener("error", e => { if (!ready) showDiag("エラー: " + e.message); });
+window.addEventListener("unhandledrejection", e => {
+  if (!ready) showDiag("エラー: " + (e.reason && e.reason.message ? e.reason.message : e.reason));
+});
+setTimeout(async () => {
+  if (ready) return;
+  showDiag("15秒経っても楽曲情報が届きません。疎通チェック中……");
+  const probes = [
+    ["api.textalive.jp", "https://api.textalive.jp/"],
+    ["api.songle.jp", "https://api.songle.jp/v2/api.js"],
+    ["songle.jp", "https://songle.jp/lyric_parsers/98.js"],
+  ];
+  for (const [name, url] of probes) {
+    try { const r = await fetch(url, { mode: "cors" }); showDiag(`${name}: HTTP ${r.status}`); }
+    catch { showDiag(`${name}: 接続失敗（ネットワーク/ブロッカー/CORS）`); }
+  }
+  showDiag("すべて成功している場合はトークンのアプリURL登録を確認: " + location.origin);
+}, 15000);
 
 // ---- 演奏エフェクト（タップ＝合いの手） ---------------------------------------
 // ホールド中は 8 分音符ごとにコードトーンのプラック（曲の和音に必ずハモる）、
