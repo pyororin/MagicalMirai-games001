@@ -83,13 +83,12 @@
 
   .stage{padding:26px 18px 20px;min-height:270px;display:flex;flex-direction:column;gap:14px}
 
-  .phrase{
-    font-family:var(--pixel);
-    font-size:clamp(22px,5.2vw,38px);
-    letter-spacing:.06em;line-height:1.5;
-    word-break:break-all;min-height:1.5em;
+  .phrase{display:flex;flex-wrap:wrap;align-items:flex-end;row-gap:6px;min-height:2.6em}
+  .chwrap{display:inline-flex;flex-direction:column;align-items:center;margin:0 1px}
+  .phrase .ch{
+    font-family:var(--pixel);font-size:clamp(22px,5.2vw,38px);letter-spacing:.04em;
+    line-height:1.15;transition:color .08s,transform .08s;
   }
-  .phrase .ch{transition:color .08s,transform .08s;display:inline-block}
   .phrase .ch.done{color:var(--dim)}
   .phrase .ch.cur{
     color:var(--cyan);transform:translateY(-2px);
@@ -99,6 +98,18 @@
   .phrase .ch.skip{color:#4A5488}
   .phrase .ch.missed{color:var(--red);opacity:.7}
   .phrase .ch.hot{color:var(--magenta)}
+  .hint{
+    font-family:var(--pixel);font-size:clamp(9px,2vw,11px);color:#4A5488;letter-spacing:0;
+    line-height:1.3;min-height:1.3em;
+  }
+  .hint.cur{color:var(--magenta)}
+
+  .phrase-progress{position:relative;height:14px;margin:0 2px}
+  .phrase-progress .tick{position:absolute;top:5px;width:2px;height:4px;background:var(--line);border-radius:1px}
+  .phrase-progress .head{
+    position:absolute;top:2px;width:10px;height:10px;border-radius:50%;
+    background:var(--cyan);box-shadow:0 0 6px var(--cyan);transform:translateX(-50%);transition:left .05s linear;
+  }
 
   .guide{
     font-family:var(--pixel);font-size:clamp(14px,3vw,20px);
@@ -107,8 +118,10 @@
   .guide .typed{color:var(--cyan)}
   .next-phrase{
     font-family:var(--pixel);font-size:clamp(13px,2.6vw,17px);
-    color:#4A5488;letter-spacing:.05em;word-break:break-all;min-height:1.3em;
+    color:#4A5488;letter-spacing:.05em;word-break:break-all;min-height:1.3em;transition:color .2s;
   }
+  .next-phrase.soon{color:var(--amber);animation:nextPulse .6s ease-in-out infinite alternate}
+  @keyframes nextPulse{from{opacity:.55}to{opacity:1}}
 
   .judge-line{display:flex;align-items:baseline;gap:12px;min-height:2.2em;flex-wrap:wrap}
   .judge{
@@ -131,14 +144,15 @@
 
   .overlay{
     position:absolute;inset:0;display:grid;place-items:center;
-    background:rgba(9,13,36,.86);text-align:center;padding:24px;z-index:5;
+    background:rgba(9,13,36,.86);text-align:center;padding:24px;z-index:5;overflow-y:auto;
   }
   .overlay h2{font-family:var(--pixel);font-size:clamp(20px,4.6vw,30px);margin:0 0 10px;letter-spacing:.06em}
   .overlay p{color:var(--dim);margin:0 auto 18px;max-width:44ch;font-size:14px}
   .overlay .result{
-    display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));
+    display:grid;grid-template-columns:repeat(3,1fr);
     gap:10px;margin:0 auto 18px;max-width:460px;
   }
+  @media (max-width:460px){ .overlay .result{grid-template-columns:repeat(2,1fr)} }
   .overlay .result div{
     background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:8px 6px;
   }
@@ -190,7 +204,16 @@
   .cross .cell.u{left:0;top:-62px}
   .cross .cell.r{left:62px;top:0}
   .cross .cell.d{left:0;top:62px}
+  .cross .cell.nw{left:-46px;top:-46px}
+  .cross .cell.ne{left:46px;top:-46px}
+  .cross .cell.se{left:46px;top:46px}
+  .cross .cell.sw{left:-46px;top:46px}
+  .cross .cell.cc{
+    left:14px;top:-14px;width:36px;height:36px;margin:-18px 0 0 -18px;
+    font-size:14px;border-style:dashed;border-color:var(--magenta);background:rgba(255,79,163,.18);
+  }
   .cross .cell.sel{background:var(--cyan);color:#06122A;border-color:var(--cyan)}
+  .cross .cell.cc.sel{background:var(--magenta);border-color:var(--magenta);color:#fff}
 
   /* ---- explainer ---- */
   .notes{margin-top:34px;display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
@@ -243,6 +266,7 @@
 
     <div class="stage">
       <div class="phrase" id="phrase"></div>
+      <div class="phrase-progress" id="phraseProgress"><i class="head" id="phraseHead"></i></div>
       <div class="guide" id="guide"></div>
       <div class="next-phrase" id="nextPhrase"></div>
       <div class="judge-line">
@@ -252,7 +276,7 @@
     </div>
 
     <div class="zone" id="zone">
-      <div class="zonehint">ここをタップ / フリック<br>そのまま離す=あ段 ・ 滑らせて離す=←い ↑う →え ↓お</div>
+      <div class="zonehint">タップ=あ段 ・ ↑↓←→=い/う/え/お<br>斜め=濁点 ・ 軽く離す=あ段の濁点</div>
       <div class="cross" id="cross"></div>
     </div>
 
@@ -506,6 +530,8 @@
     g.gain.exponentialRampToValueAtTime(0.0001,when+dur);
     o.connect(g); g.connect(master); o.start(when); o.stop(when+dur+0.02);
   }
+  function sfxTap(){ if(ctx) blip(ctx.currentTime,1700,0.02,"square",0.09); }
+  function sfxSlide(){ if(ctx) blip(ctx.currentTime,1250,0.014,"square",0.05); }
   var SCALE=[0,2,4,7,9,12,14,16];
   function schedule(startAt,totalBeats){
     // ドラム相当のクリックとベース、上物のアルペジオ
@@ -531,6 +557,7 @@
     score:document.getElementById("score"),
     combo:document.getElementById("combo"),
     progress:document.getElementById("progress"),
+    phraseProgress:document.getElementById("phraseProgress"),
     overlay:document.getElementById("overlay"),
     ovTitle:document.getElementById("ovTitle"),
     ovText:document.getElementById("ovText"),
@@ -568,19 +595,27 @@
 
   function now(){ return (ctx.currentTime - state.t0)*1000; }
 
+  // 現在の未確定文字の入力方法ヒント(フリック中は方向、キーボードは最短ローマ字)
+  function segHint(seg){
+    if(usePad) return flickHint(seg.kana);
+    return seg.patterns.reduce(function(a,b){ return b.length<a.length?b:a; });
+  }
+
   function renderPhrase(){
     var P=state.phrases[state.pi];
     var html="", i;
     for(i=0;i<P.segments.length;i++){
-      var cls;
-      if(!P.activeSet[i]) cls="skip";
-      else{
+      var cls="skip", hint="";
+      if(P.activeSet[i]){
         var ai=P.active.indexOf(i);
         if(P.results[ai]) cls = P.results[ai]==="MISS" ? "missed" : "done";
-        else if(ai===P.typer.index) cls="cur";
-        else cls="pending";
+        else{
+          cls = (ai===P.typer.index) ? "cur" : "pending";
+          hint = segHint(P.segments[i]);
+        }
       }
-      html+='<span class="ch '+cls+'">'+P.segments[i].kana+"</span>";
+      html+='<span class="chwrap"><span class="ch '+cls+'">'+P.segments[i].kana+'</span>'+
+            '<span class="hint'+(cls==="cur"?" cur":"")+'">'+hint+"</span></span>";
     }
     el.phrase.innerHTML=html;
     if(P.typer.done()){
@@ -591,8 +626,32 @@
     } else {
       el.guide.innerHTML='<span class="typed">'+P.typer.buffer+"</span>"+P.typer.hint();
     }
+
+    // フレーズ内の進行(どのあたりを歌っているか)を示すミニタイムライン
+    var t=now();
+    var first=P.notes[0].startTime, last=P.notes[P.notes.length-1].startTime, dur=last-first;
+    var pct= dur>0 ? Math.max(0,Math.min(1,(t-first)/dur)) : 0;
+    if(el.phraseProgress.dataset.pi!==String(state.pi)){
+      var tickHtml="";
+      P.active.forEach(function(segIdx){
+        var tp= dur>0 ? Math.max(0,Math.min(100,(P.notes[segIdx].startTime-first)/dur*100)) : 0;
+        tickHtml+='<i class="tick" style="left:'+tp+'%"></i>';
+      });
+      el.phraseProgress.innerHTML=tickHtml+'<i class="head" id="phraseHead"></i>';
+      el.phraseHead=document.getElementById("phraseHead");
+      el.phraseProgress.dataset.pi=String(state.pi);
+    }
+    if(el.phraseHead) el.phraseHead.style.left=(pct*100)+"%";
+
+    // カラオケ風の次フレーズプレビュー。開始が近い/現フレーズを打ち終えたら強調する
     var nx=state.phrases[state.pi+1];
-    el.nextPhrase.textContent = nx ? "next  "+nx.kana : "";
+    if(nx){
+      el.nextPhrase.textContent = "next  "+nx.kana;
+      el.nextPhrase.classList.toggle("soon", P.typer.done() || (nx.notes[0].startTime-t)<1500);
+    } else {
+      el.nextPhrase.textContent="";
+      el.nextPhrase.classList.remove("soon");
+    }
   }
 
   function showJudge(g,delta){
@@ -760,18 +819,31 @@
     });
   });
 
-  /* ---- フリック(1タッチゾーン方式) ----
-   * 12キーの選択を廃し、「行」は次に打つ文字から自動で決まる。
-   * プレイヤーはゾーンのどこかに触れる → 触れた位置にフリック十字が出現 →
-   * そのまま離せば中央(あ段)、上下左右に滑らせて離せば い/う/え/お段。
-   * つまり1かな=1ジェスチャ。母音の選択だけがプレイヤーの技能になる。
+  /* ---- フリック(1タッチゾーン方式・8方向+濁点) ----
+   * 「行」は次に打つ文字から自動で決まる。清音行(か/さ/た/は)は、そのままの
+   * cross を使って斜めスライドで濁点(が/ざ/だ/ば行)を入力できる
+   * (旧・みんなの顔文字キーボードの方式を参考)。あ段の濁点(が/ざ/だ/ば)は
+   * 中央への短いスライドで入力する。半濁点(ぱ行)は専用の5方向 cross を表示する。
    */
   var FLICK_ROWS=[
     "あいうえお","かきくけこ","がぎぐげご","さしすせそ","ざじずぜぞ",
     "たちつてと","だぢづでど","なにぬねの","はひふへほ","ばびぶべぼ",
     "ぱぴぷぺぽ","まみむめも","らりるれろ"
   ];
-  // 十字の選択肢: c=中央(そのまま離す) l/u/r/d=左/上/右/下
+  var DAKUTEN_PAIRS=[
+    ["かきくけこ","がぎぐげご"],
+    ["さしすせそ","ざじずぜぞ"],
+    ["たちつてと","だぢづでど"],
+    ["はひふへほ","ばびぶべぼ"]
+  ];
+  function findDakutenPair(kana){
+    for(var i=0;i<DAKUTEN_PAIRS.length;i++){
+      var seion=DAKUTEN_PAIRS[i][0], daku=DAKUTEN_PAIRS[i][1];
+      if(seion.indexOf(kana)>=0 || daku.indexOf(kana)>=0) return {seion:seion,daku:daku};
+    }
+    return null;
+  }
+  // 十字の選択肢: c=中央(そのまま離す) l/u/r/d=左/上/右/下、nw/ne/se/sw=斜め(濁点)、cc=短く離す(あ段濁点)
   function flickOptions(kana){
     if(kana.length===2){
       // 拗音セグメント: ゃ=中央 ゅ=上 ょ=下(や行のフリック配置に準拠)
@@ -780,6 +852,13 @@
     }
     if(kana==="わ"||kana==="を"||kana==="ん") return {c:"わ", l:"を", u:"ん"};
     if(kana==="や"||kana==="ゆ"||kana==="よ") return {c:"や", u:"ゆ", d:"よ"};
+    var pair=findDakutenPair(kana);
+    if(pair){
+      return {
+        c:pair.seion[0], l:pair.seion[1], u:pair.seion[2], r:pair.seion[3], d:pair.seion[4],
+        cc:pair.daku[0], nw:pair.daku[1], ne:pair.daku[2], se:pair.daku[3], sw:pair.daku[4]
+      };
+    }
     for(var i=0;i<FLICK_ROWS.length;i++){
       var row=FLICK_ROWS[i];
       if(row.indexOf(kana)>=0)
@@ -787,7 +866,8 @@
     }
     return {c:kana}; // っ/ー/小書き文字など: タップで確定
   }
-  var DIR_LABEL={c:"タップ", l:"←", u:"↑", r:"→", d:"↓"};
+  var DIR_LABEL={c:"タップ", l:"←", u:"↑", r:"→", d:"↓",
+    nw:"↖濁", ne:"↗濁", se:"↘濁", sw:"↙濁", cc:"軽く濁"};
   function flickHint(kana){
     var opts=flickOptions(kana);
     for(var dir in opts) if(opts[dir]===kana) return DIR_LABEL[dir];
@@ -812,24 +892,33 @@
 
   (function(){
     var zone=document.getElementById("zone"), cross=document.getElementById("cross");
-    var sx=0, sy=0, active=false, opts=null;
-    var THRESH=24;
+    var sx=0, sy=0, active=false, opts=null, optsMode="4", lastDir=null;
+    var THRESH=24, THRESH_MICRO=10;
 
     function renderCross(x,y){
       cross.style.left=x+"px"; cross.style.top=y+"px";
       var html="";
-      var pos={c:"c",l:"l",u:"u",r:"r",d:"d"};
       for(var dir in opts)
-        html+='<div class="cell '+pos[dir]+'" data-dir="'+dir+'">'+opts[dir]+"</div>";
+        html+='<div class="cell '+dir+'" data-dir="'+dir+'">'+opts[dir]+"</div>";
       cross.innerHTML=html;
       cross.classList.add("show");
     }
-    function resolveDir(dx,dy){
+    function resolveDir4(dx,dy){
       var ax=Math.abs(dx), ay=Math.abs(dy);
       if(Math.max(ax,ay)<THRESH) return "c";
       if(ax>ay) return dx<0?"l":"r";
       return dy<0?"u":"d";
     }
+    // 8方向: 十字(清音)+斜め(濁音)。中心付近の短いスライドは「あ段の濁点」
+    function resolveDir8(dx,dy){
+      var dist=Math.hypot(dx,dy);
+      if(dist<THRESH_MICRO) return "c";
+      if(dist<THRESH) return "cc";
+      var angle=(Math.atan2(dy,dx)*180/Math.PI+360)%360;
+      var dirs=["r","se","d","sw","l","nw","u","ne"]; // 0,45,90,135,180,225,270,315度
+      return dirs[Math.round(angle/45)%8];
+    }
+    function resolveDir(dx,dy){ return optsMode==="8" ? resolveDir8(dx,dy) : resolveDir4(dx,dy); }
     function highlight(dir){
       var cells=cross.querySelectorAll(".cell");
       for(var i=0;i<cells.length;i++)
@@ -842,16 +931,21 @@
       var kana=currentTargetKana();
       if(!kana) return;
       opts=flickOptions(kana);
+      optsMode = ("nw" in opts) ? "8" : "4";
+      lastDir="c";
       var rect=zone.getBoundingClientRect(), p=pt(e);
       sx=p.clientX; sy=p.clientY; active=true;
       renderCross(p.clientX-rect.left, p.clientY-rect.top);
       highlight("c");
+      sfxTap();
     }
     function move(e){
       if(!active) return;
       e.preventDefault();
       var p=pt(e);
-      highlight(resolveDir(p.clientX-sx, p.clientY-sy));
+      var dir=resolveDir(p.clientX-sx, p.clientY-sy);
+      highlight(dir);
+      if(dir!==lastDir){ sfxSlide(); lastDir=dir; }
     }
     function up(e){
       if(!active) return;
