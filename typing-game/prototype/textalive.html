@@ -38,17 +38,32 @@
   .bar{height:6px;background:var(--panel-2);border-radius:3px;overflow:hidden;flex:1 1 140px;min-width:120px}
   .bar i{display:block;height:100%;width:0;background:var(--cyan);transition:width .1s linear}
 
-  .stage{padding:24px 18px 16px;min-height:240px;display:flex;flex-direction:column;gap:12px}
-  .phrase{font-family:var(--pixel);font-size:clamp(20px,4.8vw,34px);letter-spacing:.06em;line-height:1.5;word-break:break-all;min-height:1.5em}
-  .phrase .ch{transition:color .08s,transform .08s;display:inline-block}
+  .stage{padding:24px 18px 16px;min-height:250px;display:flex;flex-direction:column;gap:8px}
+
+  .phrase{display:flex;flex-wrap:wrap;align-items:flex-end;row-gap:6px;min-height:2.6em}
+  .chwrap{display:inline-flex;flex-direction:column;align-items:center;margin:0 1px}
+  .phrase .ch{font-family:var(--pixel);font-size:clamp(20px,4.8vw,34px);letter-spacing:.02em;
+    line-height:1.15;transition:color .08s,transform .08s}
   .phrase .ch.done{color:var(--dim)}
   .phrase .ch.cur{color:var(--cyan);transform:translateY(-2px);border-bottom:3px solid var(--magenta)}
   .phrase .ch.pending{color:var(--ink)}
   .phrase .ch.skip{color:#4A5488}
   .phrase .ch.missed{color:var(--red);opacity:.7}
+  .hint{font-family:var(--pixel);font-size:clamp(9px,2vw,11px);color:#4A5488;letter-spacing:0;
+    line-height:1.3;min-height:1.3em}
+  .hint.cur{color:var(--magenta)}
+
+  .phrase-progress{position:relative;height:14px;margin:0 2px}
+  .phrase-progress .tick{position:absolute;top:5px;width:2px;height:4px;background:var(--line);border-radius:1px}
+  .phrase-progress .head{position:absolute;top:2px;width:10px;height:10px;border-radius:50%;
+    background:var(--cyan);box-shadow:0 0 6px var(--cyan);transform:translateX(-50%);transition:left .05s linear}
+
   .guide{font-family:var(--pixel);font-size:clamp(14px,3vw,20px);color:var(--dim);letter-spacing:.08em;min-height:1.4em;word-break:break-all}
   .guide .typed{color:var(--cyan)}
-  .next-phrase{font-family:var(--pixel);font-size:clamp(12px,2.4vw,16px);color:#4A5488;letter-spacing:.05em;word-break:break-all;min-height:1.3em}
+  .next-phrase{font-family:var(--pixel);font-size:clamp(12px,2.4vw,16px);color:#4A5488;letter-spacing:.05em;
+    word-break:break-all;min-height:1.3em;transition:color .2s}
+  .next-phrase.soon{color:var(--amber);animation:nextPulse .6s ease-in-out infinite alternate}
+  @keyframes nextPulse{from{opacity:.55}to{opacity:1}}
 
   .judge-line{display:flex;align-items:baseline;gap:12px;min-height:2em;flex-wrap:wrap}
   .judge{font-family:var(--pixel);font-size:clamp(20px,4.4vw,30px);letter-spacing:.08em;opacity:0;transform:translateY(4px)}
@@ -59,10 +74,11 @@
   .delta{font-family:var(--pixel);font-size:13px;color:var(--dim);font-variant-numeric:tabular-nums}
 
   .overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(9,13,36,.9);
-    text-align:center;padding:24px;z-index:5}
+    text-align:center;padding:24px;z-index:5;overflow-y:auto}
   .overlay h2{font-family:var(--pixel);font-size:clamp(18px,4.2vw,28px);margin:0 0 10px;letter-spacing:.06em}
   .overlay p{color:var(--dim);margin:0 auto 16px;max-width:46ch;font-size:14px}
-  .overlay .result{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:10px;margin:0 auto 16px;max-width:460px}
+  .overlay .result{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 auto 16px;max-width:460px}
+  @media (max-width:460px){ .overlay .result{grid-template-columns:repeat(2,1fr)} }
   .overlay .result div{background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:8px 6px}
   .overlay .result span{display:block;font-family:var(--pixel);font-size:11px;color:var(--dim);letter-spacing:.08em}
   .overlay .result b{font-family:var(--pixel);font-size:19px;font-variant-numeric:tabular-nums}
@@ -84,14 +100,19 @@
     touch-action:none;user-select:none;-webkit-user-select:none;overflow:hidden}
   .zone.on{display:block}
   .zone .zonehint{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--pixel);
-    font-size:13px;color:#4A5488;letter-spacing:.1em;pointer-events:none;text-align:center;line-height:2}
+    font-size:12px;color:#4A5488;letter-spacing:.06em;pointer-events:none;text-align:center;line-height:1.9}
   .cross{position:absolute;width:0;height:0;pointer-events:none;opacity:0;transition:opacity .06s}
   .cross.show{opacity:1}
   .cross .cell{position:absolute;width:56px;height:56px;margin:-28px 0 0 -28px;display:grid;place-items:center;
     font-family:var(--pixel);font-size:24px;background:var(--panel-2);border:1px solid var(--line);border-radius:4px;color:var(--ink)}
   .cross .cell.c{left:0;top:0} .cross .cell.l{left:-62px;top:0} .cross .cell.u{left:0;top:-62px}
   .cross .cell.r{left:62px;top:0} .cross .cell.d{left:0;top:62px}
+  .cross .cell.nw{left:-46px;top:-46px} .cross .cell.ne{left:46px;top:-46px}
+  .cross .cell.se{left:46px;top:46px} .cross .cell.sw{left:-46px;top:46px}
+  .cross .cell.cc{left:14px;top:-14px;width:36px;height:36px;margin:-18px 0 0 -18px;
+    font-size:14px;border-style:dashed;border-color:var(--magenta);background:rgba(255,79,163,.18)}
   .cross .cell.sel{background:var(--cyan);color:#06122A;border-color:var(--cyan)}
+  .cross .cell.cc.sel{background:var(--magenta);border-color:var(--magenta);color:#fff}
 
   .mediarow{margin-top:14px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
   #media{flex:0 0 auto;min-width:230px;min-height:52px;background:var(--panel);border:1px solid var(--line);border-radius:3px}
@@ -101,6 +122,7 @@
   .caveat{margin-top:26px;padding:14px 16px;border-left:3px solid var(--amber);background:var(--panel);
     font-size:14px;color:var(--dim);border-radius:0 3px 3px 0}
   .caveat b{color:var(--ink)}
+  .caveat ul{margin:8px 0 0;padding-left:1.2em}
   footer{margin-top:26px;font-size:13px;color:#5C6690}
   footer a{color:var(--cyan)}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms !important;transition-duration:.01ms !important}}
@@ -109,11 +131,12 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:#4A5488">build 7</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:#4A5488">build 8</span></p>
     <h1>打鍵ミライ × TextAlive</h1>
     <p class="lede">
       実楽曲の文字単位タイミングで判定エンジンを回す検証機。既定曲はマジカルミライ2025課題曲です。
       漢字・記号は打鍵対象外(灰色)で、かなだけを打ちます(読みデータの扱いは本実装の課題)。
+      歌詞の下に打ち方のヒント、フレーズ内のどこを歌っているかのバーを表示します。
     </p>
     <p class="songmeta" id="songmeta">楽曲情報を読み込み中…</p>
   </header>
@@ -136,6 +159,7 @@
     </div>
     <div class="stage">
       <div class="phrase" id="phrase"></div>
+      <div class="phrase-progress" id="phraseProgress"><i class="head" id="phraseHead"></i></div>
       <div class="guide" id="guide"></div>
       <div class="next-phrase" id="nextPhrase"></div>
       <div class="judge-line">
@@ -144,7 +168,7 @@
       </div>
     </div>
     <div class="zone" id="zone">
-      <div class="zonehint">ここをタップ / フリック<br>そのまま離す=あ段 ・ 滑らせて離す=←い ↑う →え ↓お</div>
+      <div class="zonehint">タップ=あ段 ・ ↑↓←→=い/う/え/お<br>斜め=濁点 ・ 軽く離す=あ段の濁点</div>
       <div class="cross" id="cross"></div>
     </div>
     <div class="overlay" id="overlay">
@@ -170,6 +194,11 @@
     <b>検証ポイント:</b> 文字の発声タイミングと打鍵時刻の突き合わせ精度、ズレの体感。
     ズレを感じる場合は何 ms ずれるかをリザルトの平均デルタで確認してください(キャリブレーション実装の判断材料)。
     アプリトークンは TextAlive の設計上クライアントに埋め込む公開値です。
+    <ul>
+      <li>打鍵音・完了音は Web Audio 合成。曲のコード進行までは追わない近似の音階です(実際の歌のピッチとは一致しません)</li>
+      <li>フリックの濁点は、清音の cross をそのまま使い「斜めスライド」で入力します(旧・みんなの顔文字キーボード方式を参考)。あ段の濁点(が/ざ/だ/ば)は短く離すだけで入力できます</li>
+      <li>漢字の読み(ひらがな化)は TextAlive から提供されないため既定では打鍵対象外です。未検証の読みを機械的に補うと誤判定の元になるため、確認済みの読みだけをコード内 <code>KANJI_READINGS</code> に追記する運用にしています</li>
+    </ul>
   </p>
   <footer>
     合成音版のデモは <a href="./demo.html">demo.html</a>。エンジンは <code>src/</code> と同一設計。<br>
@@ -339,6 +368,16 @@
   }
   function isKana(ch){ return !!(MONO[ch] || "ゃゅょぁぃぅぇぉ".indexOf(ch)>=0); }
   var SMALL="ゃゅょぁぃぅぇぉ";
+  var KANJI_RE=/[一-鿿々]/;
+  function isKanji(ch){ return KANJI_RE.test(ch); }
+
+  /**
+   * 漢字の読み(ひらがな化)は TextAlive から提供されないため、既定では空。
+   * 確認済みの読みが分かっている曲・単語だけ、ここに { "表示文字":"よみ" } の形で
+   * 追記して使う。未検証のまま機械的に埋めると誤った歌詞判定になるため、
+   * 確認なしでは追加しないこと(HARD 難易度向けの拡張フック)。
+   */
+  var KANJI_READINGS = {};
 
   // TextAlive のフレーズ→ {chars(表示用), kanaList(打鍵候補)} に変換
   function convertPhrase(ph){
@@ -357,6 +396,14 @@
           disp.kanaIdx=kanaList.length;
           kanaList.push({kana:hira, startTime:c.startTime, merged:false});
         }
+      } else if(isKanji(raw) && KANJI_READINGS[raw]){
+        // 読みが登録済みの漢字だけ、モーラ単位で等分したタイミングを割り当てて打鍵対象にする
+        var reading=KANJI_READINGS[raw];
+        var span=(c.endTime-c.startTime)||200, per=span/reading.length;
+        disp.kanaIdx=kanaList.length;
+        for(var m=0;m<reading.length;m++){
+          kanaList.push({kana:reading[m], startTime:c.startTime+m*per, merged:false});
+        }
       }
       chars.push(disp);
       if(c===ph.lastChar) break;
@@ -365,9 +412,49 @@
     return {chars:chars, kanaList:kanaList, startTime:ph.startTime, endTime:ph.endTime, text:ph.text};
   }
 
+  /* ============ 効果音(タップ/スライド/確定をメロディ風の音階で) ============ */
+  var actx=null, master=null;
+  function audio(){
+    if(!actx){
+      var AC=window.AudioContext||window.webkitAudioContext;
+      actx=new AC();
+      master=actx.createGain(); master.gain.value=0.25; master.connect(actx.destination);
+    }
+    return actx;
+  }
+  function ensureAudio(){ try{ var c=audio(); if(c.state==="suspended") c.resume(); }catch(e){} }
+  function blip(when,freq,dur,type,vol){
+    if(!actx) return;
+    var o=actx.createOscillator(), g=actx.createGain();
+    o.type=type||"sine"; o.frequency.setValueAtTime(freq,when);
+    g.gain.setValueAtTime(0,when);
+    g.gain.linearRampToValueAtTime(vol||0.3,when+0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001,when+dur);
+    o.connect(g); g.connect(master); o.start(when); o.stop(when+dur+0.02);
+  }
+  // 曲のキーに寄せたペンタトニック(近似)。実際のコード進行は追わず、
+  // 打鍵順に音階内を上下させて「メロディに寄り添っている」感触だけを作る。
+  var MELODY_SCALE=[0,3,5,7,10,12,15];
+  var BASE_FREQ=349.23; // F4 付近
+  function noteFreq(idx){
+    var deg=MELODY_SCALE[((idx%MELODY_SCALE.length)+MELODY_SCALE.length)%MELODY_SCALE.length];
+    return BASE_FREQ*Math.pow(2,deg/12);
+  }
+  function sfxTap(){ if(actx) blip(actx.currentTime,1700,0.02,"square",0.09); }
+  function sfxSlide(){ if(actx) blip(actx.currentTime,1250,0.014,"square",0.05); }
+  function sfxCommit(noteIdx,g){
+    if(!actx) return;
+    var f = g==="MISS" ? 120 : noteFreq(noteIdx);
+    var type = g==="MISS" ? "sawtooth" : "sine";
+    var vol = g==="JUST" ? 0.34 : g==="MISS" ? 0.22 : 0.27;
+    blip(actx.currentTime,f,g==="JUST"?0.16:0.11,type,vol);
+    if(g==="JUST") blip(actx.currentTime+0.01,f*2,0.09,"sine",0.11);
+  }
+  function sfxMiss(){ if(actx) blip(actx.currentTime,130,0.09,"sawtooth",0.22); }
+
   /* ============ ゲーム状態 ============ */
   var el={};
-  ["screen","phrase","guide","nextPhrase","judge","delta","score","combo","progress",
+  ["screen","phrase","phraseProgress","guide","nextPhrase","judge","delta","score","combo","progress",
    "overlay","ovTitle","ovText","ovErr","ovResult","startBtn","zone","cross","songmeta","songUrl","loadSong"]
     .forEach(function(id){ el[id]=document.getElementById(id); });
 
@@ -385,29 +472,38 @@
         startTime:vp.startTime, endTime:vp.endTime
       };
     }).filter(function(p){ return p.typer.segments.length>0; });
-    return {phrases:phrases, pi:0, score:0, combo:0, maxCombo:0, deltas:[],
+    return {phrases:phrases, pi:0, score:0, combo:0, maxCombo:0, deltas:[], noteCount:0,
             counts:{JUST:0,GREAT:0,GOOD:0,TYPED:0,LATE:0,MISS:0}, running:false};
   }
 
   function now(){ return player&&player.timer ? player.timer.position : 0; }
+
+  // 現在の未確定文字の入力方法ヒント(フリック中は方向、キーボードは最短ローマ字)
+  function segHint(seg){
+    if(usePad) return flickHint(seg.kana);
+    return seg.patterns.reduce(function(a,b){ return b.length<a.length?b:a; });
+  }
 
   function renderPhrase(){
     if(!state || !state.phrases.length) return;
     var P=state.phrases[state.pi];
     var html="";
     P.chars.forEach(function(dc){
-      var cls="skip";
+      var cls="skip", hint="";
       if(dc.kanaIdx!=null){
         var segIdx=dc.kanaIdx;
         if(!P.pickedSet[segIdx]) cls="skip";
         else{
           var ai=P.picked.indexOf(segIdx);
           if(P.results[ai]) cls = P.results[ai]==="MISS" ? "missed" : "done";
-          else if(ai===P.typer.index) cls="cur";
-          else cls="pending";
+          else{
+            cls = (ai===P.typer.index) ? "cur" : "pending";
+            hint = segHint(P.segsAll[segIdx]);
+          }
         }
       }
-      html+='<span class="ch '+cls+'">'+dc.text+"</span>";
+      html+='<span class="chwrap"><span class="ch '+cls+'">'+dc.text+'</span>'+
+            '<span class="hint'+(cls==="cur"?" cur":"")+'">'+hint+"</span></span>";
     });
     el.phrase.innerHTML=html;
     if(P.typer.done()){
@@ -418,8 +514,33 @@
     } else {
       el.guide.innerHTML='<span class="typed">'+P.typer.buffer+"</span>"+P.typer.hint();
     }
+
+    // フレーズ内の進行(どのあたりを歌っているか)を示すミニタイムライン
+    var t=now();
+    var dur=P.endTime-P.startTime;
+    var pct = dur>0 ? Math.max(0,Math.min(1,(t-P.startTime)/dur)) : 0;
+    if(el.phraseProgress.dataset.pi!==String(state.pi)){
+      var tickHtml="";
+      P.picked.forEach(function(segIdx){
+        var seg=P.segsAll[segIdx];
+        var tp = dur>0 ? Math.max(0,Math.min(100,(seg.startTime-P.startTime)/dur*100)) : 0;
+        tickHtml+='<i class="tick" style="left:'+tp+'%"></i>';
+      });
+      el.phraseProgress.innerHTML=tickHtml+'<i class="head" id="phraseHead"></i>';
+      el.phraseHead=document.getElementById("phraseHead");
+      el.phraseProgress.dataset.pi=String(state.pi);
+    }
+    if(el.phraseHead) el.phraseHead.style.left=(pct*100)+"%";
+
+    // カラオケ風の次フレーズプレビュー。開始が近い/現フレーズを打ち終えたら強調する
     var nx=state.phrases[state.pi+1];
-    el.nextPhrase.textContent = nx ? "next  "+nx.chars.map(function(d){return d.text;}).join("") : "";
+    if(nx){
+      el.nextPhrase.textContent = "next  "+nx.chars.map(function(d){ return d.text; }).join("");
+      el.nextPhrase.classList.toggle("soon", P.typer.done() || (nx.startTime-t)<1500);
+    } else {
+      el.nextPhrase.textContent="";
+      el.nextPhrase.classList.remove("soon");
+    }
   }
 
   function showJudge(g,delta){
@@ -446,6 +567,7 @@
     el.combo.textContent=state.combo;
     el.screen.classList.toggle("fever", state.combo>=12);
     showJudge(r.grade,r.delta);
+    sfxCommit(state.noteCount++, r.grade);
   }
 
   function flashMiss(){
@@ -455,6 +577,7 @@
     el.judge.className="judge MISS"; el.judge.textContent="MISS";
     void el.judge.offsetWidth; el.judge.classList.add("show");
     el.delta.textContent="";
+    sfxMiss();
   }
 
   function advancePhraseIfDone(){
@@ -553,6 +676,7 @@
 
   function start(){
     if(!videoPhrases) return;
+    ensureAudio();
     state=buildState();
     el.score.textContent="0"; el.combo.textContent="0";
     el.judge.textContent=""; el.delta.textContent="";
@@ -565,12 +689,31 @@
     requestAnimationFrame(loop);
   }
 
-  /* ============ フリック(demo.html と同一の1タッチゾーン方式) ============ */
+  /* ============ フリック(1タッチゾーン方式・8方向+濁点) ============
+   * 「行」は次に打つ文字から自動で決まる。清音行(か/さ/た/は)は、そのままの
+   * cross を使って斜めスライドで濁点(が/ざ/だ/ば行)を入力できる
+   * (旧・みんなの顔文字キーボードの方式を参考)。あ段の濁点(が/ざ/だ/ば)は
+   * 中央への短いスライドで入力する。半濁点(ぱ行)は行自体が別扱いなので、
+   * ぱ行が対象のときは専用の5方向 cross を表示する。
+   */
   var FLICK_ROWS=[
     "あいうえお","かきくけこ","がぎぐげご","さしすせそ","ざじずぜぞ",
     "たちつてと","だぢづでど","なにぬねの","はひふへほ","ばびぶべぼ",
     "ぱぴぷぺぽ","まみむめも","らりるれろ"
   ];
+  var DAKUTEN_PAIRS=[
+    ["かきくけこ","がぎぐげご"],
+    ["さしすせそ","ざじずぜぞ"],
+    ["たちつてと","だぢづでど"],
+    ["はひふへほ","ばびぶべぼ"]
+  ];
+  function findDakutenPair(kana){
+    for(var i=0;i<DAKUTEN_PAIRS.length;i++){
+      var seion=DAKUTEN_PAIRS[i][0], daku=DAKUTEN_PAIRS[i][1];
+      if(seion.indexOf(kana)>=0 || daku.indexOf(kana)>=0) return {seion:seion,daku:daku};
+    }
+    return null;
+  }
   function flickOptions(kana){
     if(kana.length===2){
       var base=kana[0];
@@ -578,6 +721,13 @@
     }
     if(kana==="わ"||kana==="を"||kana==="ん") return {c:"わ", l:"を", u:"ん"};
     if(kana==="や"||kana==="ゆ"||kana==="よ") return {c:"や", u:"ゆ", d:"よ"};
+    var pair=findDakutenPair(kana);
+    if(pair){
+      return {
+        c:pair.seion[0], l:pair.seion[1], u:pair.seion[2], r:pair.seion[3], d:pair.seion[4],
+        cc:pair.daku[0], nw:pair.daku[1], ne:pair.daku[2], se:pair.daku[3], sw:pair.daku[4]
+      };
+    }
     for(var i=0;i<FLICK_ROWS.length;i++){
       var row=FLICK_ROWS[i];
       if(row.indexOf(kana)>=0)
@@ -585,7 +735,8 @@
     }
     return {c:kana};
   }
-  var DIR_LABEL={c:"タップ", l:"←", u:"↑", r:"→", d:"↓"};
+  var DIR_LABEL={c:"タップ", l:"←", u:"↑", r:"→", d:"↓",
+    nw:"↖濁", ne:"↗濁", se:"↘濁", sw:"↙濁", cc:"軽く濁"};
   function flickHint(kana){
     var opts=flickOptions(kana);
     for(var dir in opts) if(opts[dir]===kana) return DIR_LABEL[dir];
@@ -608,7 +759,9 @@
   }
   (function(){
     var zone=el.zone, cross=el.cross;
-    var sx=0, sy=0, active=false, opts=null, THRESH=24;
+    var sx=0, sy=0, active=false, opts=null, optsMode="4", lastDir=null;
+    var THRESH=24, THRESH_MICRO=10;
+
     function renderCross(x,y){
       cross.style.left=x+"px"; cross.style.top=y+"px";
       var html="";
@@ -617,33 +770,50 @@
       cross.innerHTML=html;
       cross.classList.add("show");
     }
-    function resolveDir(dx,dy){
+    function resolveDir4(dx,dy){
       var ax=Math.abs(dx), ay=Math.abs(dy);
       if(Math.max(ax,ay)<THRESH) return "c";
       if(ax>ay) return dx<0?"l":"r";
       return dy<0?"u":"d";
     }
+    // 8方向: 十字(清音)+斜め(濁音)。中心付近の短いスライドは「あ段の濁点」
+    function resolveDir8(dx,dy){
+      var dist=Math.hypot(dx,dy);
+      if(dist<THRESH_MICRO) return "c";
+      if(dist<THRESH) return "cc";
+      var angle=(Math.atan2(dy,dx)*180/Math.PI+360)%360;
+      var dirs=["r","se","d","sw","l","nw","u","ne"]; // 0,45,90,135,180,225,270,315度
+      return dirs[Math.round(angle/45)%8];
+    }
+    function resolveDir(dx,dy){ return optsMode==="8" ? resolveDir8(dx,dy) : resolveDir4(dx,dy); }
     function highlight(dir){
       var cells=cross.querySelectorAll(".cell");
       for(var i=0;i<cells.length;i++)
         cells[i].classList.toggle("sel", cells[i].getAttribute("data-dir")===dir);
     }
     function pt(e){ return e.touches&&e.touches.length?e.touches[0]:(e.changedTouches?e.changedTouches[0]:e); }
+
     function down(e){
       e.preventDefault();
       var kana=currentTargetKana();
       if(!kana) return;
+      ensureAudio();
       opts=flickOptions(kana);
+      optsMode = ("nw" in opts) ? "8" : "4";
+      lastDir="c";
       var rect=zone.getBoundingClientRect(), p=pt(e);
       sx=p.clientX; sy=p.clientY; active=true;
       renderCross(p.clientX-rect.left, p.clientY-rect.top);
       highlight("c");
+      sfxTap();
     }
     function move(e){
       if(!active) return;
       e.preventDefault();
       var p=pt(e);
-      highlight(resolveDir(p.clientX-sx, p.clientY-sy));
+      var dir=resolveDir(p.clientX-sx, p.clientY-sy);
+      highlight(dir);
+      if(dir!==lastDir){ sfxSlide(); lastDir=dir; }
     }
     function up(e){
       if(!active) return;
@@ -670,6 +840,8 @@
     el.zone.classList.toggle("on",on);
   }
   document.getElementById("padToggle").addEventListener("click",function(){ setPadMode(!usePad); });
+
+  // タッチ端末では最初からフリックゾーンを出す
   if(window.matchMedia("(max-width:640px)").matches || "ontouchstart" in window) setPadMode(true);
 
   /* ============ 入力・難易度・曲変更 ============ */
@@ -677,6 +849,7 @@
     if(e.metaKey||e.ctrlKey||e.altKey) return;
     if(e.target===el.songUrl) return;
     if(e.key.length===1 && /[a-z\-]/i.test(e.key)){
+      ensureAudio();
       e.preventDefault();
       handleKey(e.key.toLowerCase());
     }
@@ -755,7 +928,7 @@
     el.ovText.textContent="";
     el.ovErr.hidden=false;
     var diag=netDiag.slice(-4);
-    el.ovErr.textContent=String(msg)+"\n[build 7]"+(diag.length?"\n--- 失敗した通信 ---\n"+diag.join("\n"):"");
+    el.ovErr.textContent=String(msg)+"\n[build 8]"+(diag.length?"\n--- 失敗した通信 ---\n"+diag.join("\n"):"");
     el.overlay.style.display="grid";
   }
 
