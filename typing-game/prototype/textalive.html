@@ -109,7 +109,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API</p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:#4A5488">build 7</span></p>
     <h1>打鍵ミライ × TextAlive</h1>
     <p class="lede">
       実楽曲の文字単位タイミングで判定エンジンを回す検証機。既定曲はマジカルミライ2025課題曲です。
@@ -755,7 +755,7 @@
     el.ovText.textContent="";
     el.ovErr.hidden=false;
     var diag=netDiag.slice(-4);
-    el.ovErr.textContent=String(msg)+(diag.length?"\n--- 失敗した通信 ---\n"+diag.join("\n"):"");
+    el.ovErr.textContent=String(msg)+"\n[build 7]"+(diag.length?"\n--- 失敗した通信 ---\n"+diag.join("\n"):"");
     el.overlay.style.display="grid";
   }
 
