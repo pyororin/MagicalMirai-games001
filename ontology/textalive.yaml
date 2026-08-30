@@ -328,3 +328,43 @@ pitfalls:
       実測では間隔 200ms 未満の箇所が 250 中 41 あり、クランプは必須。
     verified: 2026-08-30 (typing-game、ロンリーランで計測)
     refs: [typing-game/prototype/src/judge.ts]
+
+  - id: playback-rate-is-controllable
+    symptom: 練習用に曲を遅く再生したいが、TextAlive Player に速度APIが見当たらない。
+    cause: >
+      Player 自体は再生レートを公開していないが、piapro 等の楽曲は
+      mediaElement 配下に <audio> として作られるため、その要素を直接操作できる。
+    solution: |
+      document.querySelector("#media audio").playbackRate = 0.6 で減速できる。
+      preservesPitch を true にすると音程は保たれる。
+      player.timer.position は audio.currentTime に追従する
+      （0.6 倍で 5 秒あたりの誤差 -19ms を実測。判定はそのまま成立する）。
+      YouTube/niconico の楽曲は iframe になり同じ手が使えないので、
+      audio 要素が無いときは UI を無効化して理由を出すこと。
+      音量も player.volume ではなく audio.volume が実効だった。
+    verified: 2026-08-31 (typing-game build 9、ロンリーランで実測)
+    refs: [typing-game/prototype/textalive.html]
+
+  - id: seek-completes-after-play-request
+    symptom: >
+      曲の途中で「もう一度」を押すと、開始直後に全ノーツが一斉に MISS になる。
+    cause: >
+      requestMediaSeek(0) の直後は timer.position がまだ古い値（例 31秒）を返すため、
+      「発声時刻を過ぎた未入力ノーツを MISS にする」処理が全ノーツを刈り取ってしまう。
+    solution: >
+      開始時に seekPending フラグを立て、position が巻き戻った（1 秒未満になった）ことを
+      確認するまで刈り取りを止める。シークが失敗しても止まらないよう数秒のデッドラインも置く。
+    detection: >
+      開始直後に counts.MISS が一気に増え、idx が曲の途中まで飛ぶ。
+    verified: 2026-08-31 (typing-game build 10、自動プレイのテスト中に発見)
+    refs: [typing-game/prototype/textalive.html]
+
+  - id: beat-and-chorus-for-visuals
+    symptom: 演出を「楽曲と同期」させたいが、何を使えばいいか分からない。
+    what_to_use: |
+      player.findBeat(position) → { startTime, duration, position, length }。
+      拍頭からの経過を duration で割ると 0..1 の位相が取れ、明滅や跳ねに使える。
+      player.findChorus(position) → サビ区間（無ければ null）。パレット切替の合図に使える。
+      どちらも onVideoReady 後なら同期的に引ける（描画ループから毎フレーム呼んで問題ない）。
+    verified: 2026-08-31 (typing-game build 11、ロンリーランで beat 300ms/6拍を確認)
+    refs: [typing-game/prototype/textalive.html]
