@@ -262,12 +262,61 @@ pitfalls:
       TextAlive の文字単位データ（char.text）は表示文字であり、読み（かな）は API から提供されない。
       実測（ロンリーラン）では表示 386 文字中かなは 284 文字（74%）。
     solution: >
-      読みが必要なら形態素解析による事前生成が要る。かなだけ扱う設計なら
-      カタカナは charCode - 0x60 でひらがなへ正規化し、拗音（きゃ等）は
-      前後の文字を結合して 1 音節にまとめる。
+      形態素解析でビルド時に事前生成し、JSON として同梱する（実行時に解析しない）。
+      手順: カード JSON の lyrics.url（= piapro の歌詞ページ）から本文を取り、
+      kuromoji で分かち書き＋読みを取得し、表層形と読みを 1 文字ずつ対応づけて
+      「歌詞全文の 1 文字 = 1 読み」の配列にする。実行時は phrase の char.text を
+      空白を無視した圧縮列に突き合わせてカーソルで引く（ロンリーランで 386/386 一致）。
+      漢字 1 文字が複数モーラを持つ場合は char の startTime〜endTime を等分して
+      かなごとのノート時刻にする。かなだけ扱う設計なら、カタカナは
+      charCode - 0x60 でひらがなへ正規化する。
+      これで打鍵対象は 284 かな（かなのみ）→ 450 かな（読み込み）へ増える。
     detection: 実データのかな比率と文字間隔は onVideoReady 後に video.firstPhrase を辿って集計できる。
-    verified: 2026-08-30 (typing-game、実データ 34 フレーズで計測)
-    refs: [typing-game/prototype/src/romaji.ts]
+    verified: 2026-08-30 (typing-game、課題曲 6 曲を生成。ロンリーランで実機照合)
+    refs: [typing-game/prototype/tools/build-readings.mjs, typing-game/prototype/data/readings/]
+
+  - id: lyric-text-is-not-in-card-json
+    symptom: カード JSON（api.textalive.jp/cards/<id>）に歌詞の「文字」が入っていない。
+    cause: >
+      カード JSON の lyrics は phrases > words > characters の時刻だけを持ち、
+      文字そのものは持たない。文字はクライアントが lyrics.parserUrl の
+      パーサで lyrics.url（piapro 等の歌詞ページ）から取り出して合成している。
+    solution: >
+      サーバー側（Node）で歌詞本文が欲しいときは lyrics.url を直接取得する。
+      piapro は <div class="contents_text_txt"><p>…</p> に <br /> 区切りで入っている。
+      文字と時刻の対応が要るなら、ブラウザで Player を動かして
+      video.firstPhrase を辿るのが確実。
+    verified: 2026-08-30 (typing-game、読みデータ生成で利用)
+    refs: [typing-game/prototype/tools/build-readings.mjs]
+
+  - id: side-data-races-onvideoready
+    symptom: >
+      自前の付随データ（読みデータ等）を fetch しているのに、たまに
+      「データ無し」の劣化動作になる。ローカルでは再現せず、Pages など
+      ネットワークが遅い環境で起きる。
+    cause: >
+      onVideoReady は自前 fetch の完了を待たない。結果を変数に置いて
+      「まだ null なら無視」という書き方だと、競合したときに黙って劣化する。
+    solution: >
+      変数ではなく Promise をモジュール内で共有し、onVideoReady 側で
+      await する（取得開始はページ読み込み直後に前倒しする）。
+      取得先は相対パスではなく new URL(path, document.baseURI) で組み立てる
+      （Pages はサブディレクトリ配下に置かれるため）。ビルド番号を
+      クエリに付けて古いキャッシュを避け、失敗したら URL と HTTP ステータスを
+      画面に出す（黙って劣化させない）。
+    verified: 2026-08-30 (typing-game build 8、data/readings を Pages 相当の入れ子パスで確認)
+    refs: [typing-game/prototype/textalive.html]
+
+  - id: onplay-fires-before-user-start
+    symptom: >
+      スタートボタンを押していないのに onPlay が飛び、「準備中オーバーレイ」が
+      勝手に閉じてゲームが始まったように見える（実際は自前の状態は開始していない）。
+    cause: 準備段階のメディア初期化でも onPlay が発火することがある。
+    solution: >
+      onPlay でオーバーレイを閉じるときは、自前の「プレイ中」フラグが立っている
+      ことを条件にする（イベント単独を開始の合図にしない）。
+    verified: 2026-08-30 (typing-game build 8)
+    refs: [typing-game/prototype/textalive.html]
 
   - id: char-interval-can-be-51ms
     symptom: 文字単位タイミングで判定を作ると、速い箇所で隣の文字を誤判定する。

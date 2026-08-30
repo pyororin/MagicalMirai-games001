@@ -112,3 +112,20 @@ pitfalls:
     verified: 2026-08-30 (typing-game)
     refs: [typing-game/prototype/vendor/]
 
+
+  - id: raf-stops-on-hidden-tab
+    symptom: >
+      裏タブにしている間、曲は鳴り続けるのにゲームの進行だけ止まる。
+      戻ってくると打ち残しが一斉に MISS になる（音ゲー・リズムゲームで顕著）。
+    cause: >
+      requestAnimationFrame はドキュメントが hidden の間は呼ばれない。
+      一方、audio の再生と TextAlive の timer.position は進み続けるため、
+      「描画・判定ループ」と「曲の時刻」が乖離する。
+    solution: >
+      visibilitychange で hidden になったら曲ごと一時停止し、復帰時に
+      明示操作で再開させる（時刻ベースの判定は rAF の欠落を吸収できない）。
+      自動テストでヘッドレスに近い環境を使う場合も rAF は動かないので、
+      検証時は requestAnimationFrame を setTimeout へ差し替えて回す。
+    detection: 非表示タブで audio.currentTime だけが進み、進行バーが止まる。
+    verified: 2026-08-30 (typing-game build 8)
+    refs: [typing-game/prototype/textalive.html]
