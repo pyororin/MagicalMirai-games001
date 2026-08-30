@@ -1,17 +1,18 @@
 name: Deploy app to GitHub Pages
 
+# このリポジトリの Pages は gh-pages ブランチ配信（typing-game 案のワークフローが確立した方式）。
+# GITHUB_TOKEN では Pages サイトの新規作成ができないため actions/deploy-pages は使わない。
+# 他企画のディレクトリを保持するため destination_dir でサブディレクトリに配置する。
 on:
   push:
     branches: [claude/magical-miku-contest-proposal-r37lcw]
     paths:
-      - "miku-twintail/app/**"
+      - "miku-twintail/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
@@ -20,9 +21,6 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,11 +32,13 @@ jobs:
         working-directory: miku-twintail/app
       - run: npm run build
         working-directory: miku-twintail/app
-      - uses: actions/configure-pages@v5
+      - name: Collect static files
+        run: |
+          mkdir -p _site/prototype
+          cp -r miku-twintail/app/dist/* _site/
+          cp miku-twintail/prototype/index.html _site/prototype/
+      - uses: peaceiris/actions-gh-pages@v4
         with:
-          enablement: true
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: miku-twintail/app/dist
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_site
+          destination_dir: miku-twintail
