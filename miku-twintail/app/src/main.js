@@ -70,6 +70,73 @@ const findCharText = ms => {
   return c ? c.text : null;
 };
 
+// ---- 演奏エフェクト（タップ＝合いの手） ---------------------------------------
+// ホールド中は 8 分音符ごとにコードトーンのプラック（曲の和音に必ずハモる）、
+// リリースでマラカス。拍に合ったリリースはタンバリンの「シャン」に格上げ。
+let ac = null, noiseBuf = null;
+function ensureAudio() {
+  if (!ac) {
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.2, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  if (ac.state === "suspended") ac.resume();
+}
+const NOTE = st => 440 * Math.pow(2, st / 12);
+const PC = { C: 3, "C#": 4, Db: 4, D: 5, "D#": 6, Eb: 6, E: 7, F: 8, "F#": 9, Gb: 9,
+             G: 10, "G#": 11, Ab: 11, A: 0, "A#": 1, Bb: 1, B: 2 };
+// A4=0 の半音オフセットで現在のコードトーンを返す（コード不明時は A マイナーペンタ）
+function chordTones(ms) {
+  const c = ready && player.findChord(ms);
+  const m = c && c.name && c.name.match(/^([A-G][#b]?)(m(?!aj))?/);
+  if (!m || !(m[1] in PC)) return [0, 3, 7, 12];
+  const root = PC[m[1]] - 12;
+  return [root, root + (m[2] ? 3 : 4), root + 7, root + 12];
+}
+function pluck(step, ms) {
+  ensureAudio();
+  const tones = chordTones(ms);
+  const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+  o.type = "triangle"; o.frequency.value = NOTE(tones[step % tones.length] + 12);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.02 + 0.06 * vocalAmp(ms), t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+  o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + 0.2);
+}
+function shaker(accent) {
+  ensureAudio();
+  const t = ac.currentTime;
+  const s = ac.createBufferSource(); s.buffer = noiseBuf;
+  const hp = ac.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 5000;
+  const g = ac.createGain();
+  g.gain.setValueAtTime(accent ? 0.22 : 0.1, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + (accent ? 0.22 : 0.12));
+  s.connect(hp); hp.connect(g); g.connect(ac.destination); s.start(t);
+  if (accent) for (const [f, dt] of [[6200, 0], [8400, 0.05]]) {   // タンバリンの鈴
+    const o = ac.createOscillator(), og = ac.createGain();
+    o.type = "sine"; o.frequency.value = f;
+    og.gain.setValueAtTime(0.0001, t + dt);
+    og.gain.exponentialRampToValueAtTime(0.08, t + dt + 0.01);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + dt + 0.15);
+    o.connect(og); og.connect(ac.destination); o.start(t + dt); o.stop(t + dt + 0.25);
+  }
+}
+let holdTimer = null, lastSlot = null, toneStep = 0;
+function slotOf(ms) {
+  const b = ready && player.findBeat(ms);
+  if (!b) return null;
+  return b.startTime * 2 + (b.progress(ms) >= 0.5 ? 1 : 0);   // 8 分音符スロット
+}
+function startHold() {
+  lastSlot = slotOf(posMs()); toneStep = 0;
+  holdTimer = setInterval(() => {
+    const ms = posMs(), s = slotOf(ms);
+    if (s !== null && s !== lastSlot) { lastSlot = s; if (vocalActive(ms)) pluck(toneStep++, ms); }
+  }, 25);
+}
+function stopHold() { if (holdTimer) { clearInterval(holdTimer); holdTimer = null; } }
+
 // ---- お題（日常に存在する物。造形は Canvas 直描き） ----------------------------
 const cv = document.getElementById("stage"), cx2d = cv.getContext("2d");
 const OBJECTS = [
@@ -113,7 +180,7 @@ document.getElementById("swap").onclick = () => {
 const ropes = [];
 let stroke = null;
 
-function makeRope(drawnPts, beatFit, chars) {
+function makeRope(drawnPts, beatFit, chars, tapOnBeat = false, relOnBeat = false) {
   const pts = resample(drawnPts, Math.max(10, Math.min(26, Math.floor(polyLen(drawnPts) / 12))));
   const nodes = pts.map(p => ({ x: p.x, y: p.y, px: p.x, py: p.y }));
   const segLens = [];
@@ -123,7 +190,7 @@ function makeRope(drawnPts, beatFit, chars) {
   const od = Math.hypot(0.85, 0.55);
   const outDir = { x: sign * 0.85 / od, y: -0.55 / od };
   return { nodes, segLens, drawn: drawnPts, beatFit, len: polyLen(drawnPts),
-           seed: Math.random() * 7, outDir,
+           seed: Math.random() * 7, outDir, tapOnBeat, relOnBeat,
            chars: chars.length ? chars : [..."ツインテール"] };
 }
 function stepRope(r, t) {
@@ -244,9 +311,13 @@ function pos(e) {
   return { x: (e.clientX - r.left) * cv.width / r.width, y: (e.clientY - r.top) * cv.height / r.height };
 }
 cv.addEventListener("pointerdown", e => {
+  ensureAudio();
   if (!vocalActive(posMs())) { flash = "ミクが歌っていない……（歌唱中しか髪は生えない）"; return; }
   cv.setPointerCapture(e.pointerId);
-  stroke = { pts: [{ ...pos(e), beat: onBeat(posMs()) }], chars: [], lastChar: null };
+  const tapOnBeat = onBeat(posMs());
+  if (tapOnBeat) flash = "ナイスタップ！";
+  stroke = { pts: [{ ...pos(e), beat: tapOnBeat }], chars: [], lastChar: null, tapOnBeat };
+  startHold();
 });
 cv.addEventListener("pointermove", e => {
   if (!stroke) return;
@@ -258,9 +329,13 @@ cv.addEventListener("pointermove", e => {
   }
 });
 cv.addEventListener("pointerup", () => {
+  stopHold();
   if (stroke && stroke.pts.length > 5) {
+    const relOnBeat = onBeat(posMs());
+    shaker(relOnBeat);
+    if (relOnBeat) flash = "シャン♪";
     const fit = stroke.pts.filter(p => p.beat).length / stroke.pts.length;
-    ropes.push(makeRope(stroke.pts, fit, stroke.chars));
+    ropes.push(makeRope(stroke.pts, fit, stroke.chars, stroke.tapOnBeat, relOnBeat));
     if (ropes.length > 2) ropes.shift();
   }
   stroke = null;
@@ -290,8 +365,11 @@ function judge() {
   const ratio = (left.len + right.len) / 2 / height;
   const lenS = 20 * clamp01(1 - Math.abs(ratio - 1.6) / 1.6);
 
-  // ハリ・ツヤ 20: ビート適合率
-  const shine = 20 * (left.beatFit + right.beatFit) / 2;
+  // ハリ・ツヤ 20: 描線のビート適合 12 ＋ 拍に合ったタップ 4 ＋ 拍に合ったリリース 4
+  const shineOf = r => 12 * r.beatFit + 4 * (r.tapOnBeat ? 1 : 0) + 4 * (r.relOnBeat ? 1 : 0);
+  const shine = (shineOf(left) + shineOf(right)) / 2;
+  const taps = (left.tapOnBeat ? 1 : 0) + (right.tapOnBeat ? 1 : 0);
+  const rels = (left.relOnBeat ? 1 : 0) + (right.relOnBeat ? 1 : 0);
 
   // 歌詞充填率 10: 髪に取り込めた文字数
   const fill = 10 * clamp01((left.chars.length + right.chars.length) / 16);
@@ -302,7 +380,7 @@ function judge() {
   result.innerHTML =
     `ミク度 <b>${total}%</b> ─ ${rank}\n` +
     `対称性 ${sym.toFixed(1)}/30 ・ つむじ位置 ${anch.toFixed(1)}/20 ・ 長さ比 ${lenS.toFixed(1)}/20 (${ratio.toFixed(2)})\n` +
-    `ハリツヤ ${shine.toFixed(1)}/20 ・ 歌詞充填 ${fill.toFixed(1)}/10`;
+    `ハリツヤ ${shine.toFixed(1)}/20（タップ ${taps}/2 ・ リリース ${rels}/2）・ 歌詞充填 ${fill.toFixed(1)}/10`;
 }
 document.getElementById("judge").onclick = judge;
 const clamp01 = v => Math.max(0, Math.min(1, v));
