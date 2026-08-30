@@ -706,7 +706,7 @@
     el.ovErr.hidden=true;
     el.overlay.style.display="grid";
     el.songmeta.textContent="楽曲情報を読み込み中…";
-    player.createFromSongUrl(u).catch(function(e){ showError("楽曲の読み込みに失敗: "+e); });
+    createFromSong(u,{}).catch(function(e){ showError("楽曲の読み込みに失敗: "+e); });
   });
   el.startBtn.addEventListener("click",start);
 
@@ -731,6 +731,25 @@
     });
   };
 
+  /**
+   * 楽曲読み込み。サーバーが /cards/resolve に 302 を返す構成に
+   * クライアント v0.5.2 が追従できない(redirect:"manual" で status 0 →
+   * "Card data resolver is unavailable")ため、失敗時は自前でリダイレクトを
+   * 追従し、確定したカード URL を createFromCardUrl に渡す。
+   */
+  function createFromSong(url,opts){
+    return player.createFromSongUrl(url,opts).catch(function(e){
+      if(String(e).indexOf("Card data resolver")<0) throw e;
+      // トークン付きだとリダイレクト先が同一ホストの /cards/{id} (JSON+CORS有り)になる
+      return _fetch("https://api.textalive.jp/cards/resolve?url="+encodeURIComponent(url),
+                    {redirect:"follow", headers:{"x-ta-app-token":APP_TOKEN}})
+        .then(function(r){
+          if(!r.ok || !r.url) throw e;
+          return player.createFromCardUrl(r.url,opts);
+        });
+    });
+  }
+
   function showError(msg){
     el.ovTitle.textContent="ERROR";
     el.ovText.textContent="";
@@ -740,6 +759,8 @@
     el.overlay.style.display="grid";
   }
 
+  var APP_TOKEN="VQRxHB1a0q8fVvnm";
+
   /* ============ Player 初期化 ============ */
   if(typeof TextAliveApp==="undefined"){
     showError("TextAlive App API の読み込みに失敗しました。ネットワークを確認してください。");
@@ -748,14 +769,14 @@
   try{
     var Player=TextAliveApp.Player;
     player=new Player({
-      app:{ token:"VQRxHB1a0q8fVvnm" },
+      app:{ token:APP_TOKEN },
       mediaElement: document.getElementById("media")
     });
     player.addListener({
       onAppReady:function(app){
         if(!app.songUrl){
           // マジカルミライ2025 課題曲: ロンリーラン / 海風太陽(公式サンプルの訂正ID付き)
-          player.createFromSongUrl("https://piapro.jp/t/CyPO/20250128183915",{
+          createFromSong("https://piapro.jp/t/CyPO/20250128183915",{
             video:{
               beatId:4694280, chordId:2830735, repetitiveSegmentId:2946483,
               lyricId:67815, lyricDiffId:20659
