@@ -1,0 +1,771 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>打鍵ミライ × TextAlive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Zen+Kaku+Gothic+New:wght@400;700&display=swap">
+<style>
+  :root{
+    --ground:#0B1026; --panel:#131A38; --panel-2:#1B2450; --line:#2A3566;
+    --ink:#E8ECFF; --dim:#8A93B2; --cyan:#22E4D4; --magenta:#FF4FA3;
+    --amber:#FFC94D; --green:#7BE87B; --red:#FF6B6B;
+    --pixel:"DotGothic16","Courier New",monospace;
+    --body:"Zen Kaku Gothic New",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);line-height:1.7;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:940px;margin:0 auto;padding:28px 20px 64px}
+  .eyebrow{font-family:var(--pixel);font-size:12px;letter-spacing:.18em;color:var(--cyan);text-transform:uppercase;margin:0 0 6px}
+  h1{font-family:var(--pixel);font-size:clamp(26px,5.6vw,40px);margin:0 0 10px;letter-spacing:.04em;text-wrap:balance}
+  .lede{margin:0;color:var(--dim);max-width:62ch;font-size:15px}
+  .songmeta{font-family:var(--pixel);font-size:13px;color:var(--amber);margin:8px 0 0;letter-spacing:.04em;min-height:1.4em}
+
+  .screen{position:relative;margin:18px 0;border:2px solid var(--line);border-radius:4px;overflow:hidden;
+    background:radial-gradient(120% 80% at 50% 0%, #1A2350 0%, #0D1330 60%, #090D24 100%)}
+  .screen::after{content:"";position:absolute;inset:0;pointer-events:none;mix-blend-mode:overlay;
+    background:repeating-linear-gradient(to bottom, rgba(255,255,255,.035) 0 1px, transparent 1px 3px)}
+  .screen.fever{background:radial-gradient(120% 80% at 50% 0%, #3A1550 0%, #1B0F38 60%, #0D0722 100%)}
+
+  .hud{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 14px;
+    border-bottom:1px solid var(--line);background:rgba(9,13,36,.6)}
+  .hud .stat{font-family:var(--pixel);font-size:13px;letter-spacing:.06em}
+  .hud .stat b{display:inline-block;min-width:5ch;color:var(--cyan);font-variant-numeric:tabular-nums;font-size:16px}
+  .hud .stat.combo b{color:var(--amber);min-width:3ch}
+  .hud .spacer{flex:1}
+  .bar{height:6px;background:var(--panel-2);border-radius:3px;overflow:hidden;flex:1 1 140px;min-width:120px}
+  .bar i{display:block;height:100%;width:0;background:var(--cyan);transition:width .1s linear}
+
+  .stage{padding:24px 18px 16px;min-height:240px;display:flex;flex-direction:column;gap:12px}
+  .phrase{font-family:var(--pixel);font-size:clamp(20px,4.8vw,34px);letter-spacing:.06em;line-height:1.5;word-break:break-all;min-height:1.5em}
+  .phrase .ch{transition:color .08s,transform .08s;display:inline-block}
+  .phrase .ch.done{color:var(--dim)}
+  .phrase .ch.cur{color:var(--cyan);transform:translateY(-2px);border-bottom:3px solid var(--magenta)}
+  .phrase .ch.pending{color:var(--ink)}
+  .phrase .ch.skip{color:#4A5488}
+  .phrase .ch.missed{color:var(--red);opacity:.7}
+  .guide{font-family:var(--pixel);font-size:clamp(14px,3vw,20px);color:var(--dim);letter-spacing:.08em;min-height:1.4em;word-break:break-all}
+  .guide .typed{color:var(--cyan)}
+  .next-phrase{font-family:var(--pixel);font-size:clamp(12px,2.4vw,16px);color:#4A5488;letter-spacing:.05em;word-break:break-all;min-height:1.3em}
+
+  .judge-line{display:flex;align-items:baseline;gap:12px;min-height:2em;flex-wrap:wrap}
+  .judge{font-family:var(--pixel);font-size:clamp(20px,4.4vw,30px);letter-spacing:.08em;opacity:0;transform:translateY(4px)}
+  .judge.show{animation:pop .42s ease-out}
+  @keyframes pop{0%{opacity:0;transform:translateY(6px) scale(.9)}18%{opacity:1;transform:translateY(0) scale(1.08)}100%{opacity:0;transform:translateY(-4px) scale(1)}}
+  .judge.JUST{color:var(--magenta)} .judge.GREAT{color:var(--cyan)} .judge.GOOD{color:var(--green)}
+  .judge.TYPED{color:var(--dim)} .judge.LATE{color:var(--amber)} .judge.MISS{color:var(--red)}
+  .delta{font-family:var(--pixel);font-size:13px;color:var(--dim);font-variant-numeric:tabular-nums}
+
+  .overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(9,13,36,.9);
+    text-align:center;padding:24px;z-index:5}
+  .overlay h2{font-family:var(--pixel);font-size:clamp(18px,4.2vw,28px);margin:0 0 10px;letter-spacing:.06em}
+  .overlay p{color:var(--dim);margin:0 auto 16px;max-width:46ch;font-size:14px}
+  .overlay .result{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:10px;margin:0 auto 16px;max-width:460px}
+  .overlay .result div{background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:8px 6px}
+  .overlay .result span{display:block;font-family:var(--pixel);font-size:11px;color:var(--dim);letter-spacing:.08em}
+  .overlay .result b{font-family:var(--pixel);font-size:19px;font-variant-numeric:tabular-nums}
+  .overlay .err{color:var(--red);font-family:var(--pixel);font-size:13px;max-width:52ch;margin:0 auto 14px;word-break:break-all}
+
+  button{font-family:var(--pixel);font-size:15px;letter-spacing:.08em;background:var(--cyan);color:#06122A;
+    border:0;border-radius:3px;padding:11px 22px;cursor:pointer;transition:filter .12s,transform .12s}
+  button:disabled{opacity:.4;cursor:default}
+  button:hover:not(:disabled){filter:brightness(1.12)}
+  button:active:not(:disabled){transform:translateY(1px)}
+  button:focus-visible{outline:2px solid var(--magenta);outline-offset:3px}
+  button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+  button.ghost[aria-pressed="true"]{background:var(--panel-2);border-color:var(--cyan);color:var(--cyan)}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  .controls .label{font-family:var(--pixel);font-size:12px;color:var(--dim);letter-spacing:.1em;margin-right:2px}
+  .controls button.ghost{padding:7px 13px;font-size:13px}
+
+  .zone{display:none;position:relative;height:230px;border-top:1px dashed var(--line);
+    touch-action:none;user-select:none;-webkit-user-select:none;overflow:hidden}
+  .zone.on{display:block}
+  .zone .zonehint{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--pixel);
+    font-size:13px;color:#4A5488;letter-spacing:.1em;pointer-events:none;text-align:center;line-height:2}
+  .cross{position:absolute;width:0;height:0;pointer-events:none;opacity:0;transition:opacity .06s}
+  .cross.show{opacity:1}
+  .cross .cell{position:absolute;width:56px;height:56px;margin:-28px 0 0 -28px;display:grid;place-items:center;
+    font-family:var(--pixel);font-size:24px;background:var(--panel-2);border:1px solid var(--line);border-radius:4px;color:var(--ink)}
+  .cross .cell.c{left:0;top:0} .cross .cell.l{left:-62px;top:0} .cross .cell.u{left:0;top:-62px}
+  .cross .cell.r{left:62px;top:0} .cross .cell.d{left:0;top:62px}
+  .cross .cell.sel{background:var(--cyan);color:#06122A;border-color:var(--cyan)}
+
+  .mediarow{margin-top:14px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+  #media{flex:0 0 auto;min-width:230px;min-height:52px;background:var(--panel);border:1px solid var(--line);border-radius:3px}
+  .songurl{flex:1 1 260px;display:flex;gap:8px}
+  .songurl input{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:3px;
+    color:var(--ink);font-family:var(--pixel);font-size:13px;padding:10px 12px}
+  .caveat{margin-top:26px;padding:14px 16px;border-left:3px solid var(--amber);background:var(--panel);
+    font-size:14px;color:var(--dim);border-radius:0 3px 3px 0}
+  .caveat b{color:var(--ink)}
+  footer{margin-top:26px;font-size:13px;color:#5C6690}
+  footer a{color:var(--cyan)}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms !important;transition-duration:.01ms !important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API</p>
+    <h1>打鍵ミライ × TextAlive</h1>
+    <p class="lede">
+      実楽曲の文字単位タイミングで判定エンジンを回す検証機。既定曲はマジカルミライ2025課題曲です。
+      漢字・記号は打鍵対象外(灰色)で、かなだけを打ちます(読みデータの扱いは本実装の課題)。
+    </p>
+    <p class="songmeta" id="songmeta">楽曲情報を読み込み中…</p>
+  </header>
+
+  <div class="controls">
+    <span class="label">難易度</span>
+    <button class="ghost" data-diff="EASY" aria-pressed="false">EASY</button>
+    <button class="ghost" data-diff="NORMAL" aria-pressed="true">NORMAL</button>
+    <button class="ghost" data-diff="HARD" aria-pressed="false">HARD</button>
+    <span style="flex:1"></span>
+    <button class="ghost" id="padToggle" aria-pressed="false">フリック入力</button>
+  </div>
+
+  <div class="screen" id="screen">
+    <div class="hud">
+      <span class="stat">SCORE <b id="score">0</b></span>
+      <span class="stat combo">COMBO <b id="combo">0</b></span>
+      <span class="spacer"></span>
+      <div class="bar"><i id="progress"></i></div>
+    </div>
+    <div class="stage">
+      <div class="phrase" id="phrase"></div>
+      <div class="guide" id="guide"></div>
+      <div class="next-phrase" id="nextPhrase"></div>
+      <div class="judge-line">
+        <span class="judge" id="judge"></span>
+        <span class="delta" id="delta"></span>
+      </div>
+    </div>
+    <div class="zone" id="zone">
+      <div class="zonehint">ここをタップ / フリック<br>そのまま離す=あ段 ・ 滑らせて離す=←い ↑う →え ↓お</div>
+      <div class="cross" id="cross"></div>
+    </div>
+    <div class="overlay" id="overlay">
+      <div>
+        <h2 id="ovTitle">LOADING…</h2>
+        <p id="ovText">TextAlive から楽曲と歌詞タイミングを読み込んでいます。</p>
+        <p class="err" id="ovErr" hidden></p>
+        <div class="result" id="ovResult" hidden></div>
+        <button id="startBtn" disabled>スタート</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="mediarow">
+    <div id="media"></div>
+    <div class="songurl">
+      <input id="songUrl" placeholder="別の楽曲URL (piapro / YouTube / niconico)" aria-label="楽曲URL">
+      <button class="ghost" id="loadSong">読込</button>
+    </div>
+  </div>
+
+  <p class="caveat">
+    <b>検証ポイント:</b> 文字の発声タイミングと打鍵時刻の突き合わせ精度、ズレの体感。
+    ズレを感じる場合は何 ms ずれるかをリザルトの平均デルタで確認してください(キャリブレーション実装の判断材料)。
+    アプリトークンは TextAlive の設計上クライアントに埋め込む公開値です。
+  </p>
+  <footer>
+    合成音版のデモは <a href="./demo.html">demo.html</a>。エンジンは <code>src/</code> と同一設計。
+  </footer>
+</div>
+
+<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+<script src="https://unpkg.com/textalive-app-api/dist/index.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  /* ============ ローマ字エンジン(demo.html と同一) ============ */
+  var DIGRAPHS = {
+    "きゃ":["kya"],"きゅ":["kyu"],"きょ":["kyo"],
+    "ぎゃ":["gya"],"ぎゅ":["gyu"],"ぎょ":["gyo"],
+    "しゃ":["sha","sya"],"しゅ":["shu","syu"],"しょ":["sho","syo"],"しぇ":["she","sye"],
+    "じゃ":["ja","zya","jya"],"じゅ":["ju","zyu","jyu"],"じょ":["jo","zyo","jyo"],
+    "ちゃ":["cha","tya","cya"],"ちゅ":["chu","tyu"],"ちょ":["cho","tyo"],
+    "にゃ":["nya"],"にゅ":["nyu"],"にょ":["nyo"],
+    "ひゃ":["hya"],"ひゅ":["hyu"],"ひょ":["hyo"],
+    "びゃ":["bya"],"びゅ":["byu"],"びょ":["byo"],
+    "ぴゃ":["pya"],"ぴゅ":["pyu"],"ぴょ":["pyo"],
+    "みゃ":["mya"],"みゅ":["myu"],"みょ":["myo"],
+    "りゃ":["rya"],"りゅ":["ryu"],"りょ":["ryo"],
+    "ふぁ":["fa"],"ふぃ":["fi"],"ふぇ":["fe"],"ふぉ":["fo"],
+    "てぃ":["thi"],"でぃ":["dhi"],"うぃ":["wi","whi"],"うぇ":["we","whe"]
+  };
+  var MONO = {
+    "あ":["a"],"い":["i"],"う":["u"],"え":["e"],"お":["o"],
+    "か":["ka","ca"],"き":["ki"],"く":["ku","cu"],"け":["ke"],"こ":["ko","co"],
+    "が":["ga"],"ぎ":["gi"],"ぐ":["gu"],"げ":["ge"],"ご":["go"],
+    "さ":["sa"],"し":["shi","si","ci"],"す":["su"],"せ":["se"],"そ":["so"],
+    "ざ":["za"],"じ":["ji","zi"],"ず":["zu"],"ぜ":["ze"],"ぞ":["zo"],
+    "た":["ta"],"ち":["chi","ti"],"つ":["tsu","tu"],"て":["te"],"と":["to"],
+    "だ":["da"],"ぢ":["di"],"づ":["du"],"で":["de"],"ど":["do"],
+    "な":["na"],"に":["ni"],"ぬ":["nu"],"ね":["ne"],"の":["no"],
+    "は":["ha"],"ひ":["hi"],"ふ":["fu","hu"],"へ":["he"],"ほ":["ho"],
+    "ば":["ba"],"び":["bi"],"ぶ":["bu"],"べ":["be"],"ぼ":["bo"],
+    "ぱ":["pa"],"ぴ":["pi"],"ぷ":["pu"],"ぺ":["pe"],"ぽ":["po"],
+    "ま":["ma"],"み":["mi"],"む":["mu"],"め":["me"],"も":["mo"],
+    "や":["ya"],"ゆ":["yu"],"よ":["yo"],
+    "ら":["ra"],"り":["ri"],"る":["ru"],"れ":["re"],"ろ":["ro"],
+    "わ":["wa"],"を":["wo"],
+    "ぁ":["la","xa"],"ぃ":["li","xi"],"ぅ":["lu","xu"],"ぇ":["le","xe"],"ぉ":["lo","xo"],
+    "ゃ":["lya","xya"],"ゅ":["lyu","xyu"],"ょ":["lyo","xyo"],
+    "っ":["ltu","xtu"],"ー":["-"]
+  };
+  var VOWELS = {a:1,i:1,u:1,e:1,o:1};
+
+  function headConsonants(kana){
+    var ps = DIGRAPHS[kana] || MONO[kana] || [], out = {}, i, c;
+    for(i=0;i<ps.length;i++){ c = ps[i][0]; if(c && !VOWELS[c] && c!=="-") out[c]=1; }
+    return Object.keys(out);
+  }
+  function nPatterns(next){
+    var base=["nn","xn"];
+    if(!next) return base;
+    var h=headConsonants(next);
+    if(h.length===0 || h[0]==="n" || h[0]==="y") return base;
+    return ["n"].concat(base);
+  }
+  // 既に結合済みのかな配列からセグメントを作る(TextAlive の文字単位に対応)
+  function segsFromKanaList(list){
+    var segs=[], i;
+    for(i=0;i<list.length;i++){
+      var k=list[i].kana, next=list[i+1]&&list[i+1].kana, pats;
+      if(k==="ん"){ segs.push({kana:k,patterns:nPatterns(next),startTime:list[i].startTime}); continue; }
+      if(k==="っ"){
+        pats=MONO["っ"].slice();
+        headConsonants(next||"").forEach(function(c){ pats.push(c); });
+        segs.push({kana:k,patterns:pats.filter(function(v,j,a){return a.indexOf(v)===j;}),startTime:list[i].startTime});
+        continue;
+      }
+      pats = DIGRAPHS[k] || MONO[k];
+      if(!pats) continue;
+      segs.push({kana:k,patterns:pats.slice(),startTime:list[i].startTime});
+    }
+    return segs;
+  }
+
+  function Typer(segments){ this.segments=segments; this.index=0; this.buffer=""; this.pendingTime=0; }
+  Typer.prototype.done=function(){ return this.index>=this.segments.length; };
+  Typer.prototype.candidates=function(){
+    if(this.done()) return [];
+    var b=this.buffer;
+    return this.segments[this.index].patterns.filter(function(p){ return p.indexOf(b)===0; });
+  };
+  Typer.prototype.hint=function(){
+    var c=this.candidates(); if(!c.length) return "";
+    var s=c.reduce(function(a,b){ return b.length<a.length?b:a; });
+    return s.slice(this.buffer.length);
+  };
+  Typer.prototype.input=function(key,time){
+    if(this.done()) return {type:"miss"};
+    var seg=this.segments[this.index], attempt=this.buffer+key;
+    var m=seg.patterns.filter(function(p){ return p.indexOf(attempt)===0; });
+    if(m.length){
+      this.buffer=attempt;
+      var exact=m.indexOf(attempt)>=0;
+      var longer=m.some(function(p){ return p.length>attempt.length; });
+      if(exact && !longer) return this.commit(time);
+      if(exact) this.pendingTime=time;
+      return {type:"progress"};
+    }
+    if(this.buffer && seg.patterns.indexOf(this.buffer)>=0){
+      var idx=this.index, ct=this.pendingTime;
+      this.index++; this.buffer="";
+      var nxt=this.input(key,time);
+      return {type:"commit",segmentIndex:idx,commitTime:ct,alsoMissed:nxt.type==="miss"};
+    }
+    return {type:"miss"};
+  };
+  Typer.prototype.commit=function(time){
+    var idx=this.index; this.index++; this.buffer="";
+    return {type:"commit",segmentIndex:idx,commitTime:time};
+  };
+  Typer.prototype.commitKana=function(kana,time){
+    if(this.done()) return {type:"miss"};
+    if(this.segments[this.index].kana!==kana) return {type:"miss"};
+    this.buffer=""; return this.commit(time);
+  };
+
+  /* ============ 判定(demo.html と同一) ============ */
+  var WIN={just:100,great:250,good:450,late:1200};
+  var MULT={JUST:2,GREAT:1.5,GOOD:1,TYPED:1,LATE:.5,MISS:0};
+  function clampWindow(notes,i){
+    var t=notes[i].startTime;
+    var prev = i>0 ? (t-notes[i-1].startTime)/2 : Infinity;
+    var next = i<notes.length-1 ? (notes[i+1].startTime-t)/2 : Infinity;
+    var lim=Math.min(prev,next);
+    return {just:Math.min(WIN.just,lim),great:Math.min(WIN.great,lim),
+            good:Math.min(WIN.good,lim),late:WIN.late};
+  }
+  function grade(commitTime,note,w){
+    var d=commitTime-note.startTime, a=Math.abs(d);
+    if(d < -w.good) return {grade:"TYPED",delta:d};
+    if(a<=w.just) return {grade:"JUST",delta:d};
+    if(a<=w.great) return {grade:"GREAT",delta:d};
+    if(a<=w.good) return {grade:"GOOD",delta:d};
+    if(d<=w.late) return {grade:"LATE",delta:d};
+    return {grade:"MISS",delta:d};
+  }
+  function comboMult(c){ return Math.min(1+Math.floor(c/10)*0.1,2); }
+  var SUSTAIN={EASY:2.0,NORMAL:4.0,HARD:Infinity};
+  function selectIdx(segs,diff){
+    var kps=SUSTAIN[diff];
+    if(kps===Infinity) return segs.map(function(_,i){return i;});
+    var spk=0;
+    segs.forEach(function(s){ spk+=Math.min.apply(null,s.patterns.map(function(p){return p.length;})); });
+    spk = segs.length? spk/segs.length : 2;
+    var gap=(spk/kps)*1000, out=[], last=-Infinity;
+    segs.forEach(function(s,i){
+      if(i===0 || s.startTime-last>=gap){ out.push(i); last=s.startTime; }
+    });
+    return out;
+  }
+
+  /* ============ TextAlive 接続 ============ */
+  var KATA_START=0x30A1, KATA_END=0x30F6;
+  function toHira(ch){
+    var c=ch.charCodeAt(0);
+    if(c>=KATA_START && c<=KATA_END) return String.fromCharCode(c-0x60);
+    return ch;
+  }
+  function isKana(ch){ return !!(MONO[ch] || "ゃゅょぁぃぅぇぉ".indexOf(ch)>=0); }
+  var SMALL="ゃゅょぁぃぅぇぉ";
+
+  // TextAlive のフレーズ→ {chars(表示用), kanaList(打鍵候補)} に変換
+  function convertPhrase(ph){
+    var chars=[], kanaList=[];
+    var c=ph.firstChar;
+    while(c){
+      var raw=c.text, hira=toHira(raw);
+      var disp={text:raw, kanaIdx:null};
+      if(isKana(hira)){
+        // 拗音: 直前のかなと結合できるなら結合(DIGRAPHS に存在する組)
+        var prev=kanaList[kanaList.length-1];
+        if(SMALL.indexOf(hira)>=0 && prev && DIGRAPHS[prev.kana+hira] && !prev.merged){
+          prev.kana=prev.kana+hira; prev.merged=true;
+          disp.kanaIdx=kanaList.length-1;
+        } else {
+          disp.kanaIdx=kanaList.length;
+          kanaList.push({kana:hira, startTime:c.startTime, merged:false});
+        }
+      }
+      chars.push(disp);
+      if(c===ph.lastChar) break;
+      c=c.next;
+    }
+    return {chars:chars, kanaList:kanaList, startTime:ph.startTime, endTime:ph.endTime, text:ph.text};
+  }
+
+  /* ============ ゲーム状態 ============ */
+  var el={};
+  ["screen","phrase","guide","nextPhrase","judge","delta","score","combo","progress",
+   "overlay","ovTitle","ovText","ovErr","ovResult","startBtn","zone","cross","songmeta","songUrl","loadSong"]
+    .forEach(function(id){ el[id]=document.getElementById(id); });
+
+  var difficulty="NORMAL", usePad=false, player=null, videoPhrases=null, state=null;
+
+  function buildState(){
+    var phrases=videoPhrases.map(function(vp){
+      var segsAll=segsFromKanaList(vp.kanaList);
+      var picked=selectIdx(segsAll,difficulty);
+      var pickedSet={}; picked.forEach(function(i){ pickedSet[i]=1; });
+      return {
+        chars:vp.chars, segsAll:segsAll, picked:picked, pickedSet:pickedSet,
+        typer:new Typer(picked.map(function(i){ return segsAll[i]; })),
+        results:picked.map(function(){ return null; }),
+        startTime:vp.startTime, endTime:vp.endTime
+      };
+    }).filter(function(p){ return p.typer.segments.length>0; });
+    return {phrases:phrases, pi:0, score:0, combo:0, maxCombo:0, deltas:[],
+            counts:{JUST:0,GREAT:0,GOOD:0,TYPED:0,LATE:0,MISS:0}, running:false};
+  }
+
+  function now(){ return player&&player.timer ? player.timer.position : 0; }
+
+  function renderPhrase(){
+    if(!state || !state.phrases.length) return;
+    var P=state.phrases[state.pi];
+    var html="";
+    P.chars.forEach(function(dc){
+      var cls="skip";
+      if(dc.kanaIdx!=null){
+        var segIdx=dc.kanaIdx;
+        if(!P.pickedSet[segIdx]) cls="skip";
+        else{
+          var ai=P.picked.indexOf(segIdx);
+          if(P.results[ai]) cls = P.results[ai]==="MISS" ? "missed" : "done";
+          else if(ai===P.typer.index) cls="cur";
+          else cls="pending";
+        }
+      }
+      html+='<span class="ch '+cls+'">'+dc.text+"</span>";
+    });
+    el.phrase.innerHTML=html;
+    if(P.typer.done()){
+      el.guide.innerHTML="";
+    } else if(usePad){
+      var tk=P.typer.segments[P.typer.index].kana;
+      el.guide.innerHTML=tk+' <span class="typed">'+flickHint(tk)+"</span>";
+    } else {
+      el.guide.innerHTML='<span class="typed">'+P.typer.buffer+"</span>"+P.typer.hint();
+    }
+    var nx=state.phrases[state.pi+1];
+    el.nextPhrase.textContent = nx ? "next  "+nx.chars.map(function(d){return d.text;}).join("") : "";
+  }
+
+  function showJudge(g,delta){
+    el.judge.className="judge "+g;
+    el.judge.textContent=g;
+    void el.judge.offsetWidth;
+    el.judge.classList.add("show");
+    el.delta.textContent = (g==="MISS") ? "" : (g==="TYPED") ? "先行入力" :
+      (delta>=0?"+":"")+Math.round(delta)+" ms";
+  }
+
+  function applyJudgement(ai,commitTime){
+    var P=state.phrases[state.pi];
+    var notes=P.picked.map(function(i){ return P.segsAll[i]; });
+    var w=clampWindow(notes,ai);
+    var r=grade(commitTime,notes[ai],w);
+    P.results[ai]=r.grade;
+    state.counts[r.grade]++;
+    if(r.grade!=="TYPED"&&r.grade!=="MISS") state.deltas.push(r.delta);
+    if(r.grade==="MISS"){ state.combo=0; }
+    else { state.combo++; state.maxCombo=Math.max(state.maxCombo,state.combo); }
+    state.score+=Math.round(100*MULT[r.grade]*comboMult(state.combo));
+    el.score.textContent=state.score;
+    el.combo.textContent=state.combo;
+    el.screen.classList.toggle("fever", state.combo>=12);
+    showJudge(r.grade,r.delta);
+  }
+
+  function flashMiss(){
+    if(!state) return;
+    state.combo=0; el.combo.textContent=0;
+    el.screen.classList.remove("fever");
+    el.judge.className="judge MISS"; el.judge.textContent="MISS";
+    void el.judge.offsetWidth; el.judge.classList.add("show");
+    el.delta.textContent="";
+  }
+
+  function advancePhraseIfDone(){
+    var P=state.phrases[state.pi];
+    if(P.typer.done() && state.pi<state.phrases.length-1){
+      state.pi++; renderPhrase();
+    }
+  }
+
+  function handleKey(ch){
+    if(!state||!state.running) return;
+    var P=state.phrases[state.pi];
+    if(P.typer.done()){ advancePhraseIfDone(); P=state.phrases[state.pi]; }
+    var r=P.typer.input(ch, now());
+    if(r.type==="commit"){
+      applyJudgement(r.segmentIndex, r.commitTime);
+      if(r.alsoMissed) flashMiss();
+      advancePhraseIfDone();
+    } else if(r.type==="miss"){ flashMiss(); }
+    renderPhrase();
+  }
+
+  // 発声を大きく過ぎた未入力を MISS で流し、曲に置いていかれたフレーズを送る
+  function reap(){
+    var t=now();
+    var P=state.phrases[state.pi];
+    // 現在フレーズの先頭未入力が late 超過
+    if(!P.typer.done()){
+      var seg=P.typer.segments[P.typer.index];
+      if(t - seg.startTime > WIN.late){
+        var ai=P.typer.index;
+        P.results[ai]="MISS"; state.counts.MISS++;
+        state.combo=0; el.combo.textContent=0;
+        el.screen.classList.remove("fever");
+        P.typer.index++; P.typer.buffer="";
+        showJudge("MISS",0);
+      }
+    }
+    advancePhraseIfDone();
+    // フレーズ全体を過ぎた場合の強制送り
+    while(state.pi<state.phrases.length-1 && t>state.phrases[state.pi].endTime+WIN.late){
+      var Q=state.phrases[state.pi];
+      while(!Q.typer.done()){
+        Q.results[Q.typer.index]="MISS"; state.counts.MISS++;
+        Q.typer.index++;
+      }
+      state.combo=0;
+      state.pi++;
+    }
+  }
+
+  function loop(){
+    if(!state||!state.running) return;
+    var t=now();
+    var dur=player.video?player.video.duration:0;
+    if(dur) el.progress.style.width=Math.min(100,(t/dur)*100)+"%";
+    reap();
+    renderPhrase();
+    var last=state.phrases[state.phrases.length-1];
+    if((dur>0 && t>=dur-200) || (last.typer.done() && t>last.endTime+1500)){ finish(); return; }
+    requestAnimationFrame(loop);
+  }
+
+  function rank(){
+    var c=state.counts;
+    var total=c.JUST+c.GREAT+c.GOOD+c.TYPED+c.LATE+c.MISS;
+    var acc= total? (c.JUST+c.GREAT*0.8+c.GOOD*0.6+c.TYPED*0.4+c.LATE*0.2)/total : 0;
+    if(acc>=0.9) return "SS"; if(acc>=0.78) return "S";
+    if(acc>=0.6) return "A"; if(acc>=0.4) return "B"; return "C";
+  }
+
+  function finish(){
+    state.running=false;
+    try{ player.requestPause(); }catch(e){}
+    var c=state.counts;
+    var avg = state.deltas.length ?
+      Math.round(state.deltas.reduce(function(a,b){return a+b;},0)/state.deltas.length) : null;
+    el.ovTitle.textContent="RESULT";
+    el.ovText.textContent = avg==null ? "" :
+      "平均デルタ "+(avg>=0?"+":"")+avg+" ms(正なら遅れ気味。大きい場合はキャリブレーションが必要)";
+    el.ovResult.hidden=false;
+    el.ovResult.innerHTML=
+      '<div><span>RANK</span><b style="color:var(--magenta)">'+rank()+'</b></div>'+
+      '<div><span>SCORE</span><b>'+state.score+'</b></div>'+
+      '<div><span>MAX COMBO</span><b style="color:var(--amber)">'+state.maxCombo+'</b></div>'+
+      '<div><span>JUST</span><b style="color:var(--magenta)">'+c.JUST+'</b></div>'+
+      '<div><span>GREAT</span><b style="color:var(--cyan)">'+c.GREAT+'</b></div>'+
+      '<div><span>GOOD</span><b style="color:var(--green)">'+c.GOOD+'</b></div>'+
+      '<div><span>TYPED</span><b style="color:var(--dim)">'+c.TYPED+'</b></div>'+
+      '<div><span>LATE</span><b style="color:var(--amber)">'+c.LATE+'</b></div>'+
+      '<div><span>MISS</span><b style="color:var(--red)">'+c.MISS+'</b></div>';
+    el.startBtn.textContent="もう一度";
+    el.startBtn.disabled=false;
+    el.overlay.style.display="grid";
+  }
+
+  function start(){
+    if(!videoPhrases) return;
+    state=buildState();
+    el.score.textContent="0"; el.combo.textContent="0";
+    el.judge.textContent=""; el.delta.textContent="";
+    el.screen.classList.remove("fever");
+    el.overlay.style.display="none";
+    state.running=true;
+    player.requestMediaSeek(0);
+    player.requestPlay();
+    renderPhrase();
+    requestAnimationFrame(loop);
+  }
+
+  /* ============ フリック(demo.html と同一の1タッチゾーン方式) ============ */
+  var FLICK_ROWS=[
+    "あいうえお","かきくけこ","がぎぐげご","さしすせそ","ざじずぜぞ",
+    "たちつてと","だぢづでど","なにぬねの","はひふへほ","ばびぶべぼ",
+    "ぱぴぷぺぽ","まみむめも","らりるれろ"
+  ];
+  function flickOptions(kana){
+    if(kana.length===2){
+      var base=kana[0];
+      return {c:base+"ゃ", u:base+"ゅ", d:base+"ょ"};
+    }
+    if(kana==="わ"||kana==="を"||kana==="ん") return {c:"わ", l:"を", u:"ん"};
+    if(kana==="や"||kana==="ゆ"||kana==="よ") return {c:"や", u:"ゆ", d:"よ"};
+    for(var i=0;i<FLICK_ROWS.length;i++){
+      var row=FLICK_ROWS[i];
+      if(row.indexOf(kana)>=0)
+        return {c:row[0], l:row[1], u:row[2], r:row[3], d:row[4]};
+    }
+    return {c:kana};
+  }
+  var DIR_LABEL={c:"タップ", l:"←", u:"↑", r:"→", d:"↓"};
+  function flickHint(kana){
+    var opts=flickOptions(kana);
+    for(var dir in opts) if(opts[dir]===kana) return DIR_LABEL[dir];
+    return "タップ";
+  }
+  function currentTargetKana(){
+    if(!state) return null;
+    var P=state.phrases[state.pi];
+    if(P.typer.done()) return null;
+    return P.typer.segments[P.typer.index].kana;
+  }
+  function sendKana(kana){
+    if(!state||!state.running) return;
+    var P=state.phrases[state.pi];
+    if(P.typer.done()){ advancePhraseIfDone(); P=state.phrases[state.pi]; }
+    var r=P.typer.commitKana(kana, now());
+    if(r.type==="commit"){ applyJudgement(r.segmentIndex,r.commitTime); advancePhraseIfDone(); }
+    else flashMiss();
+    renderPhrase();
+  }
+  (function(){
+    var zone=el.zone, cross=el.cross;
+    var sx=0, sy=0, active=false, opts=null, THRESH=24;
+    function renderCross(x,y){
+      cross.style.left=x+"px"; cross.style.top=y+"px";
+      var html="";
+      for(var dir in opts)
+        html+='<div class="cell '+dir+'" data-dir="'+dir+'">'+opts[dir]+"</div>";
+      cross.innerHTML=html;
+      cross.classList.add("show");
+    }
+    function resolveDir(dx,dy){
+      var ax=Math.abs(dx), ay=Math.abs(dy);
+      if(Math.max(ax,ay)<THRESH) return "c";
+      if(ax>ay) return dx<0?"l":"r";
+      return dy<0?"u":"d";
+    }
+    function highlight(dir){
+      var cells=cross.querySelectorAll(".cell");
+      for(var i=0;i<cells.length;i++)
+        cells[i].classList.toggle("sel", cells[i].getAttribute("data-dir")===dir);
+    }
+    function pt(e){ return e.touches&&e.touches.length?e.touches[0]:(e.changedTouches?e.changedTouches[0]:e); }
+    function down(e){
+      e.preventDefault();
+      var kana=currentTargetKana();
+      if(!kana) return;
+      opts=flickOptions(kana);
+      var rect=zone.getBoundingClientRect(), p=pt(e);
+      sx=p.clientX; sy=p.clientY; active=true;
+      renderCross(p.clientX-rect.left, p.clientY-rect.top);
+      highlight("c");
+    }
+    function move(e){
+      if(!active) return;
+      e.preventDefault();
+      var p=pt(e);
+      highlight(resolveDir(p.clientX-sx, p.clientY-sy));
+    }
+    function up(e){
+      if(!active) return;
+      e.preventDefault();
+      active=false;
+      cross.classList.remove("show");
+      var p=pt(e);
+      var dir=resolveDir(p.clientX-sx, p.clientY-sy);
+      var kana=opts&&opts[dir];
+      if(kana) sendKana(kana); else flashMiss();
+      opts=null;
+    }
+    zone.addEventListener("touchstart",down,{passive:false});
+    zone.addEventListener("touchmove",move,{passive:false});
+    zone.addEventListener("touchend",up,{passive:false});
+    zone.addEventListener("mousedown",down);
+    zone.addEventListener("mousemove",move);
+    zone.addEventListener("mouseup",up);
+    zone.addEventListener("mouseleave",function(){ active=false; cross.classList.remove("show"); });
+  })();
+  function setPadMode(on){
+    usePad=on;
+    document.getElementById("padToggle").setAttribute("aria-pressed",String(on));
+    el.zone.classList.toggle("on",on);
+  }
+  document.getElementById("padToggle").addEventListener("click",function(){ setPadMode(!usePad); });
+  if(window.matchMedia("(max-width:640px)").matches || "ontouchstart" in window) setPadMode(true);
+
+  /* ============ 入力・難易度・曲変更 ============ */
+  document.addEventListener("keydown",function(e){
+    if(e.metaKey||e.ctrlKey||e.altKey) return;
+    if(e.target===el.songUrl) return;
+    if(e.key.length===1 && /[a-z\-]/i.test(e.key)){
+      e.preventDefault();
+      handleKey(e.key.toLowerCase());
+    }
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-diff]"),function(b){
+    b.addEventListener("click",function(){
+      difficulty=b.getAttribute("data-diff");
+      Array.prototype.forEach.call(document.querySelectorAll("[data-diff]"),function(o){
+        o.setAttribute("aria-pressed", String(o===b));
+      });
+      if(state){ state.running=false; try{ player.requestPause(); }catch(e){} }
+      el.ovTitle.textContent=difficulty+" で挑戦";
+      el.ovText.textContent="スタートで曲の頭から始まります。";
+      el.ovResult.hidden=true;
+      el.startBtn.textContent="スタート";
+      el.overlay.style.display="grid";
+    });
+  });
+  el.loadSong.addEventListener("click",function(){
+    var u=el.songUrl.value.trim();
+    if(!u||!player) return;
+    if(state) state.running=false;
+    videoPhrases=null;
+    el.startBtn.disabled=true;
+    el.ovTitle.textContent="LOADING…";
+    el.ovText.textContent="楽曲を読み込んでいます: "+u;
+    el.ovErr.hidden=true;
+    el.overlay.style.display="grid";
+    el.songmeta.textContent="楽曲情報を読み込み中…";
+    player.createFromSongUrl(u).catch(function(e){ showError("楽曲の読み込みに失敗: "+e); });
+  });
+  el.startBtn.addEventListener("click",start);
+
+  function showError(msg){
+    el.ovTitle.textContent="ERROR";
+    el.ovText.textContent="";
+    el.ovErr.hidden=false;
+    el.ovErr.textContent=String(msg);
+    el.overlay.style.display="grid";
+  }
+
+  /* ============ Player 初期化 ============ */
+  if(typeof TextAliveApp==="undefined"){
+    showError("TextAlive App API の読み込みに失敗しました。ネットワークを確認してください。");
+    return;
+  }
+  try{
+    var Player=TextAliveApp.Player;
+    player=new Player({
+      app:{ token:"VQRxHB1a0q8fVvnm" },
+      mediaElement: document.getElementById("media")
+    });
+    player.addListener({
+      onAppReady:function(app){
+        if(!app.songUrl){
+          // マジカルミライ2025 課題曲: ロンリーラン / 海風太陽(公式サンプルの訂正ID付き)
+          player.createFromSongUrl("https://piapro.jp/t/CyPO/20250128183915",{
+            video:{
+              beatId:4694280, chordId:2830735, repetitiveSegmentId:2946483,
+              lyricId:67815, lyricDiffId:20659
+            }
+          }).catch(function(e){ showError("楽曲の読み込みに失敗: "+e); });
+        }
+      },
+      onVideoReady:function(v){
+        try{
+          el.songmeta.textContent="♪ "+player.data.song.name+" / "+player.data.song.artist.name;
+          videoPhrases=[];
+          var ph=v.firstPhrase;
+          while(ph){
+            var cp=convertPhrase(ph);
+            if(cp.kanaList.length) videoPhrases.push(cp);
+            ph=ph.next;
+          }
+          if(!videoPhrases.length){ showError("この楽曲から打鍵対象のかなを抽出できませんでした。"); return; }
+          state=buildState();
+          renderPhrase();
+        }catch(e){ showError("歌詞データの変換に失敗: "+e); }
+      },
+      onTimerReady:function(){
+        el.ovTitle.textContent="準備完了";
+        el.ovText.textContent="スタートすると楽曲が再生されます。光っている文字を、歌に合わせて打ってください。灰色の文字(漢字・記号・間引き分)は打ちません。";
+        el.startBtn.disabled=false;
+      },
+      onPlay:function(){ el.overlay.style.display="none"; },
+      onStop:function(){ if(state&&state.running){ state.running=false; finish(); } }
+    });
+  }catch(e){
+    showError("Player の初期化に失敗: "+e);
+  }
+})();
+</script>
+</body>
+</html>
