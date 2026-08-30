@@ -22,7 +22,7 @@
 </head>
 <body>
 <h1>ミクの本体はツインテールである — 物理・採点 検証モック</h1>
-<div id="hint">「♪ サウンド」で擬似曲が鳴ります（本番は TextAlive の課題曲音源に置き換え）。歌唱中（VOCAL 点灯中）にドラッグして、日常の物にツインテールを 2 本生やす。拍に乗った線ほど「ハリ・ツヤ」が上がる。</div>
+<div id="hint">「♪ サウンド」で擬似曲が鳴ります（本番は TextAlive の課題曲音源に置き換え）。歌唱中（VOCAL 点灯中）にドラッグして、日常の物にツインテールを 2 本生やす。ホールド中は合いの手が鳴り、タップ・リリースが拍に合うと「ハリ・ツヤ」アップ。</div>
 <canvas id="stage" width="900" height="560"></canvas>
 <div id="ui">
   <button id="sound" class="sub">♪ サウンド ON</button>
@@ -47,9 +47,19 @@ const vocalActive = t => (t % VOCAL_CYCLE) < VOCAL_ON;
 const vocalAmp  = t => vocalActive(t) ? 0.55 + 0.45 * Math.sin(t * 2.3) : 0;
 
 // ---- 擬似サウンド（WebAudio 生成。外部音源なし・クリックで開始） ----------------
-let ac = null, soundOn = false, schedTimer = null, nextIdx = 0;
+let ac = null, soundOn = false, schedTimer = null, nextIdx = 0, noiseBuf = null;
 const NOTE = st => 440 * Math.pow(2, st / 12);
 const MELO = [0, 3, 5, 7, 10, 7, 5, 3, 0, 3, 7, 12, 10, 7, 5, 3];  // Aマイナーペンタ
+const PENTA = [0, 3, 5, 7, 10];
+function ensureAudio() {
+  if (!ac) {
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.2, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  if (ac.state === "suspended") ac.resume();
+}
 function env(g, at, peak, dur) {
   g.gain.setValueAtTime(0.0001, at);
   g.gain.exponentialRampToValueAtTime(peak, at + 0.02);
@@ -85,16 +95,54 @@ function scheduler() {                 // 8 分音符単位で 0.12 秒先まで
 }
 document.getElementById("sound").onclick = e => {
   if (!soundOn) {
-    if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
-    ac.resume(); nextIdx = Math.ceil(songNow() / (BEAT / 2));
+    ensureAudio(); nextIdx = Math.ceil(songNow() / (BEAT / 2));
     schedTimer = setInterval(scheduler, 30); soundOn = true;
     e.target.textContent = "♪ サウンド OFF";
   } else {
-    clearInterval(schedTimer); soundOn = false;
-    if (ac) ac.suspend();
+    clearInterval(schedTimer); soundOn = false;   // タップ演奏音は生かすため suspend はしない
     e.target.textContent = "♪ サウンド ON";
   }
 };
+
+// ---- 演奏エフェクト（タップ＝合いの手） ---------------------------------------
+// ホールド中は 8 分音符ごとにペンタトニックのプラック（本番はコードトーンに差し替え）、
+// リリースでマラカス。拍に合ったリリースはタンバリンの「シャン」に格上げ。
+function pluck(step, t) {
+  ensureAudio();
+  const o = ac.createOscillator(), g = ac.createGain(), at = ac.currentTime;
+  o.type = "triangle"; o.frequency.value = NOTE(PENTA[step % PENTA.length] + 12);
+  g.gain.setValueAtTime(0.0001, at);
+  g.gain.exponentialRampToValueAtTime(0.02 + 0.06 * vocalAmp(t), at + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, at + 0.16);
+  o.connect(g); g.connect(ac.destination); o.start(at); o.stop(at + 0.2);
+}
+function shakerFx(accent) {
+  ensureAudio();
+  const at = ac.currentTime;
+  const s = ac.createBufferSource(); s.buffer = noiseBuf;
+  const hp = ac.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 5000;
+  const g = ac.createGain();
+  g.gain.setValueAtTime(accent ? 0.22 : 0.1, at);
+  g.gain.exponentialRampToValueAtTime(0.0001, at + (accent ? 0.22 : 0.12));
+  s.connect(hp); hp.connect(g); g.connect(ac.destination); s.start(at);
+  if (accent) for (const [f, dt] of [[6200, 0], [8400, 0.05]]) {   // タンバリンの鈴
+    const o = ac.createOscillator(), og = ac.createGain();
+    o.type = "sine"; o.frequency.value = f;
+    og.gain.setValueAtTime(0.0001, at + dt);
+    og.gain.exponentialRampToValueAtTime(0.08, at + dt + 0.01);
+    og.gain.exponentialRampToValueAtTime(0.0001, at + dt + 0.15);
+    o.connect(og); og.connect(ac.destination); o.start(at + dt); o.stop(at + dt + 0.25);
+  }
+}
+let holdTimer = null, lastSlot = -1, toneStep = 0;
+function startHold() {
+  lastSlot = Math.floor(songNow() / (BEAT / 2)); toneStep = 0;
+  holdTimer = setInterval(() => {
+    const t = songNow(), s = Math.floor(t / (BEAT / 2));
+    if (s !== lastSlot) { lastSlot = s; if (vocalActive(t)) pluck(toneStep++, t); }
+  }, 25);
+}
+function stopHold() { if (holdTimer) { clearInterval(holdTimer); holdTimer = null; } }
 
 // ---- お題（日常に存在する物。造形は Canvas 直描き） ----------------------------
 const cv = document.getElementById("stage"), cx2d = cv.getContext("2d");
@@ -141,7 +189,7 @@ document.getElementById("swap").onclick = () => {
 const ropes = [];
 let stroke = null;
 
-function makeRope(drawnPts, beatFit) {
+function makeRope(drawnPts, beatFit, tapOnBeat = false, relOnBeat = false) {
   const pts = resample(drawnPts, Math.max(10, Math.min(26, Math.floor(polyLen(drawnPts) / 12))));
   const nodes = pts.map(p => ({ x: p.x, y: p.y, px: p.x, py: p.y }));
   const segLens = [];
@@ -151,7 +199,7 @@ function makeRope(drawnPts, beatFit) {
   const od = Math.hypot(0.85, 0.55);
   const outDir = { x: sign * 0.85 / od, y: -0.55 / od };
   return { nodes, segLens, drawn: drawnPts, beatFit, len: polyLen(drawnPts),
-           seed: Math.random() * 7, outDir };
+           seed: Math.random() * 7, outDir, tapOnBeat, relOnBeat };
 }
 function stepRope(r, t) {
   const wind = vocalAmp(t);
@@ -276,9 +324,13 @@ function pos(e) {
   return { x: (e.clientX - r.left) * cv.width / r.width, y: (e.clientY - r.top) * cv.height / r.height };
 }
 cv.addEventListener("pointerdown", e => {
+  ensureAudio();
   if (!vocalActive(songNow())) { flash = "ミクが歌っていない……（歌唱中しか髪は生えない）"; return; }
   cv.setPointerCapture(e.pointerId);
-  stroke = { pts: [{ ...pos(e), beat: onBeat(songNow()) }] };
+  const tapOnBeat = onBeat(songNow());
+  if (tapOnBeat) flash = "ナイスタップ！";
+  stroke = { pts: [{ ...pos(e), beat: tapOnBeat }], tapOnBeat };
+  startHold();
 });
 cv.addEventListener("pointermove", e => {
   if (!stroke) return;
@@ -286,9 +338,13 @@ cv.addEventListener("pointermove", e => {
   if (dist(p, last) > 5) stroke.pts.push({ ...p, beat: onBeat(songNow()) });
 });
 cv.addEventListener("pointerup", () => {
+  stopHold();
   if (stroke && stroke.pts.length > 5) {
+    const relOnBeat = onBeat(songNow());
+    shakerFx(relOnBeat);
+    if (relOnBeat) flash = "シャン♪";
     const fit = stroke.pts.filter(p => p.beat).length / stroke.pts.length;
-    ropes.push(makeRope(stroke.pts, fit));
+    ropes.push(makeRope(stroke.pts, fit, stroke.tapOnBeat, relOnBeat));
     if (ropes.length > 2) ropes.shift();
   }
   stroke = null;
@@ -318,8 +374,11 @@ document.getElementById("judge").onclick = () => {
   const ratio = (left.len + right.len) / 2 / height;
   const lenS = 20 * clamp01(1 - Math.abs(ratio - 1.6) / 1.6);
 
-  // ハリ・ツヤ 20: ビート適合率
-  const shine = 20 * (left.beatFit + right.beatFit) / 2;
+  // ハリ・ツヤ 20: 描線のビート適合 12 ＋ 拍に合ったタップ 4 ＋ 拍に合ったリリース 4
+  const shineOf = r => 12 * r.beatFit + 4 * (r.tapOnBeat ? 1 : 0) + 4 * (r.relOnBeat ? 1 : 0);
+  const shine = (shineOf(left) + shineOf(right)) / 2;
+  const taps = (left.tapOnBeat ? 1 : 0) + (right.tapOnBeat ? 1 : 0);
+  const rels = (left.relOnBeat ? 1 : 0) + (right.relOnBeat ? 1 : 0);
 
   // 歌詞充填率 10: 髪に取り込めた文字数（モックでは節数で代用）
   const fill = 10 * clamp01((left.nodes.length + right.nodes.length) / 40);
@@ -330,7 +389,7 @@ document.getElementById("judge").onclick = () => {
   result.innerHTML =
     `ミク度 <b>${total}%</b> ─ ${rank}\n` +
     `対称性 ${sym.toFixed(1)}/30 ・ つむじ位置 ${anch.toFixed(1)}/20 ・ 長さ比 ${lenS.toFixed(1)}/20 (${ratio.toFixed(2)})\n` +
-    `ハリツヤ ${shine.toFixed(1)}/20 ・ 歌詞充填 ${fill.toFixed(1)}/10`;
+    `ハリツヤ ${shine.toFixed(1)}/20（タップ ${taps}/2 ・ リリース ${rels}/2）・ 歌詞充填 ${fill.toFixed(1)}/10`;
 };
 const clamp01 = v => Math.max(0, Math.min(1, v));
 
