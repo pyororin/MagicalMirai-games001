@@ -146,8 +146,12 @@ function makeRope(drawnPts, beatFit) {
   const nodes = pts.map(p => ({ x: p.x, y: p.y, px: p.x, py: p.y }));
   const segLens = [];
   for (let i = 1; i < nodes.length; i++) segLens.push(dist(nodes[i - 1], nodes[i]));
+  // 付け根の向き: 頭（お題）の左右から外側上方向に立ち上がる
+  const sign = drawnPts[0].x >= obj().cx ? 1 : -1;
+  const od = Math.hypot(0.85, 0.55);
+  const outDir = { x: sign * 0.85 / od, y: -0.55 / od };
   return { nodes, segLens, drawn: drawnPts, beatFit, len: polyLen(drawnPts),
-           seed: Math.random() * 7 };
+           seed: Math.random() * 7, outDir };
 }
 function stepRope(r, t) {
   const wind = vocalAmp(t);
@@ -166,6 +170,15 @@ function stepRope(r, t) {
       if (i === 1) { b.x -= dx * diff; b.y -= dy * diff; }
       else { a.x += dx * diff * .5; a.y += dy * diff * .5; b.x -= dx * diff * .5; b.y -= dy * diff * .5; }
     }
+  }
+  // 立ち上がり剛性: 根元の数節は外側上方向に張り、その先は重力で垂れる
+  let cum = 0;
+  const K = [0.6, 0.35, 0.15];
+  for (let i = 1; i <= Math.min(3, r.nodes.length - 1); i++) {
+    cum += r.segLens[i - 1];
+    const n = r.nodes[i], k = K[i - 1];
+    n.x += (r.nodes[0].x + r.outDir.x * cum - n.x) * k;
+    n.y += (r.nodes[0].y + r.outDir.y * cum - n.y) * k;
   }
 }
 
@@ -225,10 +238,16 @@ function drawTail(g, r, t) {
   g.fillStyle = "rgba(228,255,253,0.7)"; g.font = "11px sans-serif"; g.textAlign = "center";
   for (let i = 2; i < m - 1; i += 2)
     g.fillText(LYRICS[(i + Math.floor(t)) % LYRICS.length], n[i].x, n[i].y + 4);
-  // 結び目（根元のヘアタイ）
-  g.fillStyle = "#232830"; disc(g, root.x, root.y, 9);
-  g.strokeStyle = "rgba(216,79,111,0.9)"; g.lineWidth = 2;
-  g.beginPath(); g.arc(root.x, root.y, 9, 0, 7); g.stroke();
+  // 付け根の飾り（四角のパネル。公式衣装のヘアアクセに合わせる）
+  g.save();
+  g.translate(root.x, root.y);
+  g.rotate(Math.atan2(r.outDir.y, r.outDir.x) + Math.PI / 2);
+  g.fillStyle = "#232830";
+  g.beginPath(); g.roundRect(-10, -11, 20, 22, 3); g.fill();
+  g.strokeStyle = "#3a4250"; g.lineWidth = 1.5; g.stroke();
+  g.fillStyle = "rgba(236,64,142,0.9)";                       // 内側のピンクの光
+  g.beginPath(); g.roundRect(-5, -6, 10, 12, 2); g.fill();
+  g.restore();
 }
 
 // ---- 幾何ユーティリティ（採点にも使用） ---------------------------------------
