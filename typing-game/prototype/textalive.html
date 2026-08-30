@@ -137,6 +137,10 @@
   .result td+td{text-align:right;color:var(--ink);font-variant-numeric:tabular-nums}
   .result td .chip{display:inline-block;width:9px;height:9px;margin-right:7px;vertical-align:-1px}
   .overlay .err{color:var(--bad);font-family:var(--pixel);font-size:13px;max-width:52ch;margin:0 auto 14px;word-break:break-all;white-space:pre-line;text-align:left}
+  .overlay .share{display:inline-block;margin-left:8px;font-family:var(--pixel);font-size:14px;
+    letter-spacing:.08em;padding:11px 18px;color:var(--ink);text-decoration:none;
+    border:2px solid var(--line)}
+  .overlay .share:hover{border-color:var(--key);color:var(--key)}
   .keyhint{font-family:var(--pixel);font-size:11px;color:var(--dim);letter-spacing:.08em;line-height:1.9;margin:10px 0 0}
 
   button{font-family:var(--pixel);font-size:15px;letter-spacing:.08em;background:var(--key);color:var(--night);
@@ -172,7 +176,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 14</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 15</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -244,6 +248,7 @@
         <p class="err" id="ovErr" hidden></p>
         <div class="result" id="ovResult" hidden></div>
         <button id="startBtn" disabled>スタート</button>
+        <a class="share" id="share" hidden target="_blank" rel="noopener">結果を共有</a>
         <p class="keyhint">
           <b style="color:var(--key)">←</b> い段 ・
           <b style="color:var(--good)">↑</b> う段 ・
@@ -283,7 +288,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 14;
+  var BUILD = 15;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -570,7 +575,7 @@
   var el={};
   ["screen","kNow","kNext","field","notes","judge","delta","score","combo","progress","pauseBtn",
    "overlay","ovTitle","ovText","ovErr","ovResult","startBtn","songmeta","songUrl","loadSong","songPick",
-   "cross","lead","leadVal","speed","speedVal","vol","volVal","speedNote","offset","offsetVal","autoCal"]
+   "cross","lead","leadVal","speed","speedVal","vol","volVal","speedNote","offset","offsetVal","autoCal","share"]
     .forEach(function(id){ el[id]=document.getElementById(id); });
 
   var difficulty="NORMAL", player=null, videoPhrases=null, state=null;
@@ -732,6 +737,12 @@
 
   /* ---- 背景:夜のステージ。ビートでペンライトと床が瞬く ---- */
   var beatNow=null, chorusNow=false, beatPulse=0;
+  var calmMotion=false;
+  try{
+    var mq=window.matchMedia("(prefers-reduced-motion: reduce)");
+    calmMotion=mq.matches;
+    mq.addEventListener("change",function(e){ calmMotion=e.matches; });
+  }catch(e){}
   function updateMusic(t){
     try{
       if(player.findBeat){
@@ -739,7 +750,7 @@
         if(b && b.startTime!=null){
           beatNow=b;
           var prog=(t-b.startTime)/(b.duration||500);
-          beatPulse=Math.max(0, 1-Math.min(1,prog)*1.6);      // 拍頭で1、すぐ減衰
+          beatPulse=calmMotion ? 0 : Math.max(0, 1-Math.min(1,prog)*1.6);   // 拍頭で1、すぐ減衰
         }
       }
       if(player.findChorus){
@@ -770,6 +781,20 @@
       var on = phase/10 < lit+beatPulse*0.35;
       var h=G*(2+(i%3))+(fever?Math.round(beatPulse*G):0);
       dot(x, horizon-h-G*(i%4), G, h, on ? DIR_COL[LANE_ORDER[i%5]].base : PAL.grid);
+    }
+    // サビはトラスからスポットライトが振れる
+    if(chorusNow){
+      var sweep=calmMotion?0:Math.sin(t/900), beamW=cw*0.16;
+      [0.3,0.7].forEach(function(base,bi){
+        var top=base*cw + sweep*cw*0.08*(bi?-1:1);
+        for(var yy=G*6; yy<horizon+G*10; yy+=G*2){
+          var k=(yy-G*6)/(horizon+G*10), half=beamW*(0.15+k);
+          for(var xx=top-half; xx<top+half; xx+=G*3){
+            if(((xx/G|0)+(yy/G|0))%2) continue;              // ディザで薄く
+            dot(xx,yy,G,G,"oklch(88% .09 330 / .12)");
+          }
+        }
+      });
     }
     // 天井のトラスと吊りライト
     dot(0,G*2,cw,G,PAL.rail);
@@ -845,7 +870,7 @@
     var scale = inMargin ? Math.max(3, Math.min(6, Math.floor(Math.min(marginW/34, ch*0.45/40))))
                          : Math.max(2, Math.min(4, Math.floor(below/40)));
     var w=32*scale, h=40*scale;
-    var idle=(Math.sin(performance.now()/620)+1)/2;
+    var idle=calmMotion ? 0.5 : (Math.sin(performance.now()/620)+1)/2;
     var bounce=Math.round((beatPulse*2+idle*0.6)*G);
     var x = inMargin ? Math.round((fieldX0()+fieldW()+(marginW-w)/2)/G)*G
                      : Math.round((cw-w-G*2)/G)*G;
@@ -1165,6 +1190,15 @@
         }).join('')+'</table>';
     el.startBtn.textContent="もう一度";
     el.startBtn.disabled=false;
+    // 共有リンク(押したときだけ開く。自動投稿はしない)
+    var song="";
+    try{ song=player.data.song.name+" / "+player.data.song.artist.name; }catch(e){}
+    var text="打鍵ミライ｜"+song+"\n"+difficulty+"  RANK "+rank()+"  SCORE "+state.score+
+             "  MAX COMBO "+state.maxCombo+(speedRate<1?"(練習 "+speedRate.toFixed(2)+"×)":"");
+    var url=location.href.split("?")[0];
+    el.share.href="https://twitter.com/intent/tweet?text="+encodeURIComponent(text)+
+                  "&url="+encodeURIComponent(url)+"&hashtags=打鍵ミライ,マジカルミライ";
+    el.share.hidden=false;
     el.overlay.style.display="grid";
   }
 
@@ -1218,6 +1252,7 @@
     el.judge.textContent=""; el.delta.textContent="";
     el.screen.classList.remove("fever");
     el.overlay.style.display="none";
+    el.share.hidden=true;
     el.kNow.dataset.pi="";
     stopAttract();
     state.running=true;
