@@ -11,20 +11,46 @@ import { Player } from "textalive-app-api";
 
 const TOKEN = "VQRxHB1a0q8fVvnm";
 
-// 選曲リスト。version が判明している曲は版数を固定して読み込む
-// （ontology/textalive.yaml の dev-song / song-load を参照）。
+// 選曲リスト: マジカルミライ 2025 楽曲コンテスト受賞 6 曲。
+// 版数 ID は TextAliveJp 公式サンプル各リポジトリのソースで確認した値
+// （ontology/textalive.yaml の contest-songs-2025 / song-load を参照）。
 // ホストから曲が指定されているとき（app.songUrl）はそちらが優先され、この一覧は使わない。
 const SONGS = [
   {
     title: "ロンリーラン / 海風太陽",
     url: "https://piapro.jp/t/CyPO/20250128183915",
-    video: {
-      beatId: 4694280,
-      chordId: 2830735,
-      repetitiveSegmentId: 2946483,
-      lyricId: 67815,
-      lyricDiffId: 20659,
-    },
+    video: { beatId: 4694280, chordId: 2830735, repetitiveSegmentId: 2946483,
+             lyricId: 67815, lyricDiffId: 20659 },
+  },
+  {
+    title: "ストリートライト / 加賀(ネギシャワーP)",
+    url: "https://piapro.jp/t/ULcJ/20250205120202",
+    video: { beatId: 4694275, chordId: 2830730, repetitiveSegmentId: 2946478,
+             lyricId: 67810, lyricDiffId: 20654 },
+  },
+  {
+    title: "アリフレーション / 雨良 Amala",
+    url: "https://piapro.jp/t/SuQO/20250127235813",
+    video: { beatId: 4694276, chordId: 2830731, repetitiveSegmentId: 2946479,
+             lyricId: 67811, lyricDiffId: 20655 },
+  },
+  {
+    title: "インフォーマルダイブ / 99piano",
+    url: "https://piapro.jp/t/Ppc9/20241224135843",
+    video: { beatId: 4694277, chordId: 2830732, repetitiveSegmentId: 2946480,
+             lyricId: 67812, lyricDiffId: 20656 },
+  },
+  {
+    title: "ハロー、フェルミ。/ ど～ぱみん",
+    url: "https://piapro.jp/t/oTaJ/20250204234235",
+    video: { beatId: 4694278, chordId: 2830733, repetitiveSegmentId: 2946481,
+             lyricId: 67813, lyricDiffId: 20657 },
+  },
+  {
+    title: "パレードレコード / きさら",
+    url: "https://piapro.jp/t/GCgy/20250202202635",
+    video: { beatId: 4694279, chordId: 2830734, repetitiveSegmentId: 2946482,
+             lyricId: 67814, lyricDiffId: 20658 },
   },
 ];
 const DEV_SONG = SONGS[0];
