@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ミクの本体はツインテールである — 検証モック</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #101418; color: #d8f4f2; font-family: system-ui, sans-serif;
+         display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px; }
+  h1 { font-size: 16px; margin: 4px 0 0; letter-spacing: .1em; }
+  #stage { background: #182028; border: 1px solid #2b3a44; border-radius: 8px; touch-action: none;
+           max-width: 100%; }
+  #ui { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  button { background: #39c5bb; color: #06282a; border: 0; border-radius: 6px; padding: 8px 18px;
+           font-weight: bold; font-size: 14px; cursor: pointer; }
+  button.sub { background: #2b3a44; color: #d8f4f2; }
+  #hint { font-size: 12px; opacity: .75; }
+  #result { white-space: pre-line; font-size: 13px; text-align: center; min-height: 7em; }
+  #result b { color: #39c5bb; font-size: 22px; }
+</style>
+</head>
+<body>
+<h1>ミクの本体はツインテールである — 物理・採点 検証モック</h1>
+<div id="hint">歌唱中（画面上部のランプが点灯中）にドラッグしてツインテールを 2 本描く。拍に乗った線ほど「ハリ・ツヤ」が上がる。</div>
+<canvas id="stage" width="900" height="560"></canvas>
+<div id="ui">
+  <button id="judge">ミク度判定</button>
+  <button id="reset" class="sub">散髪（リセット）</button>
+</div>
+<div id="result"></div>
+<script>
+"use strict";
+// ---- 擬似・楽曲データ（本番は TextAlive App API に差し替える層） ----------------
+const BPM = 130;
+const BEAT = 60 / BPM;                 // 拍長 [s]
+const VOCAL_CYCLE = 8, VOCAL_ON = 6;   // 8 秒中 6 秒歌う、を繰り返す
+const LYRICS = "ミクノホンタイハツインテールコエガカミヲカタチニスル";
+
+const now = () => performance.now() / 1000;
+const beatPhase = t => (t / BEAT) % 1;                       // 0..1
+const onBeat    = t => { const p = beatPhase(t); return p < 0.25 || p > 0.75; };
+const vocalActive = t => (t % VOCAL_CYCLE) < VOCAL_ON;
+const vocalAmp  = t => vocalActive(t) ? 0.55 + 0.45 * Math.sin(t * 2.3) : 0;
+
+// ---- ステージ（お題: 黄色いホイール） -----------------------------------------
+const cv = document.getElementById("stage"), cx2d = cv.getContext("2d");
+const OBJ = { x: 450, y: 360, r: 110 };  // バウンディング高さ = 2r
+
+// ---- 髪（Verlet ロープ、枯れた技術） ------------------------------------------
+const ropes = [];  // {nodes:[{x,y,px,py}], segLens:[], drawn:[{x,y}], beatFit, len}
+let stroke = null; // 描画中 {pts:[{x,y,beat}]}
+
+function makeRope(drawnPts, beatFit) {
+  const pts = resample(drawnPts, Math.max(8, Math.min(26, Math.floor(polyLen(drawnPts) / 14))));
+  const nodes = pts.map(p => ({ x: p.x, y: p.y, px: p.x, py: p.y }));
+  const segLens = [];
+  for (let i = 1; i < nodes.length; i++) segLens.push(dist(nodes[i - 1], nodes[i]));
+  return { nodes, segLens, drawn: drawnPts, beatFit, len: polyLen(drawnPts) };
+}
+function stepRope(r, t) {
+  const wind = vocalAmp(t);
+  for (let i = 1; i < r.nodes.length; i++) {
+    const n = r.nodes[i];
+    const vx = (n.x - n.px) * 0.985, vy = (n.y - n.py) * 0.985;
+    n.px = n.x; n.py = n.y;
+    n.x += vx + Math.sin(t * 3 + i * 0.45) * wind * 1.5;   // 声が髪を揺らす
+    n.y += vy + 0.35;                                       // 重力
+  }
+  for (let k = 0; k < 4; k++) {                             // 距離拘束
+    for (let i = 1; i < r.nodes.length; i++) {
+      const a = r.nodes[i - 1], b = r.nodes[i], L = r.segLens[i - 1];
+      const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1e-6;
+      const diff = (d - L) / d;
+      if (i === 1) { b.x -= dx * diff; b.y -= dy * diff; }
+      else { a.x += dx * diff * .5; a.y += dy * diff * .5; b.x -= dx * diff * .5; b.y -= dy * diff * .5; }
+    }
+  }
+}
+
+// ---- 幾何ユーティリティ（採点にも使用） ---------------------------------------
+function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+function polyLen(p) { let s = 0; for (let i = 1; i < p.length; i++) s += dist(p[i - 1], p[i]); return s; }
+function resample(pts, n) {            // 等間隔リサンプリング（$1 Recognizer 流）
+  const total = polyLen(pts), step = total / (n - 1), out = [{ ...pts[0] }];
+  let acc = 0;
+  for (let i = 1; i < pts.length; i++) {
+    let a = pts[i - 1], b = pts[i], d = dist(a, b);
+    while (acc + d >= step && d > 0) {
+      const t = (step - acc) / d;
+      const q = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+      out.push(q); a = q; d = dist(a, b); acc = 0;
+      if (out.length === n) return out;
+    }
+    acc += d;
+  }
+  while (out.length < n) out.push({ ...pts[pts.length - 1] });
+  return out;
+}
+
+// ---- 入力 ---------------------------------------------------------------------
+function pos(e) {
+  const r = cv.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * cv.width / r.width, y: (e.clientY - r.top) * cv.height / r.height };
+}
+cv.addEventListener("pointerdown", e => {
+  if (!vocalActive(now())) { flash = "ミクが歌っていない……（歌唱中しか髪は生えない）"; return; }
+  cv.setPointerCapture(e.pointerId);
+  stroke = { pts: [{ ...pos(e), beat: onBeat(now()) }] };
+});
+cv.addEventListener("pointermove", e => {
+  if (!stroke) return;
+  const p = pos(e), last = stroke.pts[stroke.pts.length - 1];
+  if (dist(p, last) > 5) stroke.pts.push({ ...p, beat: onBeat(now()) });
+});
+cv.addEventListener("pointerup", () => {
+  if (stroke && stroke.pts.length > 5) {
+    const fit = stroke.pts.filter(p => p.beat).length / stroke.pts.length;
+    ropes.push(makeRope(stroke.pts, fit));
+    if (ropes.length > 2) ropes.shift();   // 3 本目で古い方を散髪
+  }
+  stroke = null;
+});
+document.getElementById("reset").onclick = () => { ropes.length = 0; result.textContent = ""; };
+
+// ---- ミク度採点 ----------------------------------------------------------------
+const result = document.getElementById("result");
+document.getElementById("judge").onclick = () => {
+  if (ropes.length < 2) { result.textContent = "ツインテールは 2 本描いてから（今 " + ropes.length + " 本）"; return; }
+  const [a, b] = ropes;
+  const left  = a.drawn[0].x <= b.drawn[0].x ? a : b;
+  const right = left === a ? b : a;
+
+  // 対称性 30: 右を中心軸で鏡映し、リサンプル済み点列の平均距離
+  const L = resample(left.drawn, 32);
+  const R = resample(right.drawn, 32).map(p => ({ x: 2 * OBJ.x - p.x, y: p.y }));
+  const meanD = L.reduce((s, p, i) => s + dist(p, R[i]), 0) / 32;
+  const sym = 30 * clamp01(1 - meanD / 140);
+
+  // つむじ位置 20: 理想アンカーは上部・左右対称（福笑いの目安点）
+  const ideal = s => ({ x: OBJ.x + s * OBJ.r * 0.8, y: OBJ.y - OBJ.r * 0.75 });
+  const anch = 20 * clamp01(1 - (dist(left.drawn[0], ideal(-1)) + dist(right.drawn[0], ideal(1))) / 2 / 130);
+
+  // 長さ比 20: 髪長 ÷ 造形物高さ、理想 1.6
+  const ratio = (left.len + right.len) / 2 / (OBJ.r * 2);
+  const lenS = 20 * clamp01(1 - Math.abs(ratio - 1.6) / 1.6);
+
+  // ハリ・ツヤ 20: ビート適合率
+  const shine = 20 * (left.beatFit + right.beatFit) / 2;
+
+  // 歌詞充填率 10: 髪に取り込めた文字数（モックでは節数で代用）
+  const fill = 10 * clamp01((left.nodes.length + right.nodes.length) / 40);
+
+  const total = Math.round(sym + anch + lenS + shine + fill);
+  const rank = total >= 85 ? "もはや本人" : total >= 60 ? "親戚" : total >= 30 ? "ミク味を感じる" : "それはただのホイール";
+  result.innerHTML =
+    `ミク度 <b>${total}%</b> ─ ${rank}\n` +
+    `対称性 ${sym.toFixed(1)}/30 ・ つむじ位置 ${anch.toFixed(1)}/20 ・ 長さ比 ${lenS.toFixed(1)}/20 (${ratio.toFixed(2)})\n` +
+    `ハリツヤ ${shine.toFixed(1)}/20 ・ 歌詞充填 ${fill.toFixed(1)}/10`;
+};
+const clamp01 = v => Math.max(0, Math.min(1, v));
+
+// ---- 描画ループ ----------------------------------------------------------------
+let flash = "";
+function drawWheel(g) {
+  g.save(); g.translate(OBJ.x, OBJ.y);
+  g.fillStyle = "#222"; g.beginPath(); g.arc(0, 0, OBJ.r, 0, 7); g.fill();          // タイヤ
+  g.fillStyle = "#f2c519"; g.beginPath(); g.arc(0, 0, OBJ.r * 0.72, 0, 7); g.fill(); // 黄色ホイール
+  g.strokeStyle = "#c79d0a"; g.lineWidth = 10;
+  for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2;
+    g.beginPath(); g.moveTo(0, 0); g.lineTo(Math.cos(a) * OBJ.r * 0.6, Math.sin(a) * OBJ.r * 0.6); g.stroke(); }
+  g.fillStyle = "#e6e6e6"; g.beginPath(); g.arc(0, 0, OBJ.r * 0.16, 0, 7); g.fill(); // ハブ
+  g.restore();
+}
+function drawRope(g, r, t) {
+  g.strokeStyle = "rgba(57,197,187," + (0.55 + 0.45 * r.beatFit) + ")";
+  g.lineWidth = 9; g.lineCap = "round"; g.beginPath();
+  g.moveTo(r.nodes[0].x, r.nodes[0].y);
+  for (const n of r.nodes) g.lineTo(n.x, n.y);
+  g.stroke();
+  g.fillStyle = "#bff5f0"; g.font = "13px sans-serif"; g.textAlign = "center";
+  r.nodes.forEach((n, i) => { if (i % 2) g.fillText(LYRICS[i % LYRICS.length], n.x, n.y + 4); }); // 髪＝歌詞
+}
+function loop() {
+  const t = now(), g = cx2d;
+  g.clearRect(0, 0, cv.width, cv.height);
+  // ステータス: 拍ランプとボーカルメーター
+  const p = beatPhase(t);
+  g.fillStyle = onBeat(t) ? "#39c5bb" : "#2b3a44";
+  g.beginPath(); g.arc(30, 30, 12 + (1 - p) * 6, 0, 7); g.fill();
+  g.fillStyle = "#9fb6bd"; g.font = "12px sans-serif"; g.textAlign = "left";
+  g.fillText("BEAT", 50, 34);
+  g.fillStyle = vocalActive(t) ? "#39c5bb" : "#2b3a44";
+  g.fillRect(110, 22, 120 * vocalAmp(t), 14);
+  g.strokeStyle = "#2b3a44"; g.strokeRect(110, 22, 120, 14);
+  g.fillStyle = "#9fb6bd"; g.fillText(vocalActive(t) ? "VOCAL ♪" : "(間奏)", 240, 34);
+
+  drawWheel(g);
+  for (const r of ropes) { stepRope(r, t); drawRope(g, r, t); }
+  if (stroke) {
+    g.strokeStyle = "#7fe8e0"; g.lineWidth = 6; g.beginPath();
+    g.moveTo(stroke.pts[0].x, stroke.pts[0].y);
+    for (const q of stroke.pts) g.lineTo(q.x, q.y);
+    g.stroke();
+  }
+  if (flash) { g.fillStyle = "#f2c519"; g.font = "16px sans-serif"; g.textAlign = "center";
+               g.fillText(flash, cv.width / 2, 70); if (Math.random() < 0.01) flash = ""; }
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
