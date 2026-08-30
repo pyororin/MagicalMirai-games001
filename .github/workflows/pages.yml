@@ -1,5 +1,7 @@
 name: Deploy GitHub Pages
 
+# GITHUB_TOKEN では Pages サイトの新規作成ができないため、
+# 自動有効化が働く gh-pages ブランチへの配置方式を採用している。
 on:
   push:
     branches:
@@ -8,9 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
@@ -19,20 +19,14 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - name: Collect static files
         run: |
           mkdir -p _site
-          rsync -a --exclude 'node_modules' --exclude '.git' --exclude '_site' ./ _site/
-      - uses: actions/configure-pages@v5
+          rsync -a --exclude 'node_modules' --exclude '.git' --exclude '.github' --exclude '_site' ./ _site/
+          touch _site/.nojekyll
+      - uses: peaceiris/actions-gh-pages@v4
         with:
-          enablement: true
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: _site
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_site
