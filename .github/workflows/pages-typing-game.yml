@@ -1,0 +1,43 @@
+name: Deploy typing-game to GitHub Pages
+
+# gh-pages ブランチ配信。他企画を消さないよう destination_dir 方式
+# (ontology/infra.yaml の gh-pages-mutual-wipe を参照)。
+# ランディング(index.html)はルートへ keep_files: true で置く。
+on:
+  push:
+    branches: [main]
+    paths:
+      - "typing-game/**"
+      - "index.html"
+      - ".github/workflows/pages-typing-game.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages-typing-game
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Collect static files
+        run: |
+          mkdir -p _site _root
+          rsync -a --exclude 'node_modules' typing-game/ _site/
+          cp index.html _root/
+      - name: Deploy typing-game
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_site
+          destination_dir: typing-game
+      - name: Deploy landing page (root, keep other dirs)
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_root
+          keep_files: true
