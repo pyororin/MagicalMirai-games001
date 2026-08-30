@@ -20,14 +20,24 @@
   #result { white-space: pre-line; font-size: 13px; text-align: center; min-height: 7em; }
   #result b { color: #39c5bb; font-size: 22px; }
   #media { width: 640px; max-width: 100%; }
+  #songwrap { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+  select { background: #2b3a44; color: #d8f4f2; border: 1px solid #3a4a55; border-radius: 6px;
+           padding: 7px 10px; font-size: 14px; max-width: 60vw; }
+  #credit { font-size: 11px; opacity: .6; text-align: center; max-width: 60ch; line-height: 1.7;
+            padding-bottom: 8px; }
+  #credit a { color: #7fe8e0; }
 </style>
-  <script type="module" crossorigin src="./assets/index-BPJyIvCC.js"></script>
+  <script type="module" crossorigin src="./assets/index-B31OK06h.js"></script>
 </head>
 <body>
 <h1>ミクの本体はツインテールである</h1>
 <div id="hint">歌唱中（VOCAL 点灯中）にドラッグして、日常の物にツインテールを 2 本生やす。サビでミク度が自動判定される。</div>
 <canvas id="stage" width="900" height="560"></canvas>
 <div id="ui">
+  <span id="songwrap" hidden>
+    <label for="song">曲</label>
+    <select id="song"></select>
+  </span>
   <span id="control" hidden>
     <button id="play" disabled>▶ 再生</button>
     <button id="pause" class="sub" disabled>⏸ 一時停止</button>
@@ -40,5 +50,11 @@
 <div id="meta">読み込み中……</div>
 <div id="result"></div>
 <div id="media"></div>
+<footer id="credit">
+  楽曲情報・歌詞の解析データは
+  <a href="https://developer.textalive.jp/" target="_blank" rel="noopener">TextAlive App API</a>（産業技術総合研究所）と
+  <a href="https://songle.jp/" target="_blank" rel="noopener">Songle</a> を利用しています。
+  楽曲の著作権は各権利者に帰属します。
+</footer>
 </body>
 </html>
