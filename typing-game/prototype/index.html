@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>打鍵ミライ — スマートフォンで遊ぶ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Zen+Kaku+Gothic+New:wght@400;700&display=swap">
+<style>
+  :root{
+    --ground:#0B1026; --panel:#131A38; --panel-2:#1B2450; --line:#2A3566;
+    --ink:#E8ECFF; --dim:#8A93B2; --cyan:#22E4D4; --magenta:#FF4FA3; --amber:#FFC94D;
+    --pixel:"DotGothic16","Courier New",monospace;
+    --body:"Zen Kaku Gothic New",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);line-height:1.75;
+    -webkit-font-smoothing:antialiased;display:grid;place-items:center;min-height:100vh;padding:32px 20px}
+  .card{width:100%;max-width:680px;border:2px solid var(--line);border-radius:4px;overflow:hidden;
+    background:radial-gradient(120% 80% at 50% 0%, #1A2350 0%, #0D1330 60%, #090D24 100%);position:relative}
+  .card::after{content:"";position:absolute;inset:0;pointer-events:none;mix-blend-mode:overlay;
+    background:repeating-linear-gradient(to bottom, rgba(255,255,255,.035) 0 1px, transparent 1px 3px)}
+  .inner{position:relative;z-index:1;padding:30px 28px 26px}
+  .eyebrow{font-family:var(--pixel);font-size:12px;letter-spacing:.18em;color:var(--cyan);margin:0 0 6px}
+  h1{font-family:var(--pixel);font-size:clamp(24px,5vw,34px);margin:0 0 4px;letter-spacing:.04em}
+  .sub{font-family:var(--pixel);font-size:13px;color:var(--amber);letter-spacing:.06em;margin:0 0 18px}
+  p{margin:0 0 14px;font-size:15px;color:var(--dim)}
+  p b{color:var(--ink)}
+
+  .qrrow{display:flex;gap:22px;align-items:center;flex-wrap:wrap;
+    background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:18px;margin:0 0 18px}
+  .qrbox{background:#fff;padding:10px;border-radius:3px;line-height:0;flex:0 0 auto}
+  #qr{display:block;width:176px;height:176px;image-rendering:pixelated}
+  .qrtext{flex:1 1 220px;min-width:0}
+  .qrtext .label{font-family:var(--pixel);font-size:11px;letter-spacing:.16em;color:var(--cyan);margin:0 0 6px}
+  .url{font-family:var(--pixel);font-size:12px;color:var(--ink);word-break:break-all;
+    background:var(--panel-2);border:1px solid var(--line);border-radius:3px;padding:8px 10px;margin:0 0 10px}
+  .warn{font-family:var(--pixel);font-size:12px;color:var(--amber);line-height:1.8;margin:0 0 10px}
+
+  .howto{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:8px;margin:0 0 20px}
+  .howto div{background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:10px 12px}
+  .howto span{display:block;font-family:var(--pixel);font-size:11px;letter-spacing:.1em;color:var(--dim)}
+  .howto b{font-family:var(--pixel);font-size:16px;color:var(--ink);letter-spacing:.06em}
+
+  a.btn,button{font-family:var(--pixel);font-size:15px;letter-spacing:.08em;background:var(--cyan);color:#06122A;
+    border:0;border-radius:3px;padding:12px 22px;cursor:pointer;text-decoration:none;display:inline-block;
+    transition:filter .12s,transform .12s}
+  a.btn:hover,button:hover{filter:brightness(1.12)}
+  a.btn:active,button:active{transform:translateY(1px)}
+  a.btn:focus-visible,button:focus-visible{outline:2px solid var(--magenta);outline-offset:3px}
+  .ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .note{font-size:13px;color:#5C6690;margin:16px 0 0}
+  .note a{color:var(--cyan)}
+  footer{max-width:680px;width:100%;font-size:13px;color:#5C6690;margin-top:18px}
+  footer a{color:var(--cyan)}
+  @media (prefers-reduced-motion:reduce){*{transition-duration:.01ms !important}}
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="inner">
+    <p class="eyebrow">DAKEN MIRAI <span style="color:#4A5488">build 8</span></p>
+    <h1>打鍵ミライ</h1>
+    <p class="sub">スマートフォン専用 — タップとスライドで歌詞を打つリズムゲーム</p>
+
+    <p id="lead">
+      このゲームは<b>スマートフォンでの片手操作</b>を前提に作られています。
+      下の QR コードをスマホのカメラで読み取って開いてください。
+    </p>
+
+    <div class="qrrow">
+      <div class="qrbox"><canvas id="qr" width="176" height="176" aria-label="プレイ用URLのQRコード"></canvas></div>
+      <div class="qrtext">
+        <p class="label">SCAN TO PLAY</p>
+        <div class="url" id="url">—</div>
+        <p class="warn" id="warn" hidden></p>
+        <div class="row">
+          <button class="ghost" id="copy">URLをコピー</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="howto">
+      <div><span>あ段</span><b>タップ</b></div>
+      <div><span>い / う / え / お段</span><b>← ↑ → ↓</b></div>
+      <div><span>濁点・小文字</span><b>元の文字と同じ</b></div>
+      <div><span>ん / ー</span><b>↑ / →</b></div>
+    </div>
+
+    <p>
+      タッチ操作ができる PC(タッチパネル搭載機など)や、動作だけ確認したい場合はこのまま進めます。
+      キーボードでは <b>Space=タップ</b>、<b>矢印キー=上下左右</b> で同じように遊べます。
+    </p>
+    <div class="row">
+      <a class="btn" id="go" href="./textalive.html">このまま PC で進む</a>
+      <a class="btn ghost" href="./demo.html">合成音デモ(ローマ字版)</a>
+    </div>
+
+    <p class="note" id="mobileNote" hidden>
+      スマートフォンとして認識したため、まもなくゲーム画面へ移動します。
+      移動しない場合は<a href="./textalive.html">こちら</a>。
+    </p>
+  </div>
+</main>
+<footer>
+  本アプリは <a href="https://developer.textalive.jp/" target="_blank" rel="noopener">TextAlive App API</a> を利用しています。
+  QR コード生成に <a href="./vendor/QRCODE-LICENSE.md">qrcode-generator (MIT)</a> を同梱。
+</footer>
+
+<script src="./vendor/qrcode-generator-2.0.4.js"></script>
+<script>
+(function(){
+  "use strict";
+  var GAME="textalive.html";
+  var params=new URLSearchParams(location.search);
+
+  /* スマホ判定。タッチのある小さめの画面 or モバイル UA を「スマホ」とみなす。
+     判定を外しても PC 用リンクで進めるので、取りこぼしても行き止まりにはならない。 */
+  function isPhone(){
+    var ua=navigator.userAgent;
+    if(/Android|iPhone|iPod|Windows Phone/i.test(ua)) return true;
+    if(/iPad|Macintosh/.test(ua) && navigator.maxTouchPoints>1) return true;   // iPadOS
+    return window.matchMedia("(pointer: coarse)").matches && window.innerWidth<=900;
+  }
+
+  var gameUrl=new URL(GAME, location.href).href;
+  document.getElementById("url").textContent=gameUrl;
+  document.getElementById("go").href=GAME;
+
+  /* QR は同梱ライブラリで生成し、canvas にドットとして描く(CDN 依存を作らない) */
+  try{
+    var qr=qrcode(0,"M");
+    qr.addData(gameUrl);
+    qr.make();
+    var n=qr.getModuleCount(), quiet=4, total=n+quiet*2;
+    var cv=document.getElementById("qr"), scale=6;
+    cv.width=cv.height=total*scale;
+    var g=cv.getContext("2d");
+    g.fillStyle="#fff"; g.fillRect(0,0,cv.width,cv.height);
+    g.fillStyle="#0B1026";
+    for(var r=0;r<n;r++) for(var c=0;c<n;c++)
+      if(qr.isDark(r,c)) g.fillRect((c+quiet)*scale,(r+quiet)*scale,scale,scale);
+  }catch(e){
+    document.getElementById("qr").parentNode.style.display="none";
+  }
+
+  // localhost / file: の URL は他端末から開けない。QR を信じて詰まらないよう明示する
+  var host=location.hostname;
+  if(location.protocol==="file:" || host==="localhost" || host==="127.0.0.1" || host==="::1"){
+    var w=document.getElementById("warn");
+    w.hidden=false;
+    w.textContent = location.protocol==="file:"
+      ? "file:// で開いています。スマホからは開けません(読みデータの読み込みにも HTTP が必要です)。"
+      : "localhost の URL はスマホからは開けません。LAN の IP(例 http://192.168.x.x:8777/)で配信してください。";
+  }
+
+  document.getElementById("copy").addEventListener("click",function(){
+    var btn=this;
+    var done=function(){ btn.textContent="コピーしました"; setTimeout(function(){ btn.textContent="URLをコピー"; },1600); };
+    if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(gameUrl).then(done,fallback);
+    else fallback();
+    function fallback(){
+      var t=document.createElement("textarea");
+      t.value=gameUrl; document.body.appendChild(t); t.select();
+      try{ document.execCommand("copy"); done(); }catch(e){}
+      document.body.removeChild(t);
+    }
+  });
+
+  // スマホならこの分岐ページは用が無いので、そのままゲームへ送る(?stay=1 で止められる)
+  if(isPhone() && !params.has("stay")){
+    document.getElementById("lead").textContent="スマートフォンを検出しました。ゲーム画面へ移動します。";
+    document.getElementById("mobileNote").hidden=false;
+    setTimeout(function(){ location.replace(GAME); }, 700);
+  }
+})();
+</script>
+</body>
+</html>
