@@ -25,6 +25,7 @@
 | [docs/DESIGN.md](docs/DESIGN.md) | 企画・設計書（ゲームフロー、ミク度採点、TextAlive API 活用、枯れた技術の水平思考） |
 | [docs/TEXTALIVE_DEV.md](docs/TEXTALIVE_DEV.md) | TextAlive App API 開発ガイド（トークン取得、組み込みコード、Debugger での動作確認、モック移行対応表） |
 | [prototype/index.html](prototype/index.html) | 採点ロジックと髪物理の検証用モック（単体 HTML、依存なし） |
+| [app/](app/) | P1: TextAlive App API 接続版（Vite。課題曲の実ビート・実歌詞・実ボーカル音量で動作、サビで自動判定） |
 
 ## モックの動かし方
 
