@@ -14,6 +14,7 @@
     --amber:#FFC94D; --green:#7BE87B; --red:#FF6B6B;
     --pixel:"DotGothic16","Courier New",monospace;
     --body:"Zen Kaku Gothic New",system-ui,sans-serif;
+    --chip:76px;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);line-height:1.7;-webkit-font-smoothing:antialiased}
@@ -30,7 +31,7 @@
   .screen.fever{background:radial-gradient(120% 80% at 50% 0%, #3A1550 0%, #1B0F38 60%, #0D0722 100%)}
 
   .hud{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 14px;
-    border-bottom:1px solid var(--line);background:rgba(9,13,36,.6)}
+    border-bottom:1px solid var(--line);background:rgba(9,13,36,.6);position:relative;z-index:3}
   .hud .stat{font-family:var(--pixel);font-size:13px;letter-spacing:.06em}
   .hud .stat b{display:inline-block;min-width:5ch;color:var(--cyan);font-variant-numeric:tabular-nums;font-size:16px}
   .hud .stat.combo b{color:var(--amber);min-width:3ch}
@@ -38,31 +39,71 @@
   .bar{height:6px;background:var(--panel-2);border-radius:3px;overflow:hidden;flex:1 1 140px;min-width:120px}
   .bar i{display:block;height:100%;width:0;background:var(--cyan);transition:width .1s linear}
 
-  .stage{padding:24px 18px 16px;min-height:240px;display:flex;flex-direction:column;gap:12px}
-  .phrase{font-family:var(--pixel);font-size:clamp(20px,4.8vw,34px);letter-spacing:.06em;line-height:1.5;word-break:break-all;min-height:1.5em}
-  .phrase .ch{transition:color .08s,transform .08s;display:inline-block}
-  .phrase .ch.done{color:var(--dim)}
-  .phrase .ch.cur{color:var(--cyan);transform:translateY(-2px);border-bottom:3px solid var(--magenta)}
-  .phrase .ch.pending{color:var(--ink)}
-  .phrase .ch.skip{color:#4A5488}
-  .phrase .ch.missed{color:var(--red);opacity:.7}
-  .guide{font-family:var(--pixel);font-size:clamp(14px,3vw,20px);color:var(--dim);letter-spacing:.08em;min-height:1.4em;word-break:break-all}
-  .guide .typed{color:var(--cyan)}
-  .next-phrase{font-family:var(--pixel);font-size:clamp(12px,2.4vw,16px);color:#4A5488;letter-spacing:.05em;word-break:break-all;min-height:1.3em}
+  /* --- 上段:カラオケ歌詞(この後ろに MV を敷く想定。背景レイヤーは .mvslot) --- */
+  .karaoke{position:relative;min-height:132px;padding:14px 16px 10px;overflow:hidden}
+  .mvslot{position:absolute;inset:0;z-index:0;background:
+    linear-gradient(180deg,rgba(34,228,212,.05),rgba(255,79,163,.05));
+    display:grid;place-items:center}
+  .mvslot span{font-family:var(--pixel);font-size:11px;color:#2C3766;letter-spacing:.2em}
+  .karaoke .line{position:relative;z-index:1;font-family:var(--pixel);letter-spacing:.06em;word-break:break-all;text-align:center}
+  .karaoke .prev{font-size:clamp(11px,2.2vw,14px);color:#3C4778;min-height:1.4em}
+  .karaoke .now{font-size:clamp(20px,4.6vw,32px);line-height:1.5;min-height:1.5em;margin:2px 0}
+  .karaoke .now .ch{color:#5D6796;transition:color .12s}
+  .karaoke .now .ch.sung{color:var(--ink);text-shadow:0 0 12px rgba(34,228,212,.5)}
+  .karaoke .now .ch.on{color:var(--cyan);text-shadow:0 0 16px rgba(34,228,212,.9)}
+  .karaoke .next{font-size:clamp(12px,2.4vw,16px);color:#4A5488;min-height:1.4em}
 
-  .judge-line{display:flex;align-items:baseline;gap:12px;min-height:2em;flex-wrap:wrap}
+  /* --- 中段:打鍵レーン(中心に現在ターゲット。歌詞かなが右から左へ流れる) --- */
+  .lane{position:relative;height:150px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+    background:rgba(9,13,36,.45);overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+  .lane .focus{position:absolute;left:50%;top:0;bottom:0;width:var(--chip);transform:translateX(-50%);
+    border-left:1px solid rgba(255,79,163,.35);border-right:1px solid rgba(255,79,163,.35);
+    background:linear-gradient(180deg,rgba(255,79,163,.16),rgba(255,79,163,.03));pointer-events:none}
+  .lane .track{position:absolute;left:0;top:22px;height:106px;will-change:transform;
+    transition:transform .13s cubic-bezier(.2,.7,.3,1)}
+  .chip{position:absolute;top:0;width:var(--chip);height:106px;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:2px}
+  .chip .kana{font-family:var(--pixel);font-size:30px;line-height:1.1;color:#7C87B8;transition:color .1s,transform .1s}
+  .chip .base{font-family:var(--pixel);font-size:10px;color:#49548A;letter-spacing:.06em;min-height:1em}
+  .chip .dir{width:34px;height:34px;display:grid;place-items:center;border-radius:6px;
+    border:1px solid #38427A;color:#7C87B8;font-size:17px;font-family:var(--pixel);line-height:1}
+  .chip.cur .kana{color:#fff;font-size:38px;text-shadow:0 0 18px rgba(34,228,212,.8)}
+  .chip.cur .dir{border-color:var(--cyan);color:#06122A;background:var(--cyan);
+    box-shadow:0 0 16px rgba(34,228,212,.55);font-size:20px;width:40px;height:40px}
+  .chip.cur .base{color:var(--dim)}
+  .chip.done .kana{color:#38B9AF} .chip.done .dir{opacity:.28}
+  .chip.miss .kana{color:var(--red)} .chip.miss .dir{opacity:.28;border-color:#5A2B3B}
+  .chip.next2 .kana{color:#4A5488} .chip.next2 .dir{opacity:.5}
+  .chip .sep{position:absolute;left:-2px;top:8px;bottom:8px;width:2px;background:#2A3566}
+
+  .cross{position:absolute;width:0;height:0;pointer-events:none;opacity:0;transition:opacity .06s;z-index:4}
+  .cross.show{opacity:1}
+  .cross .cell{position:absolute;width:52px;height:52px;margin:-26px 0 0 -26px;display:grid;place-items:center;
+    font-family:var(--pixel);font-size:24px;background:rgba(27,36,80,.94);border:1px solid var(--line);
+    border-radius:6px;color:var(--ink)}
+  .cross .cell.c{left:0;top:0} .cross .cell.l{left:-58px;top:0} .cross .cell.u{left:0;top:-58px}
+  .cross .cell.r{left:58px;top:0} .cross .cell.d{left:0;top:58px}
+  .cross .cell.tgt{border-color:var(--magenta);color:var(--magenta)}
+  .cross .cell.sel{background:var(--cyan);color:#06122A;border-color:var(--cyan)}
+
+  .footrow{display:flex;align-items:flex-end;gap:12px;padding:10px 14px 12px;min-height:96px}
+  .judge-line{flex:1;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;min-height:2em}
   .judge{font-family:var(--pixel);font-size:clamp(20px,4.4vw,30px);letter-spacing:.08em;opacity:0;transform:translateY(4px)}
   .judge.show{animation:pop .42s ease-out}
   @keyframes pop{0%{opacity:0;transform:translateY(6px) scale(.9)}18%{opacity:1;transform:translateY(0) scale(1.08)}100%{opacity:0;transform:translateY(-4px) scale(1)}}
   .judge.JUST{color:var(--magenta)} .judge.GREAT{color:var(--cyan)} .judge.GOOD{color:var(--green)}
   .judge.TYPED{color:var(--dim)} .judge.LATE{color:var(--amber)} .judge.MISS{color:var(--red)}
   .delta{font-family:var(--pixel);font-size:13px;color:var(--dim);font-variant-numeric:tabular-nums}
+  .legend{font-family:var(--pixel);font-size:11px;color:#5C6690;letter-spacing:.06em;line-height:1.8}
+  #miku{image-rendering:pixelated;width:96px;height:96px;flex:0 0 auto;filter:drop-shadow(0 3px 0 rgba(0,0,0,.4))}
 
-  .overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(9,13,36,.9);
-    text-align:center;padding:24px;z-index:5}
+  .overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(9,13,36,.92);
+    text-align:center;padding:24px;z-index:6;overflow:auto}
   .overlay h2{font-family:var(--pixel);font-size:clamp(18px,4.2vw,28px);margin:0 0 10px;letter-spacing:.06em}
   .overlay p{color:var(--dim);margin:0 auto 16px;max-width:46ch;font-size:14px}
-  .overlay .result{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:10px;margin:0 auto 16px;max-width:460px}
+  /* auto-fit はモバイル幅で列数計算が不安定になり右にはみ出すため固定列にする */
+  .overlay .result{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 auto 16px;max-width:460px}
+  @media (max-width:460px){ .overlay .result{grid-template-columns:repeat(2,1fr)} }
   .overlay .result div{background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:8px 6px}
   .overlay .result span{display:block;font-family:var(--pixel);font-size:11px;color:var(--dim);letter-spacing:.08em}
   .overlay .result b{font-family:var(--pixel);font-size:19px;font-variant-numeric:tabular-nums}
@@ -79,19 +120,8 @@
   .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
   .controls .label{font-family:var(--pixel);font-size:12px;color:var(--dim);letter-spacing:.1em;margin-right:2px}
   .controls button.ghost{padding:7px 13px;font-size:13px}
-
-  .zone{display:none;position:relative;height:230px;border-top:1px dashed var(--line);
-    touch-action:none;user-select:none;-webkit-user-select:none;overflow:hidden}
-  .zone.on{display:block}
-  .zone .zonehint{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--pixel);
-    font-size:13px;color:#4A5488;letter-spacing:.1em;pointer-events:none;text-align:center;line-height:2}
-  .cross{position:absolute;width:0;height:0;pointer-events:none;opacity:0;transition:opacity .06s}
-  .cross.show{opacity:1}
-  .cross .cell{position:absolute;width:56px;height:56px;margin:-28px 0 0 -28px;display:grid;place-items:center;
-    font-family:var(--pixel);font-size:24px;background:var(--panel-2);border:1px solid var(--line);border-radius:4px;color:var(--ink)}
-  .cross .cell.c{left:0;top:0} .cross .cell.l{left:-62px;top:0} .cross .cell.u{left:0;top:-62px}
-  .cross .cell.r{left:62px;top:0} .cross .cell.d{left:0;top:62px}
-  .cross .cell.sel{background:var(--cyan);color:#06122A;border-color:var(--cyan)}
+  select{font-family:var(--pixel);font-size:13px;background:var(--panel);color:var(--ink);
+    border:1px solid var(--line);border-radius:3px;padding:7px 10px}
 
   .mediarow{margin-top:14px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
   #media{flex:0 0 auto;min-width:230px;min-height:52px;background:var(--panel);border:1px solid var(--line);border-radius:3px}
@@ -103,17 +133,22 @@
   .caveat b{color:var(--ink)}
   footer{margin-top:26px;font-size:13px;color:#5C6690}
   footer a{color:var(--cyan)}
+  @media (max-width:640px){
+    :root{--chip:64px}
+    .legend{display:none}
+    .lane{height:138px}
+  }
   @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms !important;transition-duration:.01ms !important}}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:#4A5488">build 7</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:#4A5488">build 8</span></p>
     <h1>打鍵ミライ × TextAlive</h1>
     <p class="lede">
-      実楽曲の文字単位タイミングで判定エンジンを回す検証機。既定曲はマジカルミライ2025課題曲です。
-      漢字・記号は打鍵対象外(灰色)で、かなだけを打ちます(読みデータの扱いは本実装の課題)。
+      実楽曲の文字単位タイミングで判定エンジンを回す検証機。
+      入力は<b>タップとスライド上下左右の5種類だけ</b>。漢字は事前生成した読みデータでかなに開いて打ちます。
     </p>
     <p class="songmeta" id="songmeta">楽曲情報を読み込み中…</p>
   </header>
@@ -124,7 +159,8 @@
     <button class="ghost" data-diff="NORMAL" aria-pressed="true">NORMAL</button>
     <button class="ghost" data-diff="HARD" aria-pressed="false">HARD</button>
     <span style="flex:1"></span>
-    <button class="ghost" id="padToggle" aria-pressed="false">フリック入力</button>
+    <label class="label" for="songPick">課題曲</label>
+    <select id="songPick" aria-label="課題曲"></select>
   </div>
 
   <div class="screen" id="screen">
@@ -134,19 +170,32 @@
       <span class="spacer"></span>
       <div class="bar"><i id="progress"></i></div>
     </div>
-    <div class="stage">
-      <div class="phrase" id="phrase"></div>
-      <div class="guide" id="guide"></div>
-      <div class="next-phrase" id="nextPhrase"></div>
+
+    <div class="karaoke">
+      <div class="mvslot"><span>MV LAYER (今後実装)</span></div>
+      <div class="line prev" id="kPrev"></div>
+      <div class="line now" id="kNow"></div>
+      <div class="line next" id="kNext"></div>
+    </div>
+
+    <div class="lane" id="lane">
+      <div class="focus"></div>
+      <div class="track" id="track"></div>
+      <div class="cross" id="cross"></div>
+    </div>
+
+    <div class="footrow">
       <div class="judge-line">
         <span class="judge" id="judge"></span>
         <span class="delta" id="delta"></span>
+        <span class="legend">
+          あ段=タップ ・ い段=← ・ う段=↑ ・ え段=→ ・ お段=↓<br>
+          「ん」=↑ ・ 「ー」=→ ・ 濁点/半濁点/小文字は元の文字と同じ方向
+        </span>
       </div>
+      <canvas id="miku" width="24" height="24" aria-label="ちゅねミク"></canvas>
     </div>
-    <div class="zone" id="zone">
-      <div class="zonehint">ここをタップ / フリック<br>そのまま離す=あ段 ・ 滑らせて離す=←い ↑う →え ↓お</div>
-      <div class="cross" id="cross"></div>
-    </div>
+
     <div class="overlay" id="overlay">
       <div>
         <h2 id="ovTitle">LOADING…</h2>
@@ -167,12 +216,13 @@
   </div>
 
   <p class="caveat">
-    <b>検証ポイント:</b> 文字の発声タイミングと打鍵時刻の突き合わせ精度、ズレの体感。
-    ズレを感じる場合は何 ms ずれるかをリザルトの平均デルタで確認してください(キャリブレーション実装の判断材料)。
-    アプリトークンは TextAlive の設計上クライアントに埋め込む公開値です。
+    <b>操作:</b> レーンをタップ / フリック(指を離した瞬間に確定+SE)。PC は <b>Space=タップ</b>、<b>矢印キー=上下左右</b>。<br>
+    <b>検証ポイント:</b> 文字の発声タイミングと入力時刻の突き合わせ精度。ズレはリザルトの平均デルタで確認できます。
+    課題曲以外の楽曲は読みデータが無いため、かな表記の文字だけが打鍵対象になります。
   </p>
   <footer>
-    合成音版のデモは <a href="./demo.html">demo.html</a>。エンジンは <code>src/</code> と同一設計。<br>
+    合成音版のデモは <a href="./demo.html">demo.html</a>。判定コアは <code>src/judge.ts</code> と同一設計。<br>
+    読みデータは <code>tools/build-readings.mjs</code>(kuromoji)で事前生成し <code>data/readings/</code> に同梱。<br>
     本アプリは <a href="https://developer.textalive.jp/" target="_blank" rel="noopener">TextAlive App API</a> を利用しています。
   </footer>
 </div>
@@ -183,119 +233,64 @@
 <script>
 (function(){
   "use strict";
+  var BUILD = 8;
 
-  /* ============ ローマ字エンジン(demo.html と同一) ============ */
-  var DIGRAPHS = {
-    "きゃ":["kya"],"きゅ":["kyu"],"きょ":["kyo"],
-    "ぎゃ":["gya"],"ぎゅ":["gyu"],"ぎょ":["gyo"],
-    "しゃ":["sha","sya"],"しゅ":["shu","syu"],"しょ":["sho","syo"],"しぇ":["she","sye"],
-    "じゃ":["ja","zya","jya"],"じゅ":["ju","zyu","jyu"],"じょ":["jo","zyo","jyo"],
-    "ちゃ":["cha","tya","cya"],"ちゅ":["chu","tyu"],"ちょ":["cho","tyo"],
-    "にゃ":["nya"],"にゅ":["nyu"],"にょ":["nyo"],
-    "ひゃ":["hya"],"ひゅ":["hyu"],"ひょ":["hyo"],
-    "びゃ":["bya"],"びゅ":["byu"],"びょ":["byo"],
-    "ぴゃ":["pya"],"ぴゅ":["pyu"],"ぴょ":["pyo"],
-    "みゃ":["mya"],"みゅ":["myu"],"みょ":["myo"],
-    "りゃ":["rya"],"りゅ":["ryu"],"りょ":["ryo"],
-    "ふぁ":["fa"],"ふぃ":["fi"],"ふぇ":["fe"],"ふぉ":["fo"],
-    "てぃ":["thi"],"でぃ":["dhi"],"うぃ":["wi","whi"],"うぇ":["we","whe"]
-  };
-  var MONO = {
-    "あ":["a"],"い":["i"],"う":["u"],"え":["e"],"お":["o"],
-    "か":["ka","ca"],"き":["ki"],"く":["ku","cu"],"け":["ke"],"こ":["ko","co"],
-    "が":["ga"],"ぎ":["gi"],"ぐ":["gu"],"げ":["ge"],"ご":["go"],
-    "さ":["sa"],"し":["shi","si","ci"],"す":["su"],"せ":["se"],"そ":["so"],
-    "ざ":["za"],"じ":["ji","zi"],"ず":["zu"],"ぜ":["ze"],"ぞ":["zo"],
-    "た":["ta"],"ち":["chi","ti"],"つ":["tsu","tu"],"て":["te"],"と":["to"],
-    "だ":["da"],"ぢ":["di"],"づ":["du"],"で":["de"],"ど":["do"],
-    "な":["na"],"に":["ni"],"ぬ":["nu"],"ね":["ne"],"の":["no"],
-    "は":["ha"],"ひ":["hi"],"ふ":["fu","hu"],"へ":["he"],"ほ":["ho"],
-    "ば":["ba"],"び":["bi"],"ぶ":["bu"],"べ":["be"],"ぼ":["bo"],
-    "ぱ":["pa"],"ぴ":["pi"],"ぷ":["pu"],"ぺ":["pe"],"ぽ":["po"],
-    "ま":["ma"],"み":["mi"],"む":["mu"],"め":["me"],"も":["mo"],
-    "や":["ya"],"ゆ":["yu"],"よ":["yo"],
-    "ら":["ra"],"り":["ri"],"る":["ru"],"れ":["re"],"ろ":["ro"],
-    "わ":["wa"],"を":["wo"],
-    "ぁ":["la","xa"],"ぃ":["li","xi"],"ぅ":["lu","xu"],"ぇ":["le","xe"],"ぉ":["lo","xo"],
-    "ゃ":["lya","xya"],"ゅ":["lyu","xyu"],"ょ":["lyo","xyo"],
-    "っ":["ltu","xtu"],"ー":["-"]
-  };
-  var VOWELS = {a:1,i:1,u:1,e:1,o:1};
+  /* ============================================================
+     かな → 入力方向
+     方向は「母音の段」だけで決まる。濁点・半濁点・小文字は
+     元の文字と同じ方向(ナナメ入力は廃止)。入力は 5 種類のみ。
+     ============================================================ */
+  var ROWS = [
+    "あいうえお","かきくけこ","さしすせそ","たちつてと","なにぬねの",
+    "はひふへほ","まみむめも","らりるれろ",
+    "がぎぐげご","ざじずぜぞ","だぢづでど","ばびぶべぼ","ぱぴぷぺぽ",
+    "ぁぃぅぇぉ","ゔ"
+  ];
+  var DIRS = ["c","l","u","r","d"];               // あ段, い段, う段, え段, お段
+  var DIR_ICON = {c:"●", l:"←", u:"↑", r:"→", d:"↓"};
+  var DIR_NAME = {c:"タップ", l:"左", u:"上", r:"右", d:"下"};
 
-  function headConsonants(kana){
-    var ps = DIGRAPHS[kana] || MONO[kana] || [], out = {}, i, c;
-    for(i=0;i<ps.length;i++){ c = ps[i][0]; if(c && !VOWELS[c] && c!=="-") out[c]=1; }
-    return Object.keys(out);
-  }
-  function nPatterns(next){
-    var base=["nn","xn"];
-    if(!next) return base;
-    var h=headConsonants(next);
-    if(h.length===0 || h[0]==="n" || h[0]==="y") return base;
-    return ["n"].concat(base);
-  }
-  // 既に結合済みのかな配列からセグメントを作る(TextAlive の文字単位に対応)
-  function segsFromKanaList(list){
-    var segs=[], i;
-    for(i=0;i<list.length;i++){
-      var k=list[i].kana, next=list[i+1]&&list[i+1].kana, pats;
-      if(k==="ん"){ segs.push({kana:k,patterns:nPatterns(next),startTime:list[i].startTime}); continue; }
-      if(k==="っ"){
-        pats=MONO["っ"].slice();
-        headConsonants(next||"").forEach(function(c){ pats.push(c); });
-        segs.push({kana:k,patterns:pats.filter(function(v,j,a){return a.indexOf(v)===j;}),startTime:list[i].startTime});
-        continue;
-      }
-      pats = DIGRAPHS[k] || MONO[k];
-      if(!pats) continue;
-      segs.push({kana:k,patterns:pats.slice(),startTime:list[i].startTime});
+  var DIR_OF = {}, ROW_OF = {};
+  ROWS.forEach(function(row){
+    for(var i=0;i<row.length;i++){ DIR_OF[row[i]] = DIRS[i]; ROW_OF[row[i]] = row; }
+  });
+  // 例外行:や行/わ行と、段を持たない「ん」「ー」「っ」
+  ["や","ゆ","よ"].forEach(function(k,i){ DIR_OF[k]=["c","u","d"][i]; ROW_OF[k]="やゆよ"; });
+  ["ゃ","ゅ","ょ"].forEach(function(k,i){ DIR_OF[k]=["c","u","d"][i]; ROW_OF[k]="ゃゅょ"; });
+  DIR_OF["わ"]="c"; DIR_OF["を"]="d"; ROW_OF["わ"]="わ　　　を"; ROW_OF["を"]="わ　　　を";
+  DIR_OF["ゐ"]="l"; DIR_OF["ゑ"]="r";
+  DIR_OF["っ"]="u"; ROW_OF["っ"]="たちってと";       // つ と同じ入力
+  DIR_OF["ん"]="u"; ROW_OF["ん"]="　　ん　　";
+  DIR_OF["ー"]="r"; ROW_OF["ー"]="　　　ー　";
+
+  function dirOf(kana){ return DIR_OF[kana] || null; }
+  function isTypable(kana){ return !!DIR_OF[kana]; }
+  /** 濁点・小文字などを「同じ入力になる基本の文字」に戻す(チップの補助表示用) */
+  var BASE_OF = (function(){
+    var m={}, plain="あいうえお かきくけこ さしすせそ たちつてと なにぬねの はひふへほ".split(" ");
+    ["がぎぐげご","ざじずぜぞ","だぢづでど","ばびぶべぼ","ぱぴぷぺぽ"].forEach(function(row,ri){
+      var base=["かきくけこ","さしすせそ","たちつてと","はひふへほ","はひふへほ"][ri];
+      for(var i=0;i<row.length;i++) m[row[i]]=base[i];
+    });
+    "ぁぃぅぇぉ".split("").forEach(function(k,i){ m[k]="あいうえお"[i]; });
+    "ゃゅょ".split("").forEach(function(k,i){ m[k]="やゆよ"[i]; });
+    m["っ"]="つ"; m["ゔ"]="う";
+    return m;
+  })();
+
+  /** 現在ターゲットの行を十字に並べる(濁点は行ごと濁点表示にして見た目を一致させる) */
+  function crossCells(kana){
+    var row = ROW_OF[kana] || kana, out = {};
+    if(row.length<=1){ out[dirOf(kana)] = kana; return out; }
+    for(var i=0;i<row.length && i<5;i++){
+      var ch=row[i];
+      if(ch===" "||ch==="　") continue;
+      out[DIRS[i]] = ch;
     }
-    return segs;
+    return out;
   }
 
-  function Typer(segments){ this.segments=segments; this.index=0; this.buffer=""; this.pendingTime=0; }
-  Typer.prototype.done=function(){ return this.index>=this.segments.length; };
-  Typer.prototype.candidates=function(){
-    if(this.done()) return [];
-    var b=this.buffer;
-    return this.segments[this.index].patterns.filter(function(p){ return p.indexOf(b)===0; });
-  };
-  Typer.prototype.hint=function(){
-    var c=this.candidates(); if(!c.length) return "";
-    var s=c.reduce(function(a,b){ return b.length<a.length?b:a; });
-    return s.slice(this.buffer.length);
-  };
-  Typer.prototype.input=function(key,time){
-    if(this.done()) return {type:"miss"};
-    var seg=this.segments[this.index], attempt=this.buffer+key;
-    var m=seg.patterns.filter(function(p){ return p.indexOf(attempt)===0; });
-    if(m.length){
-      this.buffer=attempt;
-      var exact=m.indexOf(attempt)>=0;
-      var longer=m.some(function(p){ return p.length>attempt.length; });
-      if(exact && !longer) return this.commit(time);
-      if(exact) this.pendingTime=time;
-      return {type:"progress"};
-    }
-    if(this.buffer && seg.patterns.indexOf(this.buffer)>=0){
-      var idx=this.index, ct=this.pendingTime;
-      this.index++; this.buffer="";
-      var nxt=this.input(key,time);
-      return {type:"commit",segmentIndex:idx,commitTime:ct,alsoMissed:nxt.type==="miss"};
-    }
-    return {type:"miss"};
-  };
-  Typer.prototype.commit=function(time){
-    var idx=this.index; this.index++; this.buffer="";
-    return {type:"commit",segmentIndex:idx,commitTime:time};
-  };
-  Typer.prototype.commitKana=function(kana,time){
-    if(this.done()) return {type:"miss"};
-    if(this.segments[this.index].kana!==kana) return {type:"miss"};
-    this.buffer=""; return this.commit(time);
-  };
-
-  /* ============ 判定(demo.html と同一) ============ */
+  /* ============ 判定(src/judge.ts と同一設計) ============ */
   var WIN={just:100,great:250,good:450,late:1200};
   var MULT={JUST:2,GREAT:1.5,GOOD:1,TYPED:1,LATE:.5,MISS:0};
   function clampWindow(notes,i){
@@ -316,110 +311,278 @@
     return {grade:"MISS",delta:d};
   }
   function comboMult(c){ return Math.min(1+Math.floor(c/10)*0.1,2); }
+  // 1かな=1操作になったので、しきい値は「操作/秒」そのもの
   var SUSTAIN={EASY:2.0,NORMAL:4.0,HARD:Infinity};
-  function selectIdx(segs,diff){
-    var kps=SUSTAIN[diff];
-    if(kps===Infinity) return segs.map(function(_,i){return i;});
-    var spk=0;
-    segs.forEach(function(s){ spk+=Math.min.apply(null,s.patterns.map(function(p){return p.length;})); });
-    spk = segs.length? spk/segs.length : 2;
-    var gap=(spk/kps)*1000, out=[], last=-Infinity;
-    segs.forEach(function(s,i){
-      if(i===0 || s.startTime-last>=gap){ out.push(i); last=s.startTime; }
+  function selectIdx(notes,diff){
+    var ops=SUSTAIN[diff];
+    if(ops===Infinity) return notes.map(function(_,i){return i;});
+    var gap=1000/ops, out=[], last=-Infinity;
+    notes.forEach(function(n,i){
+      if(i===0 || n.startTime-last>=gap){ out.push(i); last=n.startTime; }
     });
     return out;
   }
 
-  /* ============ TextAlive 接続 ============ */
+  /* ============ 読みデータ(事前生成) ============ */
   var KATA_START=0x30A1, KATA_END=0x30F6;
-  function toHira(ch){
-    var c=ch.charCodeAt(0);
-    if(c>=KATA_START && c<=KATA_END) return String.fromCharCode(c-0x60);
-    return ch;
+  function toHira(s){
+    return String(s).replace(/[ァ-ヶ]/g,function(c){
+      return String.fromCharCode(c.charCodeAt(0)-0x60);
+    });
   }
-  function isKana(ch){ return !!(MONO[ch] || "ゃゅょぁぃぅぇぉ".indexOf(ch)>=0); }
-  var SMALL="ゃゅょぁぃぅぇぉ";
+  var readingData=null, readingsIndexPromise=null, readingDiag="";
 
-  // TextAlive のフレーズ→ {chars(表示用), kanaList(打鍵候補)} に変換
-  function convertPhrase(ph){
-    var chars=[], kanaList=[];
-    var c=ph.firstChar;
+  /* 読みデータの置き場。GitHub Pages のようにサブディレクトリ配下へ置かれても
+     正しく解決できるよう、相対パスではなく baseURI から絶対 URL を組み立てる。
+     ?v= はビルド番号でのキャッシュ避け(ontology/infra.yaml の stale-cache-misdiagnosis)。 */
+  function dataUrl(name){
+    return new URL("data/readings/"+name+"?v="+BUILD, document.baseURI).href;
+  }
+  function getJson(url){
+    return fetch(url,{cache:"no-cache"}).then(function(r){
+      if(!r.ok) throw new Error("HTTP "+r.status);
+      return r.json();
+    });
+  }
+  /** index.json は一度だけ読み、以降は同じ Promise を待つ(曲の準備と競合させない) */
+  function readingIndex(){
+    if(!readingsIndexPromise){
+      var url=dataUrl("index.json");
+      readingsIndexPromise=getJson(url).catch(function(e){
+        readingDiag="読みデータ一覧の取得に失敗: "+url+" → "+e.message;
+        return [];
+      });
+    }
+    return readingsIndexPromise;
+  }
+  function loadReadings(songUrl, code){
+    return readingIndex().then(function(index){
+      var hit=null;
+      (index||[]).forEach(function(e){
+        if(code && e.code===code) hit=e;
+        else if(!hit && songUrl && e.songUrl && songUrl.indexOf(e.songUrl)>=0) hit=e;
+      });
+      if(!hit) return null;
+      var url=dataUrl(hit.code+".json");
+      return getJson(url).catch(function(e){
+        readingDiag="読みデータの取得に失敗: "+url+" → "+e.message;
+        return null;
+      });
+    });
+  }
+
+  /**
+   * 読みデータ(歌詞全文の1文字=1読み)に、TextAlive の文字列を突き合わせるカーソル。
+   * 空白・改行を無視した圧縮列で照合し、ずれたら先読みで復帰する。
+   */
+  function ReadingCursor(data){
+    this.chars=[]; this.readings=[]; this.pos=0; this.hits=0; this.misses=0;
+    if(!data) return;
+    var text=[].concat(Array.prototype.slice.call(data.text));
+    for(var i=0;i<text.length;i++){
+      if(/\s/.test(text[i])) continue;
+      this.chars.push(text[i]); this.readings.push(data.readings[i]||"");
+    }
+  }
+  ReadingCursor.prototype.take=function(ch){
+    if(!this.chars.length) return null;
+    if(this.chars[this.pos]===ch){ this.hits++; return this.readings[this.pos++]; }
+    for(var d=1;d<=80;d++){                       // 歌詞にない字(記号等)を跨いで復帰
+      if(this.chars[this.pos+d]===ch){ this.pos+=d+1; this.hits++; return this.readings[this.pos-1]; }
+    }
+    this.misses++; return null;
+  };
+
+  /* ============ TextAlive のフレーズ → 表示行 + ノート列 ============ */
+  function convertPhrase(ph, cursor){
+    var chars=[], notes=[], c=ph.firstChar;
     while(c){
-      var raw=c.text, hira=toHira(raw);
-      var disp={text:raw, kanaIdx:null};
-      if(isKana(hira)){
-        // 拗音: 直前のかなと結合できるなら結合(DIGRAPHS に存在する組)
-        var prev=kanaList[kanaList.length-1];
-        if(SMALL.indexOf(hira)>=0 && prev && DIGRAPHS[prev.kana+hira] && !prev.merged){
-          prev.kana=prev.kana+hira; prev.merged=true;
-          disp.kanaIdx=kanaList.length-1;
-        } else {
-          disp.kanaIdx=kanaList.length;
-          kanaList.push({kana:hira, startTime:c.startTime, merged:false});
-        }
-      }
-      chars.push(disp);
+      var raw=c.text;
+      var fromData = cursor ? cursor.take(raw) : null;
+      var reading = fromData!=null && fromData!=="" ? fromData : (isTypable(toHira(raw)) ? toHira(raw) : "");
+      var st=c.startTime, en=(c.endTime && c.endTime>st) ? c.endTime : st+180;
+      var kanas=[].concat(Array.prototype.slice.call(toHira(reading))).filter(isTypable);
+      var noteIdx=[];
+      kanas.forEach(function(k,i){
+        noteIdx.push(notes.length);
+        notes.push({kana:k, dir:dirOf(k), base:(BASE_OF[k]||null),
+                    startTime: st + (en-st)*(i/kanas.length), charIdx: chars.length});
+      });
+      chars.push({text:raw, startTime:st, endTime:en, notes:noteIdx});
       if(c===ph.lastChar) break;
       c=c.next;
     }
-    return {chars:chars, kanaList:kanaList, startTime:ph.startTime, endTime:ph.endTime, text:ph.text};
+    return {chars:chars, notes:notes, startTime:ph.startTime, endTime:ph.endTime,
+            text:chars.map(function(d){return d.text;}).join("")};
   }
+
+  /* ============ SE(Web Audio で合成。指を離した瞬間に鳴らす) ============ */
+  var actx=null;
+  function audio(){
+    if(!actx){
+      var C=window.AudioContext||window.webkitAudioContext;
+      if(!C) return null;
+      actx=new C();
+    }
+    if(actx.state==="suspended") actx.resume();
+    return actx;
+  }
+  function blip(freq, dur, type, gain, sweep){
+    var a=audio(); if(!a) return;
+    var o=a.createOscillator(), g=a.createGain(), t=a.currentTime;
+    o.type=type||"square";
+    o.frequency.setValueAtTime(freq,t);
+    if(sweep) o.frequency.exponentialRampToValueAtTime(Math.max(60,freq*sweep), t+dur);
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(gain||0.18, t+0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+    o.connect(g); g.connect(a.destination); o.start(t); o.stop(t+dur+0.02);
+  }
+  var SE_SWEEP={c:1, l:0.72, u:1.5, r:1.32, d:0.6};   // 方向で音の動きを変える
+  function seInput(dir){ blip(dir==="c"?880:740, 0.075, "square", 0.16, SE_SWEEP[dir]||1); }
+  function seJudge(g){
+    if(g==="JUST"){ blip(1568,0.10,"triangle",0.2); blip(2093,0.12,"triangle",0.12,1.02); }
+    else if(g==="GREAT"||g==="GOOD"){ blip(1318,0.09,"triangle",0.15); }
+    else if(g==="MISS"){ blip(150,0.16,"sawtooth",0.16,0.5); }
+    else if(g==="LATE"||g==="TYPED"){ blip(660,0.07,"triangle",0.1); }
+  }
+
+  /* ============ ちゅねミク(ドット絵の顔。表情+口パク) ============ */
+  var mikuCv=document.getElementById("miku"), mikuCtx=mikuCv.getContext("2d");
+  var P={ hair:"#39C5BB", hair2:"#2A9E96", skin:"#FBE3D4", line:"#0B1026",
+          eye:"#1E3A5F", eyeHi:"#EAF6FF", mouth:"#8E2B47", tongue:"#FF7FA8", blush:"#FFB3C7" };
+  var mikuExpr="normal", mikuExprUntil=0, mikuMouth=0;
+  function px(x,y,w,h,color){ mikuCtx.fillStyle=color; mikuCtx.fillRect(x,y,w,h); }
+  function drawMiku(){
+    mikuCtx.clearRect(0,0,24,24);
+    // ツインテール(左右)
+    px(1,7,3,15,P.hair); px(20,7,3,15,P.hair);
+    px(1,20,3,2,P.hair2); px(20,20,3,2,P.hair2);
+    px(2,22,2,1,P.hair2); px(20,22,2,1,P.hair2);
+    px(3,6,2,3,P.hair2);  px(19,6,2,3,P.hair2);
+    // 髪(頭頂)と輪郭
+    px(6,1,12,3,P.hair); px(5,2,14,3,P.hair);
+    px(4,4,16,2,P.hair);
+    // 顔
+    px(5,6,14,12,P.skin);
+    px(5,5,14,1,P.hair2);
+    px(4,6,1,11,P.hair2); px(19,6,1,11,P.hair2);
+    px(5,18,14,1,P.hair2);
+    // 前髪
+    px(5,6,14,2,P.hair); px(8,8,3,1,P.hair); px(14,8,3,1,P.hair);
+    // ほお
+    px(6,13,2,1,P.blush); px(16,13,2,1,P.blush);
+    var e=mikuExpr;
+    if(e==="ok"){                                   // ^ ^
+      px(7,11,1,1,P.eye); px(8,10,2,1,P.eye); px(10,11,1,1,P.eye);
+      px(14,11,1,1,P.eye); px(15,10,2,1,P.eye); px(17,11,1,1,P.eye);
+    } else if(e==="miss"){                          // > <
+      px(7,10,1,1,P.eye); px(8,11,1,1,P.eye); px(7,12,1,1,P.eye);
+      px(17,10,1,1,P.eye); px(16,11,1,1,P.eye); px(17,12,1,1,P.eye);
+      px(9,10,1,1,P.eye); px(15,10,1,1,P.eye);
+    } else {                                        // 通常:大きめの目
+      px(7,10,3,4,P.eye); px(15,10,3,4,P.eye);
+      px(8,10,1,1,P.eyeHi); px(16,10,1,1,P.eyeHi);
+    }
+    // 口(音量に応じて開く)
+    var m=mikuMouth;
+    if(m<=0){ px(11,15,3,1,P.mouth); }
+    else if(m===1){ px(11,15,3,2,P.mouth); px(11,15,3,1,P.tongue); }
+    else { px(10,14,5,4,P.mouth); px(11,16,3,1,P.tongue); }
+  }
+  function mikuReact(g){
+    mikuExpr = (g==="MISS") ? "miss" : "ok";
+    mikuExprUntil = performance.now() + 600;
+    drawMiku();
+  }
+  drawMiku();
+  window.DAKEN_MIKU=function(expr,mouth){ mikuExpr=expr; mikuMouth=mouth|0; drawMiku(); };
 
   /* ============ ゲーム状態 ============ */
   var el={};
-  ["screen","phrase","guide","nextPhrase","judge","delta","score","combo","progress",
-   "overlay","ovTitle","ovText","ovErr","ovResult","startBtn","zone","cross","songmeta","songUrl","loadSong"]
+  ["screen","kPrev","kNow","kNext","lane","track","cross","judge","delta","score","combo","progress",
+   "overlay","ovTitle","ovText","ovErr","ovResult","startBtn","songmeta","songUrl","loadSong","songPick"]
     .forEach(function(id){ el[id]=document.getElementById(id); });
 
-  var difficulty="NORMAL", usePad=false, player=null, videoPhrases=null, state=null;
+  var difficulty="NORMAL", player=null, videoPhrases=null, state=null;
 
   function buildState(){
     var phrases=videoPhrases.map(function(vp){
-      var segsAll=segsFromKanaList(vp.kanaList);
-      var picked=selectIdx(segsAll,difficulty);
-      var pickedSet={}; picked.forEach(function(i){ pickedSet[i]=1; });
-      return {
-        chars:vp.chars, segsAll:segsAll, picked:picked, pickedSet:pickedSet,
-        typer:new Typer(picked.map(function(i){ return segsAll[i]; })),
-        results:picked.map(function(){ return null; }),
-        startTime:vp.startTime, endTime:vp.endTime
-      };
-    }).filter(function(p){ return p.typer.segments.length>0; });
+      var picked=selectIdx(vp.notes,difficulty);
+      var notes=picked.map(function(i){ return vp.notes[i]; });
+      return {chars:vp.chars, allNotes:vp.notes, notes:notes,
+              pickedSet:picked.reduce(function(a,i){a[i]=1;return a;},{}),
+              idx:0, results:notes.map(function(){return null;}),
+              startTime:vp.startTime, endTime:vp.endTime, text:vp.text};
+    }).filter(function(p){ return p.notes.length>0; });
     return {phrases:phrases, pi:0, score:0, combo:0, maxCombo:0, deltas:[],
             counts:{JUST:0,GREAT:0,GOOD:0,TYPED:0,LATE:0,MISS:0}, running:false};
   }
 
   function now(){ return player&&player.timer ? player.timer.position : 0; }
+  function cur(){ return state ? state.phrases[state.pi] : null; }
+  function target(){ var P=cur(); return (P && P.idx<P.notes.length) ? P.notes[P.idx] : null; }
 
-  function renderPhrase(){
-    if(!state || !state.phrases.length) return;
-    var P=state.phrases[state.pi];
-    var html="";
-    P.chars.forEach(function(dc){
-      var cls="skip";
-      if(dc.kanaIdx!=null){
-        var segIdx=dc.kanaIdx;
-        if(!P.pickedSet[segIdx]) cls="skip";
-        else{
-          var ai=P.picked.indexOf(segIdx);
-          if(P.results[ai]) cls = P.results[ai]==="MISS" ? "missed" : "done";
-          else if(ai===P.typer.index) cls="cur";
-          else cls="pending";
-        }
-      }
-      html+='<span class="ch '+cls+'">'+dc.text+"</span>";
+  /* ---- 打鍵レーン:現在フレーズ+次フレーズを並べ、ターゲットを中心に置く ---- */
+  var chipEls=[], chipPhraseKey=null;
+  function chipWidth(){
+    return parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--chip"))||76;
+  }
+  function buildTrack(){
+    var P=cur(); if(!P) return;
+    var N=state.phrases[state.pi+1];
+    var W=chipWidth(), html="", n=0;
+    chipEls=[];
+    P.notes.forEach(function(note){
+      html+=chipHtml(note, n++, W, "");
     });
-    el.phrase.innerHTML=html;
-    if(P.typer.done()){
-      el.guide.innerHTML="";
-    } else if(usePad){
-      var tk=P.typer.segments[P.typer.index].kana;
-      el.guide.innerHTML=tk+' <span class="typed">'+flickHint(tk)+"</span>";
-    } else {
-      el.guide.innerHTML='<span class="typed">'+P.typer.buffer+"</span>"+P.typer.hint();
+    if(N) N.notes.forEach(function(note,i){
+      html+=chipHtml(note, n++, W, "next2"+(i===0?" first":""));
+    });
+    el.track.innerHTML=html;
+    chipEls=Array.prototype.slice.call(el.track.children);
+    chipPhraseKey=state.pi;
+    updateChips(true);
+  }
+  function chipHtml(note,i,W,extra){
+    var base = note.base ? "= "+note.base : "";
+    return '<div class="chip '+extra+'" style="left:'+(i*W)+'px">'+
+             '<div class="kana">'+note.kana+"</div>"+
+             '<div class="base">'+base+"</div>"+
+             '<div class="dir">'+DIR_ICON[note.dir]+"</div>"+
+           "</div>";
+  }
+  function updateChips(instant){
+    var P=cur(); if(!P||!chipEls.length) return;
+    for(var i=0;i<P.notes.length;i++){
+      var c=chipEls[i]; if(!c) continue;
+      var r=P.results[i];
+      c.className = "chip"+(r ? (r==="MISS"?" miss":" done") : (i===P.idx?" cur":""));
     }
-    var nx=state.phrases[state.pi+1];
-    el.nextPhrase.textContent = nx ? "next  "+nx.chars.map(function(d){return d.text;}).join("") : "";
+    var W=chipWidth();
+    var x=(el.lane.clientWidth/2) - (P.idx*W) - W/2;
+    if(instant) el.track.style.transition="none";
+    el.track.style.transform="translateX("+x+"px)";
+    if(instant){ void el.track.offsetWidth; el.track.style.transition=""; }
+  }
+
+  /* ---- カラオケ(上段):発声位置で色が進む ---- */
+  function renderKaraoke(){
+    var P=cur(); if(!P) return;
+    if(el.kNow.dataset.pi!==String(state.pi)){
+      el.kNow.dataset.pi=String(state.pi);
+      el.kNow.innerHTML=P.chars.map(function(d){ return '<span class="ch">'+d.text+"</span>"; }).join("");
+      var prev=state.phrases[state.pi-1], next=state.phrases[state.pi+1];
+      el.kPrev.textContent=prev?prev.text:"";
+      el.kNext.textContent=next?next.text:"";
+    }
+    var t=now(), nodes=el.kNow.children;
+    for(var i=0;i<P.chars.length;i++){
+      var d=P.chars[i], cls="ch";
+      if(t>=d.startTime && t<d.endTime) cls="ch on";
+      else if(t>=d.endTime) cls="ch sung";
+      if(nodes[i] && nodes[i].className!==cls) nodes[i].className=cls;
+    }
   }
 
   function showJudge(g,delta){
@@ -429,14 +592,14 @@
     el.judge.classList.add("show");
     el.delta.textContent = (g==="MISS") ? "" : (g==="TYPED") ? "先行入力" :
       (delta>=0?"+":"")+Math.round(delta)+" ms";
+    seJudge(g); mikuReact(g);
   }
 
-  function applyJudgement(ai,commitTime){
-    var P=state.phrases[state.pi];
-    var notes=P.picked.map(function(i){ return P.segsAll[i]; });
-    var w=clampWindow(notes,ai);
-    var r=grade(commitTime,notes[ai],w);
-    P.results[ai]=r.grade;
+  function applyJudgement(i,commitTime){
+    var P=cur();
+    var w=clampWindow(P.notes,i);
+    var r=grade(commitTime,P.notes[i],w);
+    P.results[i]=r.grade;
     state.counts[r.grade]++;
     if(r.grade!=="TYPED"&&r.grade!=="MISS") state.deltas.push(r.delta);
     if(r.grade==="MISS"){ state.combo=0; }
@@ -452,58 +615,42 @@
     if(!state) return;
     state.combo=0; el.combo.textContent=0;
     el.screen.classList.remove("fever");
-    el.judge.className="judge MISS"; el.judge.textContent="MISS";
-    void el.judge.offsetWidth; el.judge.classList.add("show");
-    el.delta.textContent="";
+    showJudge("MISS",0);
   }
 
-  function advancePhraseIfDone(){
-    var P=state.phrases[state.pi];
-    if(P.typer.done() && state.pi<state.phrases.length-1){
-      state.pi++; renderPhrase();
-    }
-  }
-
-  function handleKey(ch){
+  /** 入力(方向)を1つ受け取る。フリックは指を離した時点で呼ばれる */
+  function sendDir(dir){
     if(!state||!state.running) return;
-    var P=state.phrases[state.pi];
-    if(P.typer.done()){ advancePhraseIfDone(); P=state.phrases[state.pi]; }
-    var r=P.typer.input(ch, now());
-    if(r.type==="commit"){
-      applyJudgement(r.segmentIndex, r.commitTime);
-      if(r.alsoMissed) flashMiss();
-      advancePhraseIfDone();
-    } else if(r.type==="miss"){ flashMiss(); }
-    renderPhrase();
+    seInput(dir);
+    var P=cur(), note=target();
+    if(!note){ return; }
+    if(note.dir!==dir){ flashMiss(); return; }
+    applyJudgement(P.idx, now());
+    P.idx++;
+    updateChips(false);
   }
 
-  // 発声を大きく過ぎた未入力を MISS で流し、曲に置いていかれたフレーズを送る
+  /** 発声を大きく過ぎた未入力を MISS で流し、次フレーズの開始で強制的に送る */
   function reap(){
-    var t=now();
-    var P=state.phrases[state.pi];
-    // 現在フレーズの先頭未入力が late 超過
-    if(!P.typer.done()){
-      var seg=P.typer.segments[P.typer.index];
-      if(t - seg.startTime > WIN.late){
-        var ai=P.typer.index;
-        P.results[ai]="MISS"; state.counts.MISS++;
-        state.combo=0; el.combo.textContent=0;
-        el.screen.classList.remove("fever");
-        P.typer.index++; P.typer.buffer="";
-        showJudge("MISS",0);
-      }
+    var t=now(), P=cur();
+    while(P.idx<P.notes.length && t-P.notes[P.idx].startTime>WIN.late){
+      P.results[P.idx]="MISS"; state.counts.MISS++;
+      state.combo=0; el.combo.textContent=0;
+      el.screen.classList.remove("fever");
+      P.idx++;
+      showJudge("MISS",0);
     }
-    advancePhraseIfDone();
-    // フレーズ全体を過ぎた場合の強制送り
-    while(state.pi<state.phrases.length-1 && t>state.phrases[state.pi].endTime+WIN.late){
-      var Q=state.phrases[state.pi];
-      while(!Q.typer.done()){
-        Q.results[Q.typer.index]="MISS"; state.counts.MISS++;
-        Q.typer.index++;
-      }
-      state.combo=0;
+    // 次フレーズが始まったら、打ち残しを MISS にして強制的に次へ
+    var next=state.phrases[state.pi+1];
+    while(next && t>=next.startTime){
+      var dropped=P.notes.length-P.idx;
+      while(P.idx<P.notes.length){ P.results[P.idx]="MISS"; state.counts.MISS++; P.idx++; }
+      if(dropped>0){ state.combo=0; el.combo.textContent=0; el.screen.classList.remove("fever"); }
       state.pi++;
+      P=cur(); next=state.phrases[state.pi+1];
+      buildTrack();
     }
+    if(P.idx>=P.notes.length && !next && t>P.endTime+WIN.late) return;
   }
 
   function loop(){
@@ -512,9 +659,27 @@
     var dur=player.video?player.video.duration:0;
     if(dur) el.progress.style.width=Math.min(100,(t/dur)*100)+"%";
     reap();
-    renderPhrase();
+    if(chipPhraseKey!==state.pi) buildTrack(); else updateChips(false);
+    renderKaraoke();
+    // 口パク:ボーカル音量が取れればそれで、無ければ発声中かどうかで動かす
+    var amp=0;
+    try{
+      if(player.getVocalAmplitude){
+        var mx=player.getMaxVocalAmplitude?player.getMaxVocalAmplitude():1;
+        amp=(player.getVocalAmplitude(t)||0)/(mx||1);
+      }
+    }catch(e){}
+    var P=cur(), singing=false;
+    for(var i=0;i<P.chars.length;i++){
+      if(t>=P.chars[i].startTime && t<P.chars[i].endTime){ singing=true; break; }
+    }
+    var m = amp>0.5?2 : amp>0.18?1 : (singing ? ((Math.floor(t/110)%2)+1) : 0);
+    var expr = (performance.now()<mikuExprUntil) ? mikuExpr : "normal";
+    if(m!==mikuMouth || expr!==mikuExpr){ mikuMouth=m; mikuExpr=expr; drawMiku(); }
     var last=state.phrases[state.phrases.length-1];
-    if((dur>0 && t>=dur-200) || (last.typer.done() && t>last.endTime+1500)){ finish(); return; }
+    if((dur>0 && t>=dur-200) || (state.pi===state.phrases.length-1 && P.idx>=P.notes.length && t>last.endTime+1500)){
+      finish(); return;
+    }
     requestAnimationFrame(loop);
   }
 
@@ -551,69 +716,57 @@
     el.overlay.style.display="grid";
   }
 
+  /* タブが隠れると requestAnimationFrame が止まり、曲だけ進んで総崩れになる。
+     裏に回ったら曲ごと一時停止し、戻ったら「再開」で続きから遊べるようにする。 */
+  var paused=false;
+  function pauseForHidden(){
+    if(!state||!state.running) return;
+    state.running=false; paused=true;
+    try{ player.requestPause(); }catch(e){}
+    el.ovTitle.textContent="PAUSE";
+    el.ovText.textContent="タブが非表示になったため一時停止しました。";
+    el.ovResult.hidden=true;
+    el.startBtn.textContent="再開";
+    el.startBtn.disabled=false;
+    el.overlay.style.display="grid";
+  }
+  function resume(){
+    paused=false; state.running=true;
+    el.overlay.style.display="none";
+    try{ player.requestPlay(); }catch(e){}
+    requestAnimationFrame(loop);
+  }
+  document.addEventListener("visibilitychange",function(){ if(document.hidden) pauseForHidden(); });
+
   function start(){
     if(!videoPhrases) return;
+    audio();                                   // ユーザー操作起点で AudioContext を起こす
+    paused=false;
     state=buildState();
     el.score.textContent="0"; el.combo.textContent="0";
     el.judge.textContent=""; el.delta.textContent="";
     el.screen.classList.remove("fever");
     el.overlay.style.display="none";
+    el.kNow.dataset.pi="";
     state.running=true;
+    buildTrack(); renderKaraoke();
     player.requestMediaSeek(0);
     player.requestPlay();
-    renderPhrase();
     requestAnimationFrame(loop);
   }
 
-  /* ============ フリック(demo.html と同一の1タッチゾーン方式) ============ */
-  var FLICK_ROWS=[
-    "あいうえお","かきくけこ","がぎぐげご","さしすせそ","ざじずぜぞ",
-    "たちつてと","だぢづでど","なにぬねの","はひふへほ","ばびぶべぼ",
-    "ぱぴぷぺぽ","まみむめも","らりるれろ"
-  ];
-  function flickOptions(kana){
-    if(kana.length===2){
-      var base=kana[0];
-      return {c:base+"ゃ", u:base+"ゅ", d:base+"ょ"};
-    }
-    if(kana==="わ"||kana==="を"||kana==="ん") return {c:"わ", l:"を", u:"ん"};
-    if(kana==="や"||kana==="ゆ"||kana==="よ") return {c:"や", u:"ゆ", d:"よ"};
-    for(var i=0;i<FLICK_ROWS.length;i++){
-      var row=FLICK_ROWS[i];
-      if(row.indexOf(kana)>=0)
-        return {c:row[0], l:row[1], u:row[2], r:row[3], d:row[4]};
-    }
-    return {c:kana};
-  }
-  var DIR_LABEL={c:"タップ", l:"←", u:"↑", r:"→", d:"↓"};
-  function flickHint(kana){
-    var opts=flickOptions(kana);
-    for(var dir in opts) if(opts[dir]===kana) return DIR_LABEL[dir];
-    return "タップ";
-  }
-  function currentTargetKana(){
-    if(!state) return null;
-    var P=state.phrases[state.pi];
-    if(P.typer.done()) return null;
-    return P.typer.segments[P.typer.index].kana;
-  }
-  function sendKana(kana){
-    if(!state||!state.running) return;
-    var P=state.phrases[state.pi];
-    if(P.typer.done()){ advancePhraseIfDone(); P=state.phrases[state.pi]; }
-    var r=P.typer.commitKana(kana, now());
-    if(r.type==="commit"){ applyJudgement(r.segmentIndex,r.commitTime); advancePhraseIfDone(); }
-    else flashMiss();
-    renderPhrase();
-  }
+  /* ============ 入力:タップ / スライド上下左右 の5種類だけ ============ */
   (function(){
-    var zone=el.zone, cross=el.cross;
-    var sx=0, sy=0, active=false, opts=null, THRESH=24;
+    var lane=el.lane, cross=el.cross;
+    var sx=0, sy=0, active=false, THRESH=22;
     function renderCross(x,y){
+      var note=target(); if(!note) return;
+      var cells=crossCells(note.kana), html="";
+      for(var dir in cells){
+        var tgt = cells[dir]===note.kana ? " tgt" : "";
+        html+='<div class="cell '+dir+tgt+'" data-dir="'+dir+'">'+cells[dir]+"</div>";
+      }
       cross.style.left=x+"px"; cross.style.top=y+"px";
-      var html="";
-      for(var dir in opts)
-        html+='<div class="cell '+dir+'" data-dir="'+dir+'">'+opts[dir]+"</div>";
       cross.innerHTML=html;
       cross.classList.add("show");
     }
@@ -631,10 +784,7 @@
     function pt(e){ return e.touches&&e.touches.length?e.touches[0]:(e.changedTouches?e.changedTouches[0]:e); }
     function down(e){
       e.preventDefault();
-      var kana=currentTargetKana();
-      if(!kana) return;
-      opts=flickOptions(kana);
-      var rect=zone.getBoundingClientRect(), p=pt(e);
+      var rect=lane.getBoundingClientRect(), p=pt(e);
       sx=p.clientX; sy=p.clientY; active=true;
       renderCross(p.clientX-rect.left, p.clientY-rect.top);
       highlight("c");
@@ -651,36 +801,33 @@
       active=false;
       cross.classList.remove("show");
       var p=pt(e);
-      var dir=resolveDir(p.clientX-sx, p.clientY-sy);
-      var kana=opts&&opts[dir];
-      if(kana) sendKana(kana); else flashMiss();
-      opts=null;
+      sendDir(resolveDir(p.clientX-sx, p.clientY-sy));   // 離した瞬間に確定+SE
     }
-    zone.addEventListener("touchstart",down,{passive:false});
-    zone.addEventListener("touchmove",move,{passive:false});
-    zone.addEventListener("touchend",up,{passive:false});
-    zone.addEventListener("mousedown",down);
-    zone.addEventListener("mousemove",move);
-    zone.addEventListener("mouseup",up);
-    zone.addEventListener("mouseleave",function(){ active=false; cross.classList.remove("show"); });
+    lane.addEventListener("touchstart",down,{passive:false});
+    lane.addEventListener("touchmove",move,{passive:false});
+    lane.addEventListener("touchend",up,{passive:false});
+    lane.addEventListener("mousedown",down);
+    lane.addEventListener("mousemove",move);
+    lane.addEventListener("mouseup",up);
+    lane.addEventListener("mouseleave",function(){ active=false; cross.classList.remove("show"); });
   })();
-  function setPadMode(on){
-    usePad=on;
-    document.getElementById("padToggle").setAttribute("aria-pressed",String(on));
-    el.zone.classList.toggle("on",on);
-  }
-  document.getElementById("padToggle").addEventListener("click",function(){ setPadMode(!usePad); });
-  if(window.matchMedia("(max-width:640px)").matches || "ontouchstart" in window) setPadMode(true);
 
-  /* ============ 入力・難易度・曲変更 ============ */
+  // PC は Space=タップ / 矢印キー=上下左右。キーを離した時点で確定(フリックと同じ作法)
+  var KEY_DIR={" ":"c","Spacebar":"c","Enter":"c",
+               ArrowLeft:"l",ArrowUp:"u",ArrowRight:"r",ArrowDown:"d"};
+  var keyHeld={};
   document.addEventListener("keydown",function(e){
-    if(e.metaKey||e.ctrlKey||e.altKey) return;
-    if(e.target===el.songUrl) return;
-    if(e.key.length===1 && /[a-z\-]/i.test(e.key)){
-      e.preventDefault();
-      handleKey(e.key.toLowerCase());
-    }
+    if(e.metaKey||e.ctrlKey||e.altKey||e.target===el.songUrl) return;
+    var d=KEY_DIR[e.key];
+    if(d){ e.preventDefault(); keyHeld[e.key]=true; }
   });
+  document.addEventListener("keyup",function(e){
+    if(e.target===el.songUrl) return;
+    var d=KEY_DIR[e.key];
+    if(d && keyHeld[e.key]){ e.preventDefault(); keyHeld[e.key]=false; sendDir(d); }
+  });
+
+  /* ============ 難易度・選曲 ============ */
   Array.prototype.forEach.call(document.querySelectorAll("[data-diff]"),function(b){
     b.addEventListener("click",function(){
       difficulty=b.getAttribute("data-diff");
@@ -695,20 +842,52 @@
       el.overlay.style.display="grid";
     });
   });
+
+  // ontology/textalive.yaml の contest-songs-2025(版数IDは公式サンプルからの実測値)
+  var CONTEST_SONGS=[
+    {title:"ロンリーラン / 海風太陽", url:"https://piapro.jp/t/CyPO/20250128183915",
+     video:{beatId:4694280,chordId:2830735,repetitiveSegmentId:2946483,lyricId:67815,lyricDiffId:20659}},
+    {title:"ストリートライト / 加賀(ネギシャワーP)", url:"https://piapro.jp/t/ULcJ/20250205120202",
+     video:{beatId:4694275,chordId:2830730,repetitiveSegmentId:2946478,lyricId:67810,lyricDiffId:20654}},
+    {title:"アリフレーション / 雨良 Amala", url:"https://piapro.jp/t/SuQO/20250127235813",
+     video:{beatId:4694276,chordId:2830731,repetitiveSegmentId:2946479,lyricId:67811,lyricDiffId:20655}},
+    {title:"インフォーマルダイブ / 99piano", url:"https://piapro.jp/t/Ppc9/20241224135843",
+     video:{beatId:4694277,chordId:2830732,repetitiveSegmentId:2946480,lyricId:67812,lyricDiffId:20656}},
+    {title:"ハロー、フェルミ。/ ど～ぱみん", url:"https://piapro.jp/t/oTaJ/20250204234235",
+     video:{beatId:4694278,chordId:2830733,repetitiveSegmentId:2946481,lyricId:67813,lyricDiffId:20657}},
+    {title:"パレードレコード / きさら", url:"https://piapro.jp/t/GCgy/20250202202635",
+     video:{beatId:4694279,chordId:2830734,repetitiveSegmentId:2946482,lyricId:67814,lyricDiffId:20658}}
+  ];
+  CONTEST_SONGS.forEach(function(s,i){
+    var o=document.createElement("option");
+    o.value=String(i); o.textContent=s.title;
+    el.songPick.appendChild(o);
+  });
+  el.songPick.addEventListener("change",function(){
+    var s=CONTEST_SONGS[+el.songPick.value];
+    beginLoad(s.url);
+    createFromSong(s.url,{video:s.video}).catch(function(e){ showError("楽曲の読み込みに失敗: "+e); });
+  });
+
+  function beginLoad(url){
+    if(state) state.running=false;
+    videoPhrases=null; readingData=null;
+    el.startBtn.disabled=true;
+    el.ovTitle.textContent="LOADING…";
+    el.ovText.textContent="楽曲を読み込んでいます: "+url;
+    el.ovErr.hidden=true;
+    el.ovResult.hidden=true;
+    el.overlay.style.display="grid";
+    el.songmeta.textContent="楽曲情報を読み込み中…";
+  }
   el.loadSong.addEventListener("click",function(){
     var u=el.songUrl.value.trim();
     if(!u||!player) return;
-    if(state) state.running=false;
-    videoPhrases=null;
-    el.startBtn.disabled=true;
-    el.ovTitle.textContent="LOADING…";
-    el.ovText.textContent="楽曲を読み込んでいます: "+u;
-    el.ovErr.hidden=true;
-    el.overlay.style.display="grid";
-    el.songmeta.textContent="楽曲情報を読み込み中…";
+    beginLoad(u);
     createFromSong(u,{}).catch(function(e){ showError("楽曲の読み込みに失敗: "+e); });
   });
-  el.startBtn.addEventListener("click",start);
+  el.startBtn.addEventListener("click",function(){ if(paused&&state) resume(); else start(); });
+  window.addEventListener("resize",function(){ if(state) updateChips(true); });
 
   /* 失敗した通信を記録し、エラー表示に添える(原因調査用) */
   var netDiag=[];
@@ -738,9 +917,9 @@
    * 追従し、確定したカード URL を createFromCardUrl に渡す。
    */
   function createFromSong(url,opts){
+    lastSongUrl=url;
     return player.createFromSongUrl(url,opts).catch(function(e){
       if(String(e).indexOf("Card data resolver")<0) throw e;
-      // トークン付きだとリダイレクト先が同一ホストの /cards/{id} (JSON+CORS有り)になる
       return _fetch("https://api.textalive.jp/cards/resolve?url="+encodeURIComponent(url),
                     {redirect:"follow", headers:{"x-ta-app-token":APP_TOKEN}})
         .then(function(r){
@@ -755,57 +934,73 @@
     el.ovText.textContent="";
     el.ovErr.hidden=false;
     var diag=netDiag.slice(-4);
-    el.ovErr.textContent=String(msg)+"\n[build 7]"+(diag.length?"\n--- 失敗した通信 ---\n"+diag.join("\n"):"");
+    el.ovErr.textContent=String(msg)+"\n[build "+BUILD+"]"+(diag.length?"\n--- 失敗した通信 ---\n"+diag.join("\n"):"");
     el.overlay.style.display="grid";
   }
 
-  var APP_TOKEN="VQRxHB1a0q8fVvnm";
+  var APP_TOKEN="VQRxHB1a0q8fVvnm", lastSongUrl=CONTEST_SONGS[0].url;
 
   /* ============ Player 初期化 ============ */
   if(typeof TextAliveApp==="undefined"){
     showError("TextAlive App API の読み込みに失敗しました。ネットワークを確認してください。");
     return;
   }
+  readingIndex();          // 先に取りに行くだけ。待ち合わせは loadReadings が行う
+
+  function rebuildFromVideo(v){
+    var code=null;
+    try{ code=player.data.song.code; }catch(e){}
+    return loadReadings(lastSongUrl, code).then(function(data){
+      readingData=data;
+      var cursor=data ? new ReadingCursor(data) : null;
+      videoPhrases=[];
+      var ph=v.firstPhrase;
+      while(ph){
+        var cp=convertPhrase(ph,cursor);
+        if(cp.notes.length) videoPhrases.push(cp);
+        ph=ph.next;
+      }
+      if(!videoPhrases.length){ showError("この楽曲から打鍵対象のかなを抽出できませんでした。"); return; }
+      var notes=videoPhrases.reduce(function(a,p){ return a+p.notes.length; },0);
+      var mark = data ? "(読みデータあり)"
+                      : readingDiag ? "(読みデータ取得失敗:かな表記のみ)"
+                                    : "(読みデータ無し:かな表記のみ)";
+      el.songmeta.textContent="♪ "+player.data.song.name+" / "+player.data.song.artist.name+
+        "  —  "+videoPhrases.length+"フレーズ / "+notes+"かな"+mark;
+      el.songmeta.title=readingDiag||"";
+      if(readingDiag){ netDiag.push(readingDiag); console.warn("[daken] "+readingDiag); }
+      window.DAKEN_DEBUG={phrases:videoPhrases, readings:data, cursor:cursor};
+      state=buildState();
+      buildTrack(); renderKaraoke();
+    });
+  }
+
   try{
     var Player=TextAliveApp.Player;
     player=new Player({
       app:{ token:APP_TOKEN },
-      mediaElement: document.getElementById("media")
+      mediaElement: document.getElementById("media"),
+      vocalAmplitudeEnabled: true          // 口パクに使う(初期化時にしか有効化できない)
     });
     player.addListener({
       onAppReady:function(app){
         if(!app.songUrl){
-          // マジカルミライ2025 課題曲: ロンリーラン / 海風太陽(公式サンプルの訂正ID付き)
-          createFromSong("https://piapro.jp/t/CyPO/20250128183915",{
-            video:{
-              beatId:4694280, chordId:2830735, repetitiveSegmentId:2946483,
-              lyricId:67815, lyricDiffId:20659
-            }
-          }).catch(function(e){ showError("楽曲の読み込みに失敗: "+e); });
+          var s=CONTEST_SONGS[0];
+          createFromSong(s.url,{video:s.video})
+            .catch(function(e){ showError("楽曲の読み込みに失敗: "+e); });
         }
       },
       onVideoReady:function(v){
-        try{
-          el.songmeta.textContent="♪ "+player.data.song.name+" / "+player.data.song.artist.name;
-          videoPhrases=[];
-          var ph=v.firstPhrase;
-          while(ph){
-            var cp=convertPhrase(ph);
-            if(cp.kanaList.length) videoPhrases.push(cp);
-            ph=ph.next;
-          }
-          if(!videoPhrases.length){ showError("この楽曲から打鍵対象のかなを抽出できませんでした。"); return; }
-          window.DAKEN_DEBUG={phrases:videoPhrases}; // 検証用フック
-          state=buildState();
-          renderPhrase();
-        }catch(e){ showError("歌詞データの変換に失敗: "+e); }
+        rebuildFromVideo(v).catch(function(e){ showError("歌詞データの変換に失敗: "+e); });
       },
       onTimerReady:function(){
         el.ovTitle.textContent="準備完了";
-        el.ovText.textContent="スタートすると楽曲が再生されます。光っている文字を、歌に合わせて打ってください。灰色の文字(漢字・記号・間引き分)は打ちません。";
+        el.ovText.textContent="レーン中央の文字を、表示された方向(タップ/上下左右)で歌に合わせて入力してください。"+
+          "PC は Space と矢印キーでも遊べます。";
         el.startBtn.disabled=false;
       },
-      onPlay:function(){ el.overlay.style.display="none"; },
+      // 準備段階で onPlay が飛ぶことがあるため、プレイ中以外はオーバーレイを閉じない
+      onPlay:function(){ if(state&&state.running) el.overlay.style.display="none"; },
       onStop:function(){ if(state&&state.running){ state.running=false; finish(); } }
     });
   }catch(e){
