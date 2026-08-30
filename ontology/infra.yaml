@@ -129,3 +129,23 @@ pitfalls:
     detection: 非表示タブで audio.currentTime だけが進み、進行バーが止まる。
     verified: 2026-08-30 (typing-game build 8)
     refs: [typing-game/prototype/textalive.html]
+
+  - id: registered-property-transition-freezes-updates
+    symptom: >
+      @property で登録したカスタムプロパティ（例 --hue）を :root に定義し、
+      同じ :root に transition を付けると、その後 --hue を更新しても
+      computed value が初期値のまま変わらない（CSS ルールでも
+      element.style.setProperty でも反映されない）。
+    cause: >
+      :root に対する registered custom property の transition が値の更新を
+      塞いでしまう（Chrome 2026 で確認）。子要素に同じ変数を inline で
+      設定すると正しく反映されるため、変数自体の仕組みではなく
+      :root + transition の組み合わせが原因と切り分けられる。
+    solution: >
+      :root の transition を外し、補間が要るなら JS 側で毎フレーム
+      少しずつ setProperty する（描画ループがあるゲームなら自然に書ける）。
+    detection: >
+      getComputedStyle(document.documentElement).getPropertyValue('--x') が
+      更新後も初期値のまま。子要素に inline 指定して比較すると切り分けられる。
+    verified: 2026-08-31 (typing-game build 11)
+    refs: [typing-game/prototype/textalive.html]
