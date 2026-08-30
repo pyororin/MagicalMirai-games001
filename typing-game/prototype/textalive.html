@@ -66,7 +66,7 @@
   .overlay .result div{background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:8px 6px}
   .overlay .result span{display:block;font-family:var(--pixel);font-size:11px;color:var(--dim);letter-spacing:.08em}
   .overlay .result b{font-family:var(--pixel);font-size:19px;font-variant-numeric:tabular-nums}
-  .overlay .err{color:var(--red);font-family:var(--pixel);font-size:13px;max-width:52ch;margin:0 auto 14px;word-break:break-all}
+  .overlay .err{color:var(--red);font-family:var(--pixel);font-size:13px;max-width:52ch;margin:0 auto 14px;word-break:break-all;white-space:pre-line;text-align:left}
 
   button{font-family:var(--pixel);font-size:15px;letter-spacing:.08em;background:var(--cyan);color:#06122A;
     border:0;border-radius:3px;padding:11px 22px;cursor:pointer;transition:filter .12s,transform .12s}
@@ -172,12 +172,14 @@
     アプリトークンは TextAlive の設計上クライアントに埋め込む公開値です。
   </p>
   <footer>
-    合成音版のデモは <a href="./demo.html">demo.html</a>。エンジンは <code>src/</code> と同一設計。
+    合成音版のデモは <a href="./demo.html">demo.html</a>。エンジンは <code>src/</code> と同一設計。<br>
+    本アプリは <a href="https://developer.textalive.jp/" target="_blank" rel="noopener">TextAlive App API</a> を利用しています。
   </footer>
 </div>
 
-<script src="https://unpkg.com/axios/dist/axios.min.js"></script>
-<script src="https://unpkg.com/textalive-app-api/dist/index.js"></script>
+<!-- CDN 依存を避けるため検証済みバージョンを同梱(広告ブロッカー等による欠落も防ぐ) -->
+<script src="./vendor/axios.min.js"></script>
+<script src="./vendor/textalive-app-api-0.5.2.js"></script>
 <script>
 (function(){
   "use strict";
@@ -708,11 +710,33 @@
   });
   el.startBtn.addEventListener("click",start);
 
+  /* 失敗した通信を記録し、エラー表示に添える(原因調査用) */
+  var netDiag=[];
+  if(window.axios&&axios.interceptors){
+    axios.interceptors.response.use(function(r){return r;},function(e){
+      var u=(e.config&&e.config.url)||"?";
+      netDiag.push(u.slice(0,70)+" → "+(e.response?("HTTP "+e.response.status):e.message));
+      return Promise.reject(e);
+    });
+  }
+  var _fetch=window.fetch;
+  window.fetch=function(input,init){
+    var u=(typeof input==="string"?input:(input&&input.url))||"?";
+    return _fetch.apply(this,arguments).then(function(r){
+      if(!r.ok && u.indexOf("http")===0) netDiag.push(u.slice(0,70)+" → HTTP "+r.status);
+      return r;
+    },function(e){
+      if(u.indexOf("http")===0) netDiag.push(u.slice(0,70)+" → "+e.message);
+      throw e;
+    });
+  };
+
   function showError(msg){
     el.ovTitle.textContent="ERROR";
     el.ovText.textContent="";
     el.ovErr.hidden=false;
-    el.ovErr.textContent=String(msg);
+    var diag=netDiag.slice(-4);
+    el.ovErr.textContent=String(msg)+(diag.length?"\n--- 失敗した通信 ---\n"+diag.join("\n"):"");
     el.overlay.style.display="grid";
   }
 
