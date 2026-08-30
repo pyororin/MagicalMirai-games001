@@ -176,7 +176,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 17</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 18</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -289,7 +289,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 17;
+  var BUILD = 18;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -1025,6 +1025,22 @@
       }
     });
 
+    // コンボは判定ラインの下(ミクの反対側)に置く。ノーツと重ならない場所を選ぶ
+    if(state.combo>=5){
+      var fever=state.combo>=12;
+      ctx.save();
+      ctx.textAlign="left"; ctx.textBaseline="bottom";
+      var bx=fieldX0()+G, by=ch-G*3;
+      ctx.fillStyle=PAL.shade;
+      ctx.font=Math.round((fever?34:26)*(G/3))+'px '+PIXEL_FONT;
+      ctx.fillText(String(state.combo), bx+G, by+G);
+      ctx.fillStyle=fever ? DIR_COL.c.lit : PAL.ink;
+      ctx.fillText(String(state.combo), bx, by);
+      ctx.font=Math.round(11*(G/3))+'px '+PIXEL_FONT;
+      ctx.fillStyle=fever ? DIR_COL.r.lit : "oklch(70% .03 268)";
+      ctx.fillText(fever?"FEVER":"COMBO", bx, by-Math.round((fever?34:26)*(G/3))-G);
+      ctx.restore();
+    }
     drawMikuOnStage(jy);
   }
 
