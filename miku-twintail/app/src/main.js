@@ -11,18 +11,55 @@ import { Player } from "textalive-app-api";
 
 const TOKEN = "VQRxHB1a0q8fVvnm";
 
-// 開発用のデフォルト曲: マジカルミライ 2025 課題曲「ロンリーラン / 海風太陽」
-// （公式サンプル textalive-app-basic と同じ楽曲・版数。ホスト接続時は app.songUrl が優先される）
-const DEV_SONG = {
-  url: "https://piapro.jp/t/CyPO/20250128183915",
-  video: {
-    beatId: 4694280,
-    chordId: 2830735,
-    repetitiveSegmentId: 2946483,
-    lyricId: 67815,
-    lyricDiffId: 20659,
+// 選曲リスト: マジカルミライ 2025 楽曲コンテスト受賞 6 曲。
+// 版数 ID は TextAliveJp 公式サンプル各リポジトリのソースで確認した値
+// （ontology/textalive.yaml の contest-songs-2025 / song-load を参照）。
+// ホストから曲が指定されているとき（app.songUrl）はそちらが優先され、この一覧は使わない。
+const SONGS = [
+  {
+    title: "ロンリーラン / 海風太陽",
+    url: "https://piapro.jp/t/CyPO/20250128183915",
+    card: "https://api.textalive.jp/cards/Rv6F3kEafnB2ZmKC",
+    video: { beatId: 4694280, chordId: 2830735, repetitiveSegmentId: 2946483,
+             lyricId: 67815, lyricDiffId: 20659 },
   },
-};
+  {
+    title: "ストリートライト / 加賀(ネギシャワーP)",
+    url: "https://piapro.jp/t/ULcJ/20250205120202",
+    card: "https://api.textalive.jp/cards/mOVlJ15TwK3mGacP",
+    video: { beatId: 4694275, chordId: 2830730, repetitiveSegmentId: 2946478,
+             lyricId: 67810, lyricDiffId: 20654 },
+  },
+  {
+    title: "アリフレーション / 雨良 Amala",
+    url: "https://piapro.jp/t/SuQO/20250127235813",
+    card: "https://api.textalive.jp/cards/tHF561bSn3il7uGQ",
+    video: { beatId: 4694276, chordId: 2830731, repetitiveSegmentId: 2946479,
+             lyricId: 67811, lyricDiffId: 20655 },
+  },
+  {
+    title: "インフォーマルダイブ / 99piano",
+    url: "https://piapro.jp/t/Ppc9/20241224135843",
+    card: "https://api.textalive.jp/cards/H3zE3TtWn8pMU4Qd",
+    video: { beatId: 4694277, chordId: 2830732, repetitiveSegmentId: 2946480,
+             lyricId: 67812, lyricDiffId: 20656 },
+  },
+  {
+    title: "ハロー、フェルミ。/ ど～ぱみん",
+    url: "https://piapro.jp/t/oTaJ/20250204234235",
+    card: "https://api.textalive.jp/cards/ekhSl1QaKHtRrBCW",
+    video: { beatId: 4694278, chordId: 2830733, repetitiveSegmentId: 2946481,
+             lyricId: 67813, lyricDiffId: 20657 },
+  },
+  {
+    title: "パレードレコード / きさら",
+    url: "https://piapro.jp/t/GCgy/20250202202635",
+    card: "https://api.textalive.jp/cards/fAoEqWsPQx12kZsC",
+    video: { beatId: 4694279, chordId: 2830734, repetitiveSegmentId: 2946482,
+             lyricId: 67814, lyricDiffId: 20658 },
+  },
+];
+const DEV_SONG = SONGS[0];
 
 // ---- TextAlive Player ----------------------------------------------------------
 const player = new Player({
@@ -35,6 +72,30 @@ const player = new Player({
 let ready = false, maxAmp = 1;
 window.textAlivePlayer = player;   // デバッグ・自動テスト用
 
+/**
+ * 楽曲の読み込み。曲を替えるたびに描いた髪と採点結果を捨てる。
+ *
+ * createFromSongUrl は api.textalive.jp/cards/resolve が返す 302 に
+ * クライアント v0.5.2 が追従できず "Card data resolver is unavailable" で
+ * 失敗することがある。各曲は解決済みのカード URL を持っているので、
+ * 失敗したらそれを createFromCardUrl に渡す（リダイレクト追従が不要になる）。
+ * 詳細: ontology/textalive.yaml の card-data-resolver-unavailable
+ */
+function loadSong(song) {
+  ready = false;
+  ropes.length = 0;
+  result.textContent = "";
+  document.getElementById("meta").textContent = "読み込み中……";
+  for (const b of document.querySelectorAll("#control button")) b.disabled = true;
+  const opts = song.video ? { video: song.video } : undefined;
+  player.createFromSongUrl(song.url, opts)
+    .catch(e => {
+      if (!song.card || String(e).indexOf("Card data resolver") < 0) throw e;
+      return player.createFromCardUrl(song.card, opts);
+    })
+    .catch(e => showDiag("楽曲読み込みに失敗: " + (e && e.message ? e.message : e)));
+}
+
 player.addListener({
   onAppReady(app) {
     if (!app.managed) {
@@ -42,10 +103,10 @@ player.addListener({
       document.getElementById("play").onclick = () => player.video && player.requestPlay();
       document.getElementById("pause").onclick = () => player.video && player.requestPause();
       document.getElementById("rewind").onclick = () => player.video && player.requestMediaSeek(0);
+      buildSongPicker();
     }
-    if (!app.songUrl)
-      player.createFromSongUrl(DEV_SONG.url, { video: DEV_SONG.video })
-        .catch(e => showDiag("楽曲読み込みに失敗: " + (e && e.message ? e.message : e)));
+    // ホスト（App Debugger・審査環境）が曲を指定しているときは自動読み込みに任せる
+    if (!app.songUrl) loadSong(DEV_SONG);
   },
   onVideoReady() {
     document.getElementById("meta").textContent =
@@ -56,7 +117,37 @@ player.addListener({
     ready = true;
     for (const b of document.querySelectorAll("#control button")) b.disabled = false;
   },
+  // ホストから曲を差し替えられたとき（app.managed 時）も状態を作り直す
+  onAppMediaChange() {
+    ready = false;
+    ropes.length = 0;
+    result.textContent = "";
+    document.getElementById("meta").textContent = "読み込み中……";
+  },
 });
+
+// 選曲 UI（ホスト未接続時のみ。ホスト接続時は曲の主導権がホストにある）
+function buildSongPicker() {
+  const sel = document.getElementById("song");
+  for (const [i, s] of SONGS.entries()) {
+    const o = document.createElement("option");
+    o.value = String(i); o.textContent = s.title;
+    sel.appendChild(o);
+  }
+  const other = document.createElement("option");
+  other.value = "other"; other.textContent = "他の曲を URL で指定……";
+  sel.appendChild(other);
+  sel.onchange = () => {
+    if (sel.value === "other") {
+      const url = prompt("TextAlive で利用できる楽曲の URL（piapro / YouTube など）", "");
+      if (!url) { sel.value = "0"; return; }
+      loadSong({ title: url, url });        // 版数未指定＝最新の解析結果で読み込む
+    } else {
+      loadSong(SONGS[Number(sel.value)]);
+    }
+  };
+  document.getElementById("songwrap").hidden = false;
+}
 
 // ---- 楽曲データ層（モックの擬似層と同じインタフェースを実データで提供） --------
 const posMs = () => (player.timer ? player.timer.position : 0);
@@ -87,14 +178,20 @@ window.addEventListener("unhandledrejection", e => {
 setTimeout(async () => {
   if (ready) return;
   showDiag("15秒経っても楽曲情報が届きません。疎通チェック中……");
+  // api.songle.jp / songle.jp は script として読む前提で CORS ヘッダを返さないため、
+  // mode:"cors" だと到達できていても失敗する。到達性だけを見る no-cors で叩く。
   const probes = [
-    ["api.textalive.jp", "https://api.textalive.jp/"],
-    ["api.songle.jp", "https://api.songle.jp/v2/api.js"],
-    ["songle.jp", "https://songle.jp/lyric_parsers/98.js"],
+    ["api.textalive.jp", "https://api.textalive.jp/", "cors"],
+    ["api.songle.jp", "https://api.songle.jp/v2/api.js", "no-cors"],
+    ["songle.jp", "https://songle.jp/lyric_parsers/98.js", "no-cors"],
   ];
-  for (const [name, url] of probes) {
-    try { const r = await fetch(url, { mode: "cors" }); showDiag(`${name}: HTTP ${r.status}`); }
-    catch { showDiag(`${name}: 接続失敗（ネットワーク/ブロッカー/CORS）`); }
+  for (const [name, url, mode] of probes) {
+    try {
+      const r = await fetch(url, { mode });
+      showDiag(`${name}: ${mode === "no-cors" ? "到達OK" : "HTTP " + r.status}`);
+    } catch {
+      showDiag(`${name}: 接続失敗（ネットワーク遮断/ブロッカー）`);
+    }
   }
   showDiag("すべて成功している場合はトークンのアプリURL登録を確認: " + location.origin);
 }, 15000);
