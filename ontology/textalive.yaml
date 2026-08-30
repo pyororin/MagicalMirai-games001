@@ -47,6 +47,22 @@ concepts:
       音量の正規化には getMaxVocalAmplitude() を使う。
     depends_on: [player]
 
+  - id: song-switching
+    what: >
+      アプリ内で曲を切り替えるときは createFromSongUrl を呼び直す。
+      版数ID（video オプション）は省略でき、その場合は最新の解析結果で読み込まれる
+      （課題曲は版数固定、ユーザー入力の任意曲は省略、という使い分けになる）。
+      切替時は ready を false に戻し、曲に紐づくゲーム状態（描画物・スコア）を捨てること。
+      ホスト接続時はホストが曲を差し替えるので、同じ後始末を onAppMediaChange でも行う。
+      選曲 UI 自体は app.managed が false のときだけ出す（曲の主導権はホストにある）。
+    depends_on: [song-load, host-managed]
+
+  - id: credit-requirement
+    what: >
+      TextAlive App API / Songle の利用と、楽曲の著作権が各権利者に帰属することを
+      アプリ画面に明示する。コンテスト応募時のライセンス要件でもあり、
+      developer.textalive.jp へのリンクを添えるのが通例。
+
   - id: dev-song
     what: >
       動作確認済みの開発用デフォルト曲（公式サンプル textalive-app-basic と同一）。
