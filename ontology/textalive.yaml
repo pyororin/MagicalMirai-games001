@@ -63,12 +63,45 @@ concepts:
       アプリ画面に明示する。コンテスト応募時のライセンス要件でもあり、
       developer.textalive.jp へのリンクを添えるのが通例。
 
+  - id: contest-songs-2025
+    what: >
+      マジカルミライ 2025 楽曲コンテスト受賞 6 曲の songUrl と版数ID。
+      公式サンプル各リポジトリのソースから採取した実測値（推測ではない）。
+      課題曲は年度ごとに変わるので、次年度は同様に公式サンプルを当たること。
+      版数ID の探し方: TextAliveJp の各サンプルリポジトリを clone して
+      "beatId" / "piapro.jp/t/" で grep する（GitHub の code search は当環境では機能しなかった）。
+    songs:
+      - title: ロンリーラン / 海風太陽
+        url: https://piapro.jp/t/CyPO/20250128183915
+        video: { beatId: 4694280, chordId: 2830735, repetitiveSegmentId: 2946483, lyricId: 67815, lyricDiffId: 20659 }
+        source: TextAliveJp/textalive-app-basic
+      - title: ストリートライト / 加賀(ネギシャワーP)
+        url: https://piapro.jp/t/ULcJ/20250205120202
+        video: { beatId: 4694275, chordId: 2830730, repetitiveSegmentId: 2946478, lyricId: 67810, lyricDiffId: 20654 }
+        source: TextAliveJp/textalive-app-lyric-sheet
+      - title: アリフレーション / 雨良 Amala
+        url: https://piapro.jp/t/SuQO/20250127235813
+        video: { beatId: 4694276, chordId: 2830731, repetitiveSegmentId: 2946479, lyricId: 67811, lyricDiffId: 20655 }
+        source: TextAliveJp/textalive-app-p5js
+      - title: インフォーマルダイブ / 99piano
+        url: https://piapro.jp/t/Ppc9/20241224135843
+        video: { beatId: 4694277, chordId: 2830732, repetitiveSegmentId: 2946480, lyricId: 67812, lyricDiffId: 20656 }
+        source: TextAliveJp/textalive-app-mosaic
+      - title: ハロー、フェルミ。/ ど～ぱみん
+        url: https://piapro.jp/t/oTaJ/20250204234235
+        video: { beatId: 4694278, chordId: 2830733, repetitiveSegmentId: 2946481, lyricId: 67813, lyricDiffId: 20657 }
+        source: TextAliveJp/textalive-app-char-cube
+      - title: パレードレコード / きさら
+        url: https://piapro.jp/t/GCgy/20250202202635
+        video: { beatId: 4694279, chordId: 2830734, repetitiveSegmentId: 2946482, lyricId: 67814, lyricDiffId: 20658 }
+        source: TextAliveJp/textalive-app-lyric-tiles
+    verified: 2026-08-30 (miku-twintail。公式サンプルを clone して採取、piapro のページタイトルで曲名を照合)
+
   - id: dev-song
     what: >
-      動作確認済みの開発用デフォルト曲（公式サンプル textalive-app-basic と同一）。
-      マジカルミライ 2025 課題曲「ロンリーラン / 海風太陽」
-      songUrl: https://piapro.jp/t/CyPO/20250128183915
-      video: { beatId: 4694280, chordId: 2830735, repetitiveSegmentId: 2946483, lyricId: 67815, lyricDiffId: 20659 }
+      動作確認済みの開発用デフォルト曲。contest-songs-2025 の「ロンリーラン / 海風太陽」を使う
+      （公式サンプル textalive-app-basic と同一で、実再生・歌詞取得まで確認済み）。
+    depends_on: [contest-songs-2025]
     verified: 2026-08-30 (miku-twintail / typing-game 両企画)
 
 pitfalls:
