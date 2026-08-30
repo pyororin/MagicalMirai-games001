@@ -160,16 +160,37 @@
   .controls .label{font-family:var(--pixel);font-size:12px;color:var(--dim);letter-spacing:.1em;margin-right:2px}
   .controls button.ghost{padding:7px 13px;font-size:13px}
 
-  /* ---- flick pad ---- */
-  .pad{display:none;gap:6px;grid-template-columns:repeat(3,1fr);padding:12px 14px 16px;border-top:1px solid var(--line)}
-  .pad.on{display:grid}
-  .pad button{
-    font-family:var(--pixel);font-size:19px;padding:14px 0;
-    background:var(--panel-2);color:var(--ink);border:1px solid var(--line);
-    touch-action:none;user-select:none;position:relative;
+  /* ---- flick zone (1タッチゾーン方式) ---- */
+  .zone{
+    display:none;position:relative;height:230px;margin:0;
+    border-top:1px dashed var(--line);
+    touch-action:none;user-select:none;-webkit-user-select:none;
+    overflow:hidden;
   }
-  .pad button:active{background:var(--cyan);color:#06122A}
-  .pad .hintrow{font-size:10px;color:var(--dim);display:block;letter-spacing:.06em}
+  .zone.on{display:block}
+  .zone .zonehint{
+    position:absolute;inset:0;display:grid;place-items:center;
+    font-family:var(--pixel);font-size:13px;color:#4A5488;
+    letter-spacing:.1em;pointer-events:none;text-align:center;line-height:2;
+  }
+  .cross{
+    position:absolute;width:0;height:0;pointer-events:none;
+    opacity:0;transition:opacity .06s;
+  }
+  .cross.show{opacity:1}
+  .cross .cell{
+    position:absolute;width:56px;height:56px;margin:-28px 0 0 -28px;
+    display:grid;place-items:center;
+    font-family:var(--pixel);font-size:24px;
+    background:var(--panel-2);border:1px solid var(--line);border-radius:4px;
+    color:var(--ink);
+  }
+  .cross .cell.c{left:0;top:0}
+  .cross .cell.l{left:-62px;top:0}
+  .cross .cell.u{left:0;top:-62px}
+  .cross .cell.r{left:62px;top:0}
+  .cross .cell.d{left:0;top:62px}
+  .cross .cell.sel{background:var(--cyan);color:#06122A;border-color:var(--cyan)}
 
   /* ---- explainer ---- */
   .notes{margin-top:34px;display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
@@ -230,7 +251,10 @@
       </div>
     </div>
 
-    <div class="pad" id="pad"></div>
+    <div class="zone" id="zone">
+      <div class="zonehint">ここをタップ / フリック<br>そのまま離す=あ段 ・ 滑らせて離す=←い ↑う →え ↓お</div>
+      <div class="cross" id="cross"></div>
+    </div>
 
     <div class="overlay" id="overlay">
       <div>
@@ -270,8 +294,9 @@
     <div class="note">
       <h3>スマホはフリックで</h3>
       <p>
-        フリック入力は1かな=1操作なので、実はローマ字よりリズムに乗れます。
-        キーを押した指を上下左右に払って母音を選びます。
+        キー選びはありません。「行」は次の文字から自動で決まり、触れた指の位置に
+        フリック十字が出ます。そのまま離せばあ段、滑らせて離せば ←い ↑う →え ↓お。
+        1かな=1ジェスチャなので、実はローマ字より深くリズムに乗れます。
       </p>
     </div>
   </div>
@@ -510,8 +535,7 @@
     ovTitle:document.getElementById("ovTitle"),
     ovText:document.getElementById("ovText"),
     ovResult:document.getElementById("ovResult"),
-    startBtn:document.getElementById("startBtn"),
-    pad:document.getElementById("pad")
+    startBtn:document.getElementById("startBtn")
   };
 
   var difficulty="NORMAL", usePad=false;
@@ -559,8 +583,14 @@
       html+='<span class="ch '+cls+'">'+P.segments[i].kana+"</span>";
     }
     el.phrase.innerHTML=html;
-    el.guide.innerHTML = P.typer.done() ? "" :
-      '<span class="typed">'+P.typer.buffer+"</span>"+P.typer.hint();
+    if(P.typer.done()){
+      el.guide.innerHTML="";
+    } else if(usePad){
+      var tk=P.typer.segments[P.typer.index].kana;
+      el.guide.innerHTML=tk+' <span class="typed">'+flickHint(tk)+"</span>";
+    } else {
+      el.guide.innerHTML='<span class="typed">'+P.typer.buffer+"</span>"+P.typer.hint();
+    }
     var nx=state.phrases[state.pi+1];
     el.nextPhrase.textContent = nx ? "next  "+nx.kana : "";
   }
@@ -730,57 +760,47 @@
     });
   });
 
-  /* ---- フリックパッド ---- */
-  var PAD=[
-    ["あ","あいうえお"],["か","かきくけこ"],["さ","さしすせそ"],
-    ["た","たちつてと"],["な","なにぬねの"],["は","はひふへほ"],
-    ["ま","まみむめも"],["や","やゆよ"],  ["ら","らりるれろ"],
-    ["゛","濁点"],     ["わ","わをん"],   ["ー","ー"]
+  /* ---- フリック(1タッチゾーン方式) ----
+   * 12キーの選択を廃し、「行」は次に打つ文字から自動で決まる。
+   * プレイヤーはゾーンのどこかに触れる → 触れた位置にフリック十字が出現 →
+   * そのまま離せば中央(あ段)、上下左右に滑らせて離せば い/う/え/お段。
+   * つまり1かな=1ジェスチャ。母音の選択だけがプレイヤーの技能になる。
+   */
+  var FLICK_ROWS=[
+    "あいうえお","かきくけこ","がぎぐげご","さしすせそ","ざじずぜぞ",
+    "たちつてと","だぢづでど","なにぬねの","はひふへほ","ばびぶべぼ",
+    "ぱぴぷぺぽ","まみむめも","らりるれろ"
   ];
-  var DAKUTEN={"か":"が","き":"ぎ","く":"ぐ","け":"げ","こ":"ご",
-    "さ":"ざ","し":"じ","す":"ず","せ":"ぜ","そ":"ぞ",
-    "た":"だ","ち":"ぢ","つ":"づ","て":"で","と":"ど",
-    "は":"ば","ひ":"び","ふ":"ぶ","へ":"べ","ほ":"ぼ"};
-  var lastKana=null;
-
-  function buildPad(){
-    el.pad.innerHTML="";
-    PAD.forEach(function(row){
-      var b=document.createElement("button");
-      b.innerHTML=row[0]+'<span class="hintrow">'+row[1]+"</span>";
-      b.setAttribute("data-set",row[1]);
-      el.pad.appendChild(b);
-      var sx=0, sy=0;
-      function down(e){
-        var p=e.touches?e.touches[0]:e; sx=p.clientX; sy=p.clientY;
-      }
-      function up(e){
-        e.preventDefault();
-        var p=e.changedTouches?e.changedTouches[0]:e;
-        var dx=p.clientX-sx, dy=p.clientY-sy;
-        var set=row[1];
-        if(row[0]==="゛"){ // 濁点は直前のかなを濁らせる
-          if(lastKana && DAKUTEN[lastKana]) sendKana(DAKUTEN[lastKana]);
-          return;
-        }
-        if(set.length<=1){ sendKana(set); return; }
-        var idx=0, ax=Math.abs(dx), ay=Math.abs(dy);
-        if(Math.max(ax,ay)>18){
-          if(ax>ay) idx = dx<0 ? 1 : 3;
-          else      idx = dy<0 ? 2 : 4;
-        }
-        if(idx>=set.length) idx=0;
-        sendKana(set[idx]);
-      }
-      b.addEventListener("touchstart",down,{passive:true});
-      b.addEventListener("touchend",up);
-      b.addEventListener("mousedown",down);
-      b.addEventListener("mouseup",up);
-    });
+  // 十字の選択肢: c=中央(そのまま離す) l/u/r/d=左/上/右/下
+  function flickOptions(kana){
+    if(kana.length===2){
+      // 拗音セグメント: ゃ=中央 ゅ=上 ょ=下(や行のフリック配置に準拠)
+      var base=kana[0];
+      return {c:base+"ゃ", u:base+"ゅ", d:base+"ょ"};
+    }
+    if(kana==="わ"||kana==="を"||kana==="ん") return {c:"わ", l:"を", u:"ん"};
+    if(kana==="や"||kana==="ゆ"||kana==="よ") return {c:"や", u:"ゆ", d:"よ"};
+    for(var i=0;i<FLICK_ROWS.length;i++){
+      var row=FLICK_ROWS[i];
+      if(row.indexOf(kana)>=0)
+        return {c:row[0], l:row[1], u:row[2], r:row[3], d:row[4]};
+    }
+    return {c:kana}; // っ/ー/小書き文字など: タップで確定
+  }
+  var DIR_LABEL={c:"タップ", l:"←", u:"↑", r:"→", d:"↓"};
+  function flickHint(kana){
+    var opts=flickOptions(kana);
+    for(var dir in opts) if(opts[dir]===kana) return DIR_LABEL[dir];
+    return "タップ";
+  }
+  function currentTargetKana(){
+    if(!state) return null;
+    var P=state.phrases[state.pi];
+    if(P.typer.done()) return null;
+    return P.typer.segments[P.typer.index].kana;
   }
 
   function sendKana(kana){
-    lastKana=kana;
     if(!state||!state.running) return;
     var P=state.phrases[state.pi];
     if(P.typer.done()){ advancePhraseIfDone(); P=state.phrases[state.pi]; }
@@ -790,18 +810,79 @@
     renderPhrase();
   }
 
-  document.getElementById("padToggle").addEventListener("click",function(){
-    usePad=!usePad;
-    this.setAttribute("aria-pressed",String(usePad));
-    el.pad.classList.toggle("on",usePad);
-    if(usePad && !el.pad.children.length) buildPad();
-  });
+  (function(){
+    var zone=document.getElementById("zone"), cross=document.getElementById("cross");
+    var sx=0, sy=0, active=false, opts=null;
+    var THRESH=24;
 
-  // 狭い画面では最初からフリックパッドを出す
-  if(window.matchMedia("(max-width:640px)").matches){
-    usePad=true;
-    document.getElementById("padToggle").setAttribute("aria-pressed","true");
-    el.pad.classList.add("on"); buildPad();
+    function renderCross(x,y){
+      cross.style.left=x+"px"; cross.style.top=y+"px";
+      var html="";
+      var pos={c:"c",l:"l",u:"u",r:"r",d:"d"};
+      for(var dir in opts)
+        html+='<div class="cell '+pos[dir]+'" data-dir="'+dir+'">'+opts[dir]+"</div>";
+      cross.innerHTML=html;
+      cross.classList.add("show");
+    }
+    function resolveDir(dx,dy){
+      var ax=Math.abs(dx), ay=Math.abs(dy);
+      if(Math.max(ax,ay)<THRESH) return "c";
+      if(ax>ay) return dx<0?"l":"r";
+      return dy<0?"u":"d";
+    }
+    function highlight(dir){
+      var cells=cross.querySelectorAll(".cell");
+      for(var i=0;i<cells.length;i++)
+        cells[i].classList.toggle("sel", cells[i].getAttribute("data-dir")===dir);
+    }
+    function pt(e){ return e.touches&&e.touches.length?e.touches[0]:(e.changedTouches?e.changedTouches[0]:e); }
+
+    function down(e){
+      e.preventDefault();
+      var kana=currentTargetKana();
+      if(!kana) return;
+      opts=flickOptions(kana);
+      var rect=zone.getBoundingClientRect(), p=pt(e);
+      sx=p.clientX; sy=p.clientY; active=true;
+      renderCross(p.clientX-rect.left, p.clientY-rect.top);
+      highlight("c");
+    }
+    function move(e){
+      if(!active) return;
+      e.preventDefault();
+      var p=pt(e);
+      highlight(resolveDir(p.clientX-sx, p.clientY-sy));
+    }
+    function up(e){
+      if(!active) return;
+      e.preventDefault();
+      active=false;
+      cross.classList.remove("show");
+      var p=pt(e);
+      var dir=resolveDir(p.clientX-sx, p.clientY-sy);
+      var kana=opts&&opts[dir];
+      if(kana) sendKana(kana); else flashMiss();
+      opts=null;
+    }
+    zone.addEventListener("touchstart",down,{passive:false});
+    zone.addEventListener("touchmove",move,{passive:false});
+    zone.addEventListener("touchend",up,{passive:false});
+    zone.addEventListener("mousedown",down);
+    zone.addEventListener("mousemove",move);
+    zone.addEventListener("mouseup",up);
+    zone.addEventListener("mouseleave",function(){ active=false; cross.classList.remove("show"); });
+  })();
+
+  function setPadMode(on){
+    usePad=on;
+    document.getElementById("padToggle").setAttribute("aria-pressed",String(on));
+    document.getElementById("zone").classList.toggle("on",on);
+  }
+  document.getElementById("padToggle").addEventListener("click",function(){ setPadMode(!usePad); });
+
+  // タッチ端末では最初からフリックゾーンを出す
+  if(window.matchMedia("(max-width:640px)").matches || "ontouchstart" in window){
+    setPadMode(true);
   }
 
   // 初期表示
