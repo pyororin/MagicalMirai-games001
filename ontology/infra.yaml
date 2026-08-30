@@ -149,3 +149,22 @@ pitfalls:
       更新後も初期値のまま。子要素に inline 指定して比較すると切り分けられる。
     verified: 2026-08-31 (typing-game build 11)
     refs: [typing-game/prototype/textalive.html]
+
+  - id: raf-loop-dies-on-early-return
+    symptom: >
+      待機中のアニメーション（アトラクト画面など）が、環境によって最初の1フレームで
+      止まったまま二度と動かない。エラーは出ない。
+    cause: >
+      ループ関数の先頭で「まだ描けない条件」を早期 return したとき、
+      次フレームの requestAnimationFrame を積み直していないと、そこでループが
+      静かに終わる。レイアウト確定前（幅・高さが 0）や、非表示タブで
+      ネイティブ rAF が凍っている間に開始した場合に踏みやすい。
+    solution: >
+      早期 return する場合も必ず次フレームを積む（描かずに再スケジュールする）。
+      「開始済みフラグ」を見て多重起動を防いでいるなら、そのフラグが立ったまま
+      ループだけ死ぬ状態になり得ることに注意する。
+    detection: >
+      キャンバスが完全に透明のまま。clearRect/fillRect をラップして呼び出し回数を
+      数えると、ループが回っていないことを一発で切り分けられる。
+    verified: 2026-08-31 (typing-game build 12)
+    refs: [typing-game/prototype/textalive.html]
