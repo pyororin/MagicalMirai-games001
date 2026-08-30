@@ -28,6 +28,8 @@
     background:radial-gradient(120% 80% at 50% 0%, #1A2350 0%, #0D1330 60%, #090D24 100%)}
   .screen::after{content:"";position:absolute;inset:0;pointer-events:none;mix-blend-mode:overlay;
     background:repeating-linear-gradient(to bottom, rgba(255,255,255,.035) 0 1px, transparent 1px 3px)}
+  .screen:focus{outline:none}
+  .screen.playing{touch-action:none;user-select:none;-webkit-user-select:none}
   .screen.fever{background:radial-gradient(120% 80% at 50% 0%, #3A1550 0%, #1B0F38 60%, #0D0722 100%)}
 
   .hud{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 14px;
@@ -120,6 +122,9 @@
   .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
   .controls .label{font-family:var(--pixel);font-size:12px;color:var(--dim);letter-spacing:.1em;margin-right:2px}
   .controls button.ghost{padding:7px 13px;font-size:13px}
+  .controls input[type=range]{accent-color:var(--cyan);width:132px;height:22px;cursor:pointer}
+  .controls input[type=range]:disabled{opacity:.4;cursor:default}
+  .controls .val{font-variant-numeric:tabular-nums;min-width:4.5ch;color:var(--ink)}
   select{font-family:var(--pixel);font-size:13px;background:var(--panel);color:var(--ink);
     border:1px solid var(--line);border-radius:3px;padding:7px 10px}
 
@@ -144,7 +149,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:#4A5488">build 8</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:#4A5488">build 9</span></p>
     <h1>打鍵ミライ × TextAlive</h1>
     <p class="lede">
       実楽曲の文字単位タイミングで判定エンジンを回す検証機。
@@ -163,7 +168,18 @@
     <select id="songPick" aria-label="課題曲"></select>
   </div>
 
-  <div class="screen" id="screen">
+  <div class="controls">
+    <label class="label" for="speed">速度</label>
+    <input type="range" id="speed" min="50" max="100" step="5" value="100" aria-label="再生速度">
+    <span class="label val" id="speedVal">1.00×</span>
+    <span style="width:14px"></span>
+    <label class="label" for="vol">音量</label>
+    <input type="range" id="vol" min="0" max="100" step="5" value="80" aria-label="音量">
+    <span class="label val" id="volVal">80</span>
+    <span class="label" id="speedNote" style="color:#5C6690"></span>
+  </div>
+
+  <div class="screen" id="screen" tabindex="-1">
     <div class="hud">
       <span class="stat">SCORE <b id="score">0</b></span>
       <span class="stat combo">COMBO <b id="combo">0</b></span>
@@ -181,8 +197,8 @@
     <div class="lane" id="lane">
       <div class="focus"></div>
       <div class="track" id="track"></div>
-      <div class="cross" id="cross"></div>
     </div>
+    <div class="cross" id="cross"></div>
 
     <div class="footrow">
       <div class="judge-line">
@@ -190,7 +206,7 @@
         <span class="delta" id="delta"></span>
         <span class="legend">
           あ段=タップ ・ い段=← ・ う段=↑ ・ え段=→ ・ お段=↓<br>
-          「ん」=↑ ・ 「ー」=→ ・ 濁点/半濁点/小文字は元の文字と同じ方向
+          「ん」=↑ ・ 「ー」=→ ・ 濁点/半濁点は元の文字と同じ方向 ・ 小書き(っ/ぁ/ゃ)は打たない
         </span>
       </div>
       <canvas id="miku" width="24" height="24" aria-label="ちゅねミク"></canvas>
@@ -233,7 +249,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 8;
+  var BUILD = 9;
 
   /* ============================================================
      かな → 入力方向
@@ -263,8 +279,12 @@
   DIR_OF["ん"]="u"; ROW_OF["ん"]="　　ん　　";
   DIR_OF["ー"]="r"; ROW_OF["ー"]="　　　ー　";
 
+  /* 小書き文字(っ/ぁ/ゃ 等)は打鍵対象にしない。
+     促音・拗音は発声が短く、独立した1操作にするとリズムが取れないため
+     (歌詞表示には残し、直前のかなの一部として読ませる)。 */
+  var SMALL_KANA="ぁぃぅぇぉっゃゅょゎヵヶ";
   function dirOf(kana){ return DIR_OF[kana] || null; }
-  function isTypable(kana){ return !!DIR_OF[kana]; }
+  function isTypable(kana){ return !!DIR_OF[kana] && SMALL_KANA.indexOf(kana)<0; }
   /** 濁点・小文字などを「同じ入力になる基本の文字」に戻す(チップの補助表示用) */
   var BASE_OF = (function(){
     var m={}, plain="あいうえお かきくけこ さしすせそ たちつてと なにぬねの はひふへほ".split(" ");
@@ -501,7 +521,8 @@
   /* ============ ゲーム状態 ============ */
   var el={};
   ["screen","kPrev","kNow","kNext","lane","track","cross","judge","delta","score","combo","progress",
-   "overlay","ovTitle","ovText","ovErr","ovResult","startBtn","songmeta","songUrl","loadSong","songPick"]
+   "overlay","ovTitle","ovText","ovErr","ovResult","startBtn","songmeta","songUrl","loadSong","songPick",
+   "speed","speedVal","vol","volVal","speedNote"]
     .forEach(function(id){ el[id]=document.getElementById(id); });
 
   var difficulty="NORMAL", player=null, videoPhrases=null, state=null;
@@ -693,13 +714,15 @@
 
   function finish(){
     state.running=false;
+    el.screen.classList.remove("playing");
     try{ player.requestPause(); }catch(e){}
     var c=state.counts;
     var avg = state.deltas.length ?
       Math.round(state.deltas.reduce(function(a,b){return a+b;},0)/state.deltas.length) : null;
     el.ovTitle.textContent="RESULT";
-    el.ovText.textContent = avg==null ? "" :
-      "平均デルタ "+(avg>=0?"+":"")+avg+" ms(正なら遅れ気味。大きい場合はキャリブレーションが必要)";
+    var speedNote = speedRate<1 ? "速度 "+speedRate.toFixed(2)+"× の練習プレイです(等速ではありません)。" : "";
+    el.ovText.textContent = speedNote + (avg==null ? "" :
+      "平均デルタ "+(avg>=0?"+":"")+avg+" ms(正なら遅れ気味。大きい場合はキャリブレーションが必要)");
     el.ovResult.hidden=false;
     el.ovResult.innerHTML=
       '<div><span>RANK</span><b style="color:var(--magenta)">'+rank()+'</b></div>'+
@@ -722,6 +745,7 @@
   function pauseForHidden(){
     if(!state||!state.running) return;
     state.running=false; paused=true;
+    el.screen.classList.remove("playing");
     try{ player.requestPause(); }catch(e){}
     el.ovTitle.textContent="PAUSE";
     el.ovText.textContent="タブが非表示になったため一時停止しました。";
@@ -732,8 +756,10 @@
   }
   function resume(){
     paused=false; state.running=true;
+    el.screen.classList.add("playing");
     el.overlay.style.display="none";
     try{ player.requestPlay(); }catch(e){}
+    applySpeed(); applyVolume();
     requestAnimationFrame(loop);
   }
   document.addEventListener("visibilitychange",function(){ if(document.hidden) pauseForHidden(); });
@@ -749,16 +775,71 @@
     el.overlay.style.display="none";
     el.kNow.dataset.pi="";
     state.running=true;
+    el.screen.classList.add("playing");
+    // 楽曲プレイヤーの iframe 等にフォーカスが残るとキー入力が届かないので取り返す
+    try{ el.startBtn.blur(); window.focus(); el.screen.focus({preventScroll:true}); }catch(e){}
+    try{ el.screen.scrollIntoView({block:"center",behavior:"smooth"}); }catch(e){}
     buildTrack(); renderKaraoke();
     player.requestMediaSeek(0);
     player.requestPlay();
+    applySpeed(); applyVolume();
+    setTimeout(function(){ applySpeed(); applyVolume(); },300);   // 再生開始で作り直される場合に備える
     requestAnimationFrame(loop);
   }
 
+  /* ============ 再生速度・音量 ============
+     TextAlive の Player は <audio> を mediaElement 配下に作る。
+     速度は audio.playbackRate をそのまま使う(timer.position は追従する)。
+     YouTube/niconico の楽曲は iframe になり playbackRate を触れないため、
+     その場合はスライダーを無効化して理由を表示する。 */
+  var speedRate=1, volume=80;
+  function mediaAudio(){ return document.querySelector("#media audio"); }
+  function loadPrefs(){
+    try{
+      var s=localStorage.getItem("daken.speed"), v=localStorage.getItem("daken.volume");
+      if(s) speedRate=Math.min(1,Math.max(.5,parseFloat(s)));
+      if(v!==null) volume=Math.min(100,Math.max(0,parseInt(v,10)));
+    }catch(e){}
+  }
+  function savePrefs(){
+    try{
+      localStorage.setItem("daken.speed",String(speedRate));
+      localStorage.setItem("daken.volume",String(volume));
+    }catch(e){}
+  }
+  function applySpeed(){
+    var a=mediaAudio();
+    el.speed.value=String(Math.round(speedRate*100));
+    el.speedVal.textContent=speedRate.toFixed(2)+"×";
+    if(!a){ el.speed.disabled=true; el.speedNote.textContent="この楽曲は速度を変えられません"; return; }
+    el.speed.disabled=false;
+    el.speedNote.textContent = speedRate<1 ? "練習モード(等速ではありません)" : "";
+    try{
+      a.preservesPitch=true; a.mozPreservesPitch=true; a.webkitPreservesPitch=true;  // 音程は保つ
+      a.playbackRate=speedRate;
+    }catch(e){ el.speed.disabled=true; el.speedNote.textContent="この環境では速度を変えられません"; }
+  }
+  function applyVolume(){
+    el.vol.value=String(volume);
+    el.volVal.textContent=String(volume);
+    try{ if(player && typeof player.volume==="number") player.volume=volume; }catch(e){}
+    var a=mediaAudio(); if(a) a.volume=volume/100;
+  }
+  loadPrefs();
+  el.speed.addEventListener("input",function(){ speedRate=(+el.speed.value)/100; applySpeed(); savePrefs(); });
+  el.vol.addEventListener("input",function(){ volume=+el.vol.value; applyVolume(); savePrefs(); });
+
   /* ============ 入力:タップ / スライド上下左右 の5種類だけ ============ */
   (function(){
-    var lane=el.lane, cross=el.cross;
+    /* 入力面はレーンだけでなく画面全体。細い帯を狙わせると、スマホでは
+       指が外れて「フリックが効かない」状態になるため。 */
+    var lane=el.screen, cross=el.cross;
     var sx=0, sy=0, active=false, THRESH=22;
+    function ignore(e){
+      if(!state||!state.running) return true;                       // 開始前はページ操作を優先
+      var t=e.target;
+      return !!(t && t.closest && t.closest(".overlay,.hud,button,select,input,a"));
+    }
     function renderCross(x,y){
       var note=target(); if(!note) return;
       var cells=crossCells(note.kana), html="";
@@ -783,6 +864,7 @@
     }
     function pt(e){ return e.touches&&e.touches.length?e.touches[0]:(e.changedTouches?e.changedTouches[0]:e); }
     function down(e){
+      if(ignore(e)) return;
       e.preventDefault();
       var rect=lane.getBoundingClientRect(), p=pt(e);
       sx=p.clientX; sy=p.clientY; active=true;
@@ -816,16 +898,21 @@
   var KEY_DIR={" ":"c","Spacebar":"c","Enter":"c",
                ArrowLeft:"l",ArrowUp:"u",ArrowRight:"r",ArrowDown:"d"};
   var keyHeld={};
-  document.addEventListener("keydown",function(e){
-    if(e.metaKey||e.ctrlKey||e.altKey||e.target===el.songUrl) return;
-    var d=KEY_DIR[e.key];
-    if(d){ e.preventDefault(); keyHeld[e.key]=true; }
-  });
-  document.addEventListener("keyup",function(e){
-    if(e.target===el.songUrl) return;
+  /* 矢印キー・スペースでページがスクロールしないよう、capture 段階で既定動作を止める。
+     フォーム部品(スライダー・選曲・URL入力)にフォーカスがあるときは通常操作を優先する。 */
+  function formFocused(e){
+    var t=e.target, tag=t&&t.tagName;
+    return tag==="INPUT"||tag==="SELECT"||tag==="TEXTAREA";
+  }
+  window.addEventListener("keydown",function(e){
+    if(e.metaKey||e.ctrlKey||e.altKey||formFocused(e)) return;
+    if(KEY_DIR[e.key]){ e.preventDefault(); keyHeld[e.key]=true; }
+  },true);
+  window.addEventListener("keyup",function(e){
+    if(formFocused(e)) return;
     var d=KEY_DIR[e.key];
     if(d && keyHeld[e.key]){ e.preventDefault(); keyHeld[e.key]=false; sendDir(d); }
-  });
+  },true);
 
   /* ============ 難易度・選曲 ============ */
   Array.prototype.forEach.call(document.querySelectorAll("[data-diff]"),function(b){
@@ -969,7 +1056,7 @@
         "  —  "+videoPhrases.length+"フレーズ / "+notes+"かな"+mark;
       el.songmeta.title=readingDiag||"";
       if(readingDiag){ netDiag.push(readingDiag); console.warn("[daken] "+readingDiag); }
-      window.DAKEN_DEBUG={phrases:videoPhrases, readings:data, cursor:cursor};
+      window.DAKEN_DEBUG={phrases:videoPhrases, readings:data, cursor:cursor, player:player};
       state=buildState();
       buildTrack(); renderKaraoke();
     });
@@ -994,6 +1081,7 @@
         rebuildFromVideo(v).catch(function(e){ showError("歌詞データの変換に失敗: "+e); });
       },
       onTimerReady:function(){
+        applySpeed(); applyVolume();
         el.ovTitle.textContent="準備完了";
         el.ovText.textContent="レーン中央の文字を、表示された方向(タップ/上下左右)で歌に合わせて入力してください。"+
           "PC は Space と矢印キーでも遊べます。";
