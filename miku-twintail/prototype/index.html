@@ -11,20 +11,22 @@
   h1 { font-size: 16px; margin: 4px 0 0; letter-spacing: .1em; }
   #stage { background: #182028; border: 1px solid #2b3a44; border-radius: 8px; touch-action: none;
            max-width: 100%; }
-  #ui { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; }
-  button { background: #39c5bb; color: #06282a; border: 0; border-radius: 6px; padding: 8px 18px;
+  #ui { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  button { background: #39c5bb; color: #06282a; border: 0; border-radius: 6px; padding: 8px 16px;
            font-weight: bold; font-size: 14px; cursor: pointer; }
   button.sub { background: #2b3a44; color: #d8f4f2; }
-  #hint { font-size: 12px; opacity: .75; }
+  #hint { font-size: 12px; opacity: .75; text-align: center; }
   #result { white-space: pre-line; font-size: 13px; text-align: center; min-height: 7em; }
   #result b { color: #39c5bb; font-size: 22px; }
 </style>
 </head>
 <body>
 <h1>ミクの本体はツインテールである — 物理・採点 検証モック</h1>
-<div id="hint">歌唱中（画面上部のランプが点灯中）にドラッグしてツインテールを 2 本描く。拍に乗った線ほど「ハリ・ツヤ」が上がる。</div>
+<div id="hint">「♪ サウンド」で擬似曲が鳴ります（本番は TextAlive の課題曲音源に置き換え）。歌唱中（VOCAL 点灯中）にドラッグして、日常の物にツインテールを 2 本生やす。拍に乗った線ほど「ハリ・ツヤ」が上がる。</div>
 <canvas id="stage" width="900" height="560"></canvas>
 <div id="ui">
+  <button id="sound" class="sub">♪ サウンド ON</button>
+  <button id="swap" class="sub">お題交換</button>
   <button id="judge">ミク度判定</button>
   <button id="reset" class="sub">散髪（リセット）</button>
 </div>
@@ -37,26 +39,115 @@ const BEAT = 60 / BPM;                 // 拍長 [s]
 const VOCAL_CYCLE = 8, VOCAL_ON = 6;   // 8 秒中 6 秒歌う、を繰り返す
 const LYRICS = "ミクノホンタイハツインテールコエガカミヲカタチニスル";
 
-const now = () => performance.now() / 1000;
-const beatPhase = t => (t / BEAT) % 1;                       // 0..1
+const T0 = performance.now() / 1000;
+const songNow = () => performance.now() / 1000 - T0;   // 曲内時刻（音と絵の共通時計）
+const beatPhase = t => (t / BEAT) % 1;
 const onBeat    = t => { const p = beatPhase(t); return p < 0.25 || p > 0.75; };
 const vocalActive = t => (t % VOCAL_CYCLE) < VOCAL_ON;
 const vocalAmp  = t => vocalActive(t) ? 0.55 + 0.45 * Math.sin(t * 2.3) : 0;
 
-// ---- ステージ（お題: 黄色いホイール） -----------------------------------------
+// ---- 擬似サウンド（WebAudio 生成。外部音源なし・クリックで開始） ----------------
+let ac = null, soundOn = false, schedTimer = null, nextIdx = 0;
+const NOTE = st => 440 * Math.pow(2, st / 12);
+const MELO = [0, 3, 5, 7, 10, 7, 5, 3, 0, 3, 7, 12, 10, 7, 5, 3];  // Aマイナーペンタ
+function env(g, at, peak, dur) {
+  g.gain.setValueAtTime(0.0001, at);
+  g.gain.exponentialRampToValueAtTime(peak, at + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+}
+function tone(at, freq, type, peak, dur, vib) {
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, at);
+  if (vib) { const l = ac.createOscillator(), lg = ac.createGain();
+    l.frequency.value = 5.5; lg.gain.value = 6; l.connect(lg); lg.connect(o.frequency);
+    l.start(at); l.stop(at + dur); }
+  env(g, at, peak, dur);
+  o.connect(g); g.connect(ac.destination); o.start(at); o.stop(at + dur + 0.05);
+}
+function kick(at) {
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = "sine"; o.frequency.setValueAtTime(140, at);
+  o.frequency.exponentialRampToValueAtTime(45, at + 0.11);
+  env(g, at, 0.5, 0.13);
+  o.connect(g); g.connect(ac.destination); o.start(at); o.stop(at + 0.2);
+}
+function scheduler() {                 // 8 分音符単位で 0.12 秒先まで予約
+  const eighth = BEAT / 2;
+  while (nextIdx * eighth < songNow() + 0.12) {
+    const ts = nextIdx * eighth;
+    const at = ac.currentTime + Math.max(0, ts - songNow());
+    if (nextIdx % 2 === 0) kick(at);
+    if (nextIdx % 4 === 0) tone(at, NOTE(-24), "sine", 0.14, 0.22);        // ベース
+    if (vocalActive(ts))                                                    // ボーカル相当のリード
+      tone(at, NOTE(MELO[nextIdx % 16]), "triangle", 0.05 + 0.1 * vocalAmp(ts), 0.2, true);
+    nextIdx++;
+  }
+}
+document.getElementById("sound").onclick = e => {
+  if (!soundOn) {
+    if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+    ac.resume(); nextIdx = Math.ceil(songNow() / (BEAT / 2));
+    schedTimer = setInterval(scheduler, 30); soundOn = true;
+    e.target.textContent = "♪ サウンド OFF";
+  } else {
+    clearInterval(schedTimer); soundOn = false;
+    if (ac) ac.suspend();
+    e.target.textContent = "♪ サウンド ON";
+  }
+};
+
+// ---- お題（日常に存在する物。造形は Canvas 直描き） ----------------------------
 const cv = document.getElementById("stage"), cx2d = cv.getContext("2d");
-const OBJ = { x: 450, y: 360, r: 110 };  // バウンディング高さ = 2r
+const OBJECTS = [
+  { name: "タイヤホイール", cx: 450, cy: 370, hw: 110, hh: 110, draw(g) {
+      g.fillStyle = "#222"; disc(g, this.cx, this.cy, 110);
+      g.fillStyle = "#f2c519"; disc(g, this.cx, this.cy, 79);
+      g.strokeStyle = "#c79d0a"; g.lineWidth = 10;
+      for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2;
+        g.beginPath(); g.moveTo(this.cx, this.cy);
+        g.lineTo(this.cx + Math.cos(a) * 66, this.cy + Math.sin(a) * 66); g.stroke(); }
+      g.fillStyle = "#e6e6e6"; disc(g, this.cx, this.cy, 18); } },
+  { name: "マグカップ", cx: 450, cy: 380, hw: 80, hh: 95, draw(g) {
+      g.strokeStyle = "#b8895a"; g.lineWidth = 16;
+      g.beginPath(); g.arc(this.cx + 92, this.cy, 42, -1.2, 1.2); g.stroke();  // 取っ手
+      g.fillStyle = "#d9a06b"; roundRect(g, this.cx - 80, this.cy - 95, 160, 190, 18);
+      g.fillStyle = "#7a4f2b"; g.beginPath();
+      g.ellipse(this.cx, this.cy - 88, 72, 14, 0, 0, 7); g.fill(); } },       // コーヒー面
+  { name: "炊飯器", cx: 450, cy: 395, hw: 105, hh: 85, draw(g) {
+      g.fillStyle = "#e9edf0"; roundRect(g, this.cx - 105, this.cy - 85, 210, 170, 34);
+      g.fillStyle = "#c6ced4"; roundRect(g, this.cx - 105, this.cy - 85, 210, 46, 22); // フタ
+      g.fillStyle = "#39c5bb"; disc(g, this.cx, this.cy + 20, 12);                     // 炊飯ボタン
+      g.fillStyle = "#9aa6ad"; roundRect(g, this.cx - 30, this.cy - 96, 60, 14, 6); } },
+  { name: "ペットボトル", cx: 450, cy: 385, hw: 55, hh: 115, draw(g) {
+      g.fillStyle = "#bfe3f2"; roundRect(g, this.cx - 55, this.cy - 75, 110, 190, 22); // 胴
+      g.fillStyle = "#bfe3f2"; g.beginPath();
+      g.moveTo(this.cx - 55, this.cy - 70); g.lineTo(this.cx - 22, this.cy - 108);
+      g.lineTo(this.cx + 22, this.cy - 108); g.lineTo(this.cx + 55, this.cy - 70);
+      g.closePath(); g.fill();                                                          // 肩
+      g.fillStyle = "#ffffff"; roundRect(g, this.cx - 44, this.cy - 20, 88, 56, 6);    // ラベル
+      g.fillStyle = "#2f89a8"; roundRect(g, this.cx - 20, this.cy - 130, 40, 24, 5); } }, // キャップ
+];
+let objIdx = 0;
+const obj = () => OBJECTS[objIdx];
+function disc(g, x, y, r) { g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
+function roundRect(g, x, y, w, h, r) {
+  g.beginPath(); g.roundRect(x, y, w, h, r); g.fill();
+}
+document.getElementById("swap").onclick = () => {
+  objIdx = (objIdx + 1) % OBJECTS.length; ropes.length = 0; result.textContent = "";
+};
 
 // ---- 髪（Verlet ロープ、枯れた技術） ------------------------------------------
-const ropes = [];  // {nodes:[{x,y,px,py}], segLens:[], drawn:[{x,y}], beatFit, len}
-let stroke = null; // 描画中 {pts:[{x,y,beat}]}
+const ropes = [];
+let stroke = null;
 
 function makeRope(drawnPts, beatFit) {
-  const pts = resample(drawnPts, Math.max(8, Math.min(26, Math.floor(polyLen(drawnPts) / 14))));
+  const pts = resample(drawnPts, Math.max(10, Math.min(26, Math.floor(polyLen(drawnPts) / 12))));
   const nodes = pts.map(p => ({ x: p.x, y: p.y, px: p.x, py: p.y }));
   const segLens = [];
   for (let i = 1; i < nodes.length; i++) segLens.push(dist(nodes[i - 1], nodes[i]));
-  return { nodes, segLens, drawn: drawnPts, beatFit, len: polyLen(drawnPts) };
+  return { nodes, segLens, drawn: drawnPts, beatFit, len: polyLen(drawnPts),
+           seed: Math.random() * 7 };
 }
 function stepRope(r, t) {
   const wind = vocalAmp(t);
@@ -64,10 +155,10 @@ function stepRope(r, t) {
     const n = r.nodes[i];
     const vx = (n.x - n.px) * 0.985, vy = (n.y - n.py) * 0.985;
     n.px = n.x; n.py = n.y;
-    n.x += vx + Math.sin(t * 3 + i * 0.45) * wind * 1.5;   // 声が髪を揺らす
-    n.y += vy + 0.35;                                       // 重力
+    n.x += vx + Math.sin(t * 3 + i * 0.45 + r.seed) * wind * 1.5;   // 声が髪を揺らす
+    n.y += vy + 0.35;
   }
-  for (let k = 0; k < 4; k++) {                             // 距離拘束
+  for (let k = 0; k < 4; k++) {
     for (let i = 1; i < r.nodes.length; i++) {
       const a = r.nodes[i - 1], b = r.nodes[i], L = r.segLens[i - 1];
       const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1e-6;
@@ -78,10 +169,72 @@ function stepRope(r, t) {
   }
 }
 
+// ---- ミクのツインテール描画 -----------------------------------------------------
+// 中心線（ロープ）から法線方向に幅プロファイルを張り、房の輪郭を作る。
+// 根元: 結び目の直後にボリューム / 毛先: 一点に収束 / 表面: ツヤのハイライト。
+function tailOutline(r, t) {
+  const n = r.nodes, m = n.length, L = [], R = [];
+  const wRoot = 22;
+  for (let i = 0; i < m; i++) {
+    const ti = i / (m - 1);
+    const a = n[Math.max(0, i - 1)], b = n[Math.min(m - 1, i + 1)];
+    let dx = b.x - a.x, dy = b.y - a.y; const d = Math.hypot(dx, dy) || 1e-6;
+    const nx = -dy / d, ny = dx / d;
+    // 立ち上がり→緩やかな減衰→毛先で 0。房のうねり（lump）を重ねる
+    const rise = Math.sin(Math.min(ti * 2.6, 1) * Math.PI / 2);
+    const lump = 1 + 0.16 * Math.sin(ti * 9 + r.seed) + 0.06 * Math.sin(t * 2 + ti * 5);
+    const w = wRoot * rise * Math.pow(1 - ti, 1.05) * lump + 0.2;
+    L.push({ x: n[i].x + nx * w, y: n[i].y + ny * w });
+    R.push({ x: n[i].x - nx * w, y: n[i].y - ny * w });
+  }
+  return { L, R };
+}
+function drawTail(g, r, t) {
+  const n = r.nodes, m = n.length, tip = n[m - 1], root = n[0];
+  const { L, R } = tailOutline(r, t);
+  const light = 40 + 14 * r.beatFit;                        // ビート適合率＝ツヤ
+  const grad = g.createLinearGradient(root.x, root.y, tip.x, tip.y);
+  grad.addColorStop(0, `hsl(174 62% ${light + 12}%)`);
+  grad.addColorStop(0.65, `hsl(174 60% ${light}%)`);
+  grad.addColorStop(1, `hsl(176 55% ${light - 16}%)`);
+  g.beginPath();
+  g.moveTo(L[0].x, L[0].y);
+  for (const p of L) g.lineTo(p.x, p.y);
+  g.lineTo(tip.x, tip.y);
+  for (let i = m - 1; i >= 0; i--) g.lineTo(R[i].x, R[i].y);
+  g.closePath();
+  g.fillStyle = grad; g.fill();
+  g.strokeStyle = "hsl(178 60% 18%)"; g.lineWidth = 1.5; g.stroke();
+  // 内側の毛流れ（陰）
+  g.strokeStyle = "rgba(10,60,56,0.35)"; g.lineWidth = 1.5;
+  g.beginPath();
+  for (let i = 1; i < m - 1; i++) {
+    const p = { x: (n[i].x * 2 + R[i].x) / 3, y: (n[i].y * 2 + R[i].y) / 3 };
+    i === 1 ? g.moveTo(p.x, p.y) : g.lineTo(p.x, p.y);
+  }
+  g.stroke();
+  // ツヤのハイライト
+  g.strokeStyle = `rgba(220,255,252,${0.18 + 0.25 * r.beatFit})`; g.lineWidth = 3;
+  g.beginPath();
+  for (let i = 1; i < m - 2; i++) {
+    const p = { x: (n[i].x + L[i].x * 1.2) / 2.2, y: (n[i].y + L[i].y * 1.2) / 2.2 };
+    i === 1 ? g.moveTo(p.x, p.y) : g.lineTo(p.x, p.y);
+  }
+  g.stroke();
+  // 髪に取り込まれた歌詞が流れる
+  g.fillStyle = "rgba(228,255,253,0.7)"; g.font = "11px sans-serif"; g.textAlign = "center";
+  for (let i = 2; i < m - 1; i += 2)
+    g.fillText(LYRICS[(i + Math.floor(t)) % LYRICS.length], n[i].x, n[i].y + 4);
+  // 結び目（根元のヘアタイ）
+  g.fillStyle = "#232830"; disc(g, root.x, root.y, 9);
+  g.strokeStyle = "rgba(216,79,111,0.9)"; g.lineWidth = 2;
+  g.beginPath(); g.arc(root.x, root.y, 9, 0, 7); g.stroke();
+}
+
 // ---- 幾何ユーティリティ（採点にも使用） ---------------------------------------
 function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 function polyLen(p) { let s = 0; for (let i = 1; i < p.length; i++) s += dist(p[i - 1], p[i]); return s; }
-function resample(pts, n) {            // 等間隔リサンプリング（$1 Recognizer 流）
+function resample(pts, n) {
   const total = polyLen(pts), step = total / (n - 1), out = [{ ...pts[0] }];
   let acc = 0;
   for (let i = 1; i < pts.length; i++) {
@@ -104,20 +257,20 @@ function pos(e) {
   return { x: (e.clientX - r.left) * cv.width / r.width, y: (e.clientY - r.top) * cv.height / r.height };
 }
 cv.addEventListener("pointerdown", e => {
-  if (!vocalActive(now())) { flash = "ミクが歌っていない……（歌唱中しか髪は生えない）"; return; }
+  if (!vocalActive(songNow())) { flash = "ミクが歌っていない……（歌唱中しか髪は生えない）"; return; }
   cv.setPointerCapture(e.pointerId);
-  stroke = { pts: [{ ...pos(e), beat: onBeat(now()) }] };
+  stroke = { pts: [{ ...pos(e), beat: onBeat(songNow()) }] };
 });
 cv.addEventListener("pointermove", e => {
   if (!stroke) return;
   const p = pos(e), last = stroke.pts[stroke.pts.length - 1];
-  if (dist(p, last) > 5) stroke.pts.push({ ...p, beat: onBeat(now()) });
+  if (dist(p, last) > 5) stroke.pts.push({ ...p, beat: onBeat(songNow()) });
 });
 cv.addEventListener("pointerup", () => {
   if (stroke && stroke.pts.length > 5) {
     const fit = stroke.pts.filter(p => p.beat).length / stroke.pts.length;
     ropes.push(makeRope(stroke.pts, fit));
-    if (ropes.length > 2) ropes.shift();   // 3 本目で古い方を散髪
+    if (ropes.length > 2) ropes.shift();
   }
   stroke = null;
 });
@@ -127,22 +280,23 @@ document.getElementById("reset").onclick = () => { ropes.length = 0; result.text
 const result = document.getElementById("result");
 document.getElementById("judge").onclick = () => {
   if (ropes.length < 2) { result.textContent = "ツインテールは 2 本描いてから（今 " + ropes.length + " 本）"; return; }
+  const o = obj(), height = o.hh * 2;
   const [a, b] = ropes;
   const left  = a.drawn[0].x <= b.drawn[0].x ? a : b;
   const right = left === a ? b : a;
 
   // 対称性 30: 右を中心軸で鏡映し、リサンプル済み点列の平均距離
   const L = resample(left.drawn, 32);
-  const R = resample(right.drawn, 32).map(p => ({ x: 2 * OBJ.x - p.x, y: p.y }));
+  const R = resample(right.drawn, 32).map(p => ({ x: 2 * o.cx - p.x, y: p.y }));
   const meanD = L.reduce((s, p, i) => s + dist(p, R[i]), 0) / 32;
   const sym = 30 * clamp01(1 - meanD / 140);
 
-  // つむじ位置 20: 理想アンカーは上部・左右対称（福笑いの目安点）
-  const ideal = s => ({ x: OBJ.x + s * OBJ.r * 0.8, y: OBJ.y - OBJ.r * 0.75 });
+  // つむじ位置 20: 理想アンカーは上部・左右対称
+  const ideal = s => ({ x: o.cx + s * o.hw * 0.8, y: o.cy - o.hh * 0.85 });
   const anch = 20 * clamp01(1 - (dist(left.drawn[0], ideal(-1)) + dist(right.drawn[0], ideal(1))) / 2 / 130);
 
   // 長さ比 20: 髪長 ÷ 造形物高さ、理想 1.6
-  const ratio = (left.len + right.len) / 2 / (OBJ.r * 2);
+  const ratio = (left.len + right.len) / 2 / height;
   const lenS = 20 * clamp01(1 - Math.abs(ratio - 1.6) / 1.6);
 
   // ハリ・ツヤ 20: ビート適合率
@@ -152,7 +306,8 @@ document.getElementById("judge").onclick = () => {
   const fill = 10 * clamp01((left.nodes.length + right.nodes.length) / 40);
 
   const total = Math.round(sym + anch + lenS + shine + fill);
-  const rank = total >= 85 ? "もはや本人" : total >= 60 ? "親戚" : total >= 30 ? "ミク味を感じる" : "それはただのホイール";
+  const rank = total >= 85 ? "もはや本人" : total >= 60 ? "親戚" : total >= 30 ? "ミク味を感じる"
+             : "それはただの" + o.name;
   result.innerHTML =
     `ミク度 <b>${total}%</b> ─ ${rank}\n` +
     `対称性 ${sym.toFixed(1)}/30 ・ つむじ位置 ${anch.toFixed(1)}/20 ・ 長さ比 ${lenS.toFixed(1)}/20 (${ratio.toFixed(2)})\n` +
@@ -162,29 +317,9 @@ const clamp01 = v => Math.max(0, Math.min(1, v));
 
 // ---- 描画ループ ----------------------------------------------------------------
 let flash = "";
-function drawWheel(g) {
-  g.save(); g.translate(OBJ.x, OBJ.y);
-  g.fillStyle = "#222"; g.beginPath(); g.arc(0, 0, OBJ.r, 0, 7); g.fill();          // タイヤ
-  g.fillStyle = "#f2c519"; g.beginPath(); g.arc(0, 0, OBJ.r * 0.72, 0, 7); g.fill(); // 黄色ホイール
-  g.strokeStyle = "#c79d0a"; g.lineWidth = 10;
-  for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2;
-    g.beginPath(); g.moveTo(0, 0); g.lineTo(Math.cos(a) * OBJ.r * 0.6, Math.sin(a) * OBJ.r * 0.6); g.stroke(); }
-  g.fillStyle = "#e6e6e6"; g.beginPath(); g.arc(0, 0, OBJ.r * 0.16, 0, 7); g.fill(); // ハブ
-  g.restore();
-}
-function drawRope(g, r, t) {
-  g.strokeStyle = "rgba(57,197,187," + (0.55 + 0.45 * r.beatFit) + ")";
-  g.lineWidth = 9; g.lineCap = "round"; g.beginPath();
-  g.moveTo(r.nodes[0].x, r.nodes[0].y);
-  for (const n of r.nodes) g.lineTo(n.x, n.y);
-  g.stroke();
-  g.fillStyle = "#bff5f0"; g.font = "13px sans-serif"; g.textAlign = "center";
-  r.nodes.forEach((n, i) => { if (i % 2) g.fillText(LYRICS[i % LYRICS.length], n.x, n.y + 4); }); // 髪＝歌詞
-}
 function loop() {
-  const t = now(), g = cx2d;
+  const t = songNow(), g = cx2d;
   g.clearRect(0, 0, cv.width, cv.height);
-  // ステータス: 拍ランプとボーカルメーター
   const p = beatPhase(t);
   g.fillStyle = onBeat(t) ? "#39c5bb" : "#2b3a44";
   g.beginPath(); g.arc(30, 30, 12 + (1 - p) * 6, 0, 7); g.fill();
@@ -194,17 +329,20 @@ function loop() {
   g.fillRect(110, 22, 120 * vocalAmp(t), 14);
   g.strokeStyle = "#2b3a44"; g.strokeRect(110, 22, 120, 14);
   g.fillStyle = "#9fb6bd"; g.fillText(vocalActive(t) ? "VOCAL ♪" : "(間奏)", 240, 34);
+  g.textAlign = "right"; g.fillText("お題: " + obj().name, cv.width - 20, 34);
+  g.textAlign = "left";
 
-  drawWheel(g);
-  for (const r of ropes) { stepRope(r, t); drawRope(g, r, t); }
+  obj().draw(g);
+  for (const r of ropes) { stepRope(r, t); drawTail(g, r, t); }
   if (stroke) {
-    g.strokeStyle = "#7fe8e0"; g.lineWidth = 6; g.beginPath();
+    g.strokeStyle = "#7fe8e0"; g.lineWidth = 6; g.lineCap = "round"; g.beginPath();
     g.moveTo(stroke.pts[0].x, stroke.pts[0].y);
     for (const q of stroke.pts) g.lineTo(q.x, q.y);
     g.stroke();
   }
   if (flash) { g.fillStyle = "#f2c519"; g.font = "16px sans-serif"; g.textAlign = "center";
-               g.fillText(flash, cv.width / 2, 70); if (Math.random() < 0.01) flash = ""; }
+               g.fillText(flash, cv.width / 2, 70); g.textAlign = "left";
+               if (Math.random() < 0.01) flash = ""; }
   requestAnimationFrame(loop);
 }
 loop();
