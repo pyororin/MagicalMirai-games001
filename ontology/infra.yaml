@@ -1,0 +1,74 @@
+# GitHub Pages / Actions / Claude Code リモート環境（sandbox）の知見
+# スキーマは ontology/README.md を参照
+domain: infra
+
+concepts:
+  - id: pages-deploy-method
+    what: >
+      このリポジトリの GitHub Pages は gh-pages ブランチ配信。
+      各企画ブランチの Actions ワークフローが peaceiris/actions-gh-pages で
+      gh-pages に push する。公開 URL は
+      https://pyororin.github.io/MagicalMirai-games001/<企画ディレクトリ>/
+
+  - id: vite-pages-base
+    what: >
+      Vite アプリを Pages のサブパスで配信するには vite.config.js に
+      base: "./"（相対パス）を設定する。設定しないとアセットが 404 になる。
+
+pitfalls:
+  - id: pages-enablement-permission
+    symptom: >
+      actions/configure-pages の enablement: true が
+      "Resource not accessible by integration" で失敗し、
+      actions/deploy-pages 方式のワークフローが red になる。
+    cause: GITHUB_TOKEN では Pages サイトの新規作成ができない。
+    solution: >
+      gh-pages ブランチ方式に切り替える（初回の gh-pages push で Pages が自動有効化される）。
+      peaceiris/actions-gh-pages@v4 + github_token を使う。
+    verified: 2026-08-30 (typing-game が発見、miku-twintail が追認)
+
+  - id: gh-pages-mutual-wipe
+    symptom: >
+      デプロイ済みの Pages ページが突然 404 になる。gh-pages ブランチから
+      自分の企画ディレクトリが消えている。
+    cause: >
+      複数の企画ブランチが同じ gh-pages に「サイト全体を置き換える」方式で
+      デプロイすると、後から走った方が他企画のディレクトリを削除する。
+      keep_files なしのルート publish は全置換になる。
+    solution: >
+      各企画のワークフローは publish_dir をビルド成果物に限定し、
+      peaceiris の destination_dir: <企画ディレクトリ> で配置する
+      （destination_dir 配下だけがクリーンされ、他企画は保持される）。
+      全企画がこの方式に揃うまでは、消されたら workflow_dispatch で再デプロイして復旧。
+      根本解決は main への集約と単一ワークフロー化。
+    detection: gh-pages ブランチのルート一覧に自分のディレクトリがあるか確認する。
+    verified: 2026-08-30 (miku-twintail、複数回発生)
+
+  - id: sandbox-egress-allowlist
+    symptom: >
+      Claude Code リモート環境（sandbox）から外部 API に接続できない
+      （connect_rejected / EGRESS_BLOCKED）。curl は 200 なのにブラウザだけ失敗することもある。
+    cause: >
+      sandbox の外部通信はドメイン許可制。ユーザーが環境設定で 1 ドメインずつ許可する必要がある。
+      TextAlive 開発に必要なのは api.textalive.jp / api.songle.jp / songle.jp の 3 つ
+      （詳細は textalive.yaml の required-domains）。
+    solution: 必要ドメインをユーザーに依頼して許可してもらう。ワイルドカードは別サブドメインをカバーしない前提で個別に。
+    verified: 2026-08-30 (miku-twintail)
+
+  - id: sandbox-headless-chromium-tls
+    symptom: >
+      sandbox 内のヘッドレス Chromium だけ TLS 接続が ERR_CONNECTION_RESET になる
+      （curl・Node fetch は同じホストに成功する）。プロキシ CA を NSS に取り込んでも直らない。
+    cause: egress プロキシの中継が Chromium の TLS ハンドシェイクと相性が悪い（詳細不明のまま回避）。
+    solution: >
+      Playwright の page.route で全外部リクエストを横取りし、Node の fetch
+      （NODE_USE_ENV_PROXY=1 + NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt）で
+      中継して route.fulfill で返す。リダイレクトは redirect:"follow" で解決してから返す。
+      実装例: このセッションの smoke テスト（Playwright route 中継パターン）。
+    verified: 2026-08-30 (miku-twintail、実 API の E2E テストに成功)
+
+  - id: pages-stale-cache
+    symptom: 再デプロイ後もブラウザに古い JS が残り、修正が反映されて見えない。
+    cause: Pages の静的アセットがブラウザキャッシュされる。
+    solution: 強制再読み込み（Ctrl+F5 / Cmd+Shift+R）を案内する。Vite はハッシュ付きファイル名なので index.html さえ更新されれば解決する。
+    verified: 2026-08-30 (miku-twintail)
