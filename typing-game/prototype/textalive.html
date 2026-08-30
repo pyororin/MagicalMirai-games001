@@ -750,6 +750,7 @@
             ph=ph.next;
           }
           if(!videoPhrases.length){ showError("この楽曲から打鍵対象のかなを抽出できませんでした。"); return; }
+          window.DAKEN_DEBUG={phrases:videoPhrases}; // 検証用フック
           state=buildState();
           renderPhrase();
         }catch(e){ showError("歌詞データの変換に失敗: "+e); }
