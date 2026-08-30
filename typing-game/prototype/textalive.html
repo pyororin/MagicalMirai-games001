@@ -79,7 +79,12 @@
   .karaoke .line{position:relative;z-index:1;font-family:var(--pixel);letter-spacing:.06em;word-break:break-all;text-align:center}
   .karaoke .now{font-size:clamp(17px,4.2cqw + 10px,28px);line-height:1.45;min-height:1.45em;margin:0}
   @container (min-width:560px){ .karaoke .now{font-size:26px} }
-  .karaoke .now .ch{color:color-mix(in oklab, var(--dim) 55%, var(--night));transition:color .12s}
+  .karaoke .now .ch{color:color-mix(in oklab, var(--dim) 55%, var(--night));transition:color .12s;
+    ruby-align:center;ruby-position:over}
+  .karaoke .now rt{font-size:.42em;letter-spacing:.02em;
+    color:color-mix(in oklab, var(--dim) 60%, var(--night))}
+  .karaoke .now .ch.on rt{color:var(--key)}
+  .karaoke .now .ch.sung rt{color:color-mix(in oklab, var(--ink) 60%, var(--night))}
   .karaoke .now .ch.sung{color:var(--ink)}
   .karaoke .now .ch.on{color:var(--night);background:var(--key);box-shadow:0 0 0 2px var(--key)}
   .karaoke .next{font-size:clamp(11px,2.6vw,15px);color:color-mix(in oklab, var(--dim) 45%, var(--night));min-height:1.4em}
@@ -167,7 +172,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 12</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 13</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -278,7 +283,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 12;
+  var BUILD = 13;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -419,7 +424,9 @@
         notes.push({kana:k, dir:dirOf(k), lane:LANE_OF[dirOf(k)], base:(BASE_OF[k]||null),
                     time: st + (en-st)*(i/kanas.length), charIdx: chars.length});
       });
-      chars.push({text:raw, startTime:st, endTime:en});
+      // 表示用: 漢字などかな以外の文字には読みを添える(カラオケ行のルビになる)
+      var ruby = (reading && toHira(raw)!==reading) ? reading : "";
+      chars.push({text:raw, reading:ruby, startTime:st, endTime:en});
       if(c===ph.lastChar) break;
       c=c.next;
     }
@@ -942,7 +949,11 @@
     var P=state.phrases[pi];
     if(el.kNow.dataset.pi!==String(pi)){
       el.kNow.dataset.pi=String(pi);
-      el.kNow.innerHTML=P.chars.map(function(d){ return '<span class="ch">'+d.text+"</span>"; }).join("");
+      el.kNow.innerHTML=P.chars.map(function(d){
+        return d.reading
+          ? '<ruby class="ch">'+d.text+'<rt>'+d.reading+'</rt></ruby>'
+          : '<span class="ch">'+d.text+'</span>';
+      }).join("");
       var next=state.phrases[pi+1];
       el.kNext.textContent=next?next.text:"";
     }
