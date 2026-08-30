@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>打鍵ミライ × TextAlive</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,102 +14,86 @@
     --amber:#FFC94D; --green:#7BE87B; --red:#FF6B6B;
     --pixel:"DotGothic16","Courier New",monospace;
     --body:"Zen Kaku Gothic New",system-ui,sans-serif;
-    --chip:76px;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);line-height:1.7;-webkit-font-smoothing:antialiased}
+  body.playing{overflow:hidden}
   .wrap{max-width:940px;margin:0 auto;padding:28px 20px 64px}
   .eyebrow{font-family:var(--pixel);font-size:12px;letter-spacing:.18em;color:var(--cyan);text-transform:uppercase;margin:0 0 6px}
   h1{font-family:var(--pixel);font-size:clamp(26px,5.6vw,40px);margin:0 0 10px;letter-spacing:.04em;text-wrap:balance}
   .lede{margin:0;color:var(--dim);max-width:62ch;font-size:15px}
   .songmeta{font-family:var(--pixel);font-size:13px;color:var(--amber);margin:8px 0 0;letter-spacing:.04em;min-height:1.4em}
 
+  /* ---- プレイ画面。プレイ中は全画面に切り替える(落下距離を稼ぎ、ページスクロールを無くす) ---- */
   .screen{position:relative;margin:18px 0;border:2px solid var(--line);border-radius:4px;overflow:hidden;
-    background:radial-gradient(120% 80% at 50% 0%, #1A2350 0%, #0D1330 60%, #090D24 100%)}
-  .screen::after{content:"";position:absolute;inset:0;pointer-events:none;mix-blend-mode:overlay;
-    background:repeating-linear-gradient(to bottom, rgba(255,255,255,.035) 0 1px, transparent 1px 3px)}
+    background:radial-gradient(120% 80% at 50% 0%, #1A2350 0%, #0D1330 60%, #090D24 100%);
+    display:flex;flex-direction:column;height:min(74vh,560px)}
   .screen:focus{outline:none}
-  .screen.playing{touch-action:none;user-select:none;-webkit-user-select:none}
+  .screen.playing{position:fixed;inset:0;z-index:60;margin:0;border:0;border-radius:0;height:100dvh;
+    touch-action:none;user-select:none;-webkit-user-select:none}
+  .screen::after{content:"";position:absolute;inset:0;pointer-events:none;mix-blend-mode:overlay;z-index:5;
+    background:repeating-linear-gradient(to bottom, rgba(255,255,255,.035) 0 1px, transparent 1px 3px)}
   .screen.fever{background:radial-gradient(120% 80% at 50% 0%, #3A1550 0%, #1B0F38 60%, #0D0722 100%)}
 
-  .hud{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 14px;
+  .hud{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 12px;flex:0 0 auto;
     border-bottom:1px solid var(--line);background:rgba(9,13,36,.6);position:relative;z-index:3}
-  .hud .stat{font-family:var(--pixel);font-size:13px;letter-spacing:.06em}
+  .hud .stat{font-family:var(--pixel);font-size:12px;letter-spacing:.06em}
   .hud .stat b{display:inline-block;min-width:5ch;color:var(--cyan);font-variant-numeric:tabular-nums;font-size:16px}
   .hud .stat.combo b{color:var(--amber);min-width:3ch}
   .hud .spacer{flex:1}
-  .bar{height:6px;background:var(--panel-2);border-radius:3px;overflow:hidden;flex:1 1 140px;min-width:120px}
+  .hud .pause{display:none;background:transparent;border:1px solid var(--line);color:var(--ink);
+    font-family:var(--pixel);font-size:12px;padding:5px 10px;border-radius:3px}
+  .screen.playing .hud .pause{display:inline-block}
+  .bar{height:5px;background:var(--panel-2);border-radius:3px;overflow:hidden;flex:1 1 120px;min-width:100px}
   .bar i{display:block;height:100%;width:0;background:var(--cyan);transition:width .1s linear}
 
-  /* --- 上段:カラオケ歌詞(この後ろに MV を敷く想定。背景レイヤーは .mvslot) --- */
-  .karaoke{position:relative;min-height:132px;padding:14px 16px 10px;overflow:hidden}
-  .mvslot{position:absolute;inset:0;z-index:0;background:
-    linear-gradient(180deg,rgba(34,228,212,.05),rgba(255,79,163,.05));
+  /* ---- 上段:カラオケ歌詞(背面に MV レイヤーの枠) ---- */
+  .karaoke{position:relative;flex:0 0 auto;padding:10px 14px 8px;overflow:hidden}
+  .mvslot{position:absolute;inset:0;z-index:0;background:linear-gradient(180deg,rgba(34,228,212,.05),rgba(255,79,163,.05));
     display:grid;place-items:center}
-  .mvslot span{font-family:var(--pixel);font-size:11px;color:#2C3766;letter-spacing:.2em}
+  .mvslot span{font-family:var(--pixel);font-size:10px;color:#2C3766;letter-spacing:.2em}
   .karaoke .line{position:relative;z-index:1;font-family:var(--pixel);letter-spacing:.06em;word-break:break-all;text-align:center}
-  .karaoke .prev{font-size:clamp(11px,2.2vw,14px);color:#3C4778;min-height:1.4em}
-  .karaoke .now{font-size:clamp(20px,4.6vw,32px);line-height:1.5;min-height:1.5em;margin:2px 0}
+  .karaoke .now{font-size:clamp(17px,4.2vw,28px);line-height:1.45;min-height:1.45em;margin:0}
   .karaoke .now .ch{color:#5D6796;transition:color .12s}
-  .karaoke .now .ch.sung{color:var(--ink);text-shadow:0 0 12px rgba(34,228,212,.5)}
+  .karaoke .now .ch.sung{color:var(--ink);text-shadow:0 0 12px rgba(34,228,212,.45)}
   .karaoke .now .ch.on{color:var(--cyan);text-shadow:0 0 16px rgba(34,228,212,.9)}
-  .karaoke .next{font-size:clamp(12px,2.4vw,16px);color:#4A5488;min-height:1.4em}
+  .karaoke .next{font-size:clamp(11px,2.6vw,15px);color:#48538A;min-height:1.4em}
 
-  /* --- 中段:打鍵レーン(中心に現在ターゲット。歌詞かなが右から左へ流れる) --- */
-  .lane{position:relative;height:150px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
-    background:rgba(9,13,36,.45);overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
-  .lane .focus{position:absolute;left:50%;top:0;bottom:0;width:var(--chip);transform:translateX(-50%);
-    border-left:1px solid rgba(255,79,163,.35);border-right:1px solid rgba(255,79,163,.35);
-    background:linear-gradient(180deg,rgba(255,79,163,.16),rgba(255,79,163,.03));pointer-events:none}
-  .lane .track{position:absolute;left:0;top:22px;height:106px;will-change:transform;
-    transition:transform .13s cubic-bezier(.2,.7,.3,1)}
-  .chip{position:absolute;top:0;width:var(--chip);height:106px;display:flex;flex-direction:column;
-    align-items:center;justify-content:center;gap:2px}
-  .chip .kana{font-family:var(--pixel);font-size:30px;line-height:1.1;color:#7C87B8;transition:color .1s,transform .1s}
-  .chip .base{font-family:var(--pixel);font-size:10px;color:#49548A;letter-spacing:.06em;min-height:1em}
-  .chip .dir{width:34px;height:34px;display:grid;place-items:center;border-radius:6px;
-    border:1px solid #38427A;color:#7C87B8;font-size:17px;font-family:var(--pixel);line-height:1}
-  .chip.cur .kana{color:#fff;font-size:38px;text-shadow:0 0 18px rgba(34,228,212,.8)}
-  .chip.cur .dir{border-color:var(--cyan);color:#06122A;background:var(--cyan);
-    box-shadow:0 0 16px rgba(34,228,212,.55);font-size:20px;width:40px;height:40px}
-  .chip.cur .base{color:var(--dim)}
-  .chip.done .kana{color:#38B9AF} .chip.done .dir{opacity:.28}
-  .chip.miss .kana{color:var(--red)} .chip.miss .dir{opacity:.28;border-color:#5A2B3B}
-  .chip.next2 .kana{color:#4A5488} .chip.next2 .dir{opacity:.5}
-  .chip .sep{position:absolute;left:-2px;top:8px;bottom:8px;width:2px;background:#2A3566}
+  /* ---- 中段:5レーン落下フィールド(横位置=入力方向 / 縦位置=時間) ---- */
+  .field{position:relative;flex:1 1 auto;min-height:200px}
+  #notes{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .judgepop{position:absolute;left:0;right:0;bottom:14%;text-align:center;pointer-events:none;z-index:2}
+  .judge{font-family:var(--pixel);font-size:clamp(20px,5vw,30px);letter-spacing:.08em;opacity:0}
+  .judge.show{animation:pop .42s ease-out}
+  @keyframes pop{0%{opacity:0;transform:translateY(6px) scale(.9)}18%{opacity:1;transform:translateY(0) scale(1.1)}100%{opacity:0;transform:translateY(-6px) scale(1)}}
+  .judge.JUST{color:var(--magenta)} .judge.GREAT{color:var(--cyan)} .judge.GOOD{color:var(--green)}
+  .judge.TYPED{color:var(--dim)} .judge.LATE{color:var(--amber)} .judge.MISS{color:var(--red)}
+  .delta{display:block;font-family:var(--pixel);font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums;min-height:1.2em}
+  #miku{position:absolute;right:8px;bottom:6px;z-index:3;image-rendering:pixelated;width:76px;height:76px;
+    filter:drop-shadow(0 3px 0 rgba(0,0,0,.4));pointer-events:none}
 
+  /* 触った位置に出る方向ガイド(いま何を選んでいるかの確認用) */
   .cross{position:absolute;width:0;height:0;pointer-events:none;opacity:0;transition:opacity .06s;z-index:4}
   .cross.show{opacity:1}
-  .cross .cell{position:absolute;width:52px;height:52px;margin:-26px 0 0 -26px;display:grid;place-items:center;
-    font-family:var(--pixel);font-size:24px;background:rgba(27,36,80,.94);border:1px solid var(--line);
-    border-radius:6px;color:var(--ink)}
-  .cross .cell.c{left:0;top:0} .cross .cell.l{left:-58px;top:0} .cross .cell.u{left:0;top:-58px}
-  .cross .cell.r{left:58px;top:0} .cross .cell.d{left:0;top:58px}
+  .cross .cell{position:absolute;width:46px;height:46px;margin:-23px 0 0 -23px;display:grid;place-items:center;
+    font-family:var(--pixel);font-size:20px;background:rgba(27,36,80,.9);border:1px solid var(--line);
+    border-radius:8px;color:#7C87B8}
+  .cross .cell.c{left:0;top:0} .cross .cell.l{left:-54px;top:0} .cross .cell.u{left:0;top:-54px}
+  .cross .cell.r{left:54px;top:0} .cross .cell.d{left:0;top:54px}
   .cross .cell.tgt{border-color:var(--magenta);color:var(--magenta)}
   .cross .cell.sel{background:var(--cyan);color:#06122A;border-color:var(--cyan)}
 
-  .footrow{display:flex;align-items:flex-end;gap:12px;padding:10px 14px 12px;min-height:96px}
-  .judge-line{flex:1;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;min-height:2em}
-  .judge{font-family:var(--pixel);font-size:clamp(20px,4.4vw,30px);letter-spacing:.08em;opacity:0;transform:translateY(4px)}
-  .judge.show{animation:pop .42s ease-out}
-  @keyframes pop{0%{opacity:0;transform:translateY(6px) scale(.9)}18%{opacity:1;transform:translateY(0) scale(1.08)}100%{opacity:0;transform:translateY(-4px) scale(1)}}
-  .judge.JUST{color:var(--magenta)} .judge.GREAT{color:var(--cyan)} .judge.GOOD{color:var(--green)}
-  .judge.TYPED{color:var(--dim)} .judge.LATE{color:var(--amber)} .judge.MISS{color:var(--red)}
-  .delta{font-family:var(--pixel);font-size:13px;color:var(--dim);font-variant-numeric:tabular-nums}
-  .legend{font-family:var(--pixel);font-size:11px;color:#5C6690;letter-spacing:.06em;line-height:1.8}
-  #miku{image-rendering:pixelated;width:96px;height:96px;flex:0 0 auto;filter:drop-shadow(0 3px 0 rgba(0,0,0,.4))}
-
-  .overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(9,13,36,.92);
-    text-align:center;padding:24px;z-index:6;overflow:auto}
+  .overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(9,13,36,.93);
+    text-align:center;padding:20px;z-index:8;overflow:auto}
   .overlay h2{font-family:var(--pixel);font-size:clamp(18px,4.2vw,28px);margin:0 0 10px;letter-spacing:.06em}
-  .overlay p{color:var(--dim);margin:0 auto 16px;max-width:46ch;font-size:14px}
-  /* auto-fit はモバイル幅で列数計算が不安定になり右にはみ出すため固定列にする */
+  .overlay p{color:var(--dim);margin:0 auto 14px;max-width:46ch;font-size:14px}
   .overlay .result{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 auto 16px;max-width:460px}
   @media (max-width:460px){ .overlay .result{grid-template-columns:repeat(2,1fr)} }
   .overlay .result div{background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:8px 6px}
   .overlay .result span{display:block;font-family:var(--pixel);font-size:11px;color:var(--dim);letter-spacing:.08em}
   .overlay .result b{font-family:var(--pixel);font-size:19px;font-variant-numeric:tabular-nums}
   .overlay .err{color:var(--red);font-family:var(--pixel);font-size:13px;max-width:52ch;margin:0 auto 14px;word-break:break-all;white-space:pre-line;text-align:left}
+  .keyhint{font-family:var(--pixel);font-size:11px;color:#5C6690;letter-spacing:.08em;line-height:1.9;margin:10px 0 0}
 
   button{font-family:var(--pixel);font-size:15px;letter-spacing:.08em;background:var(--cyan);color:#06122A;
     border:0;border-radius:3px;padding:11px 22px;cursor:pointer;transition:filter .12s,transform .12s}
@@ -119,10 +103,10 @@
   button:focus-visible{outline:2px solid var(--magenta);outline-offset:3px}
   button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
   button.ghost[aria-pressed="true"]{background:var(--panel-2);border-color:var(--cyan);color:var(--cyan)}
-  .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
   .controls .label{font-family:var(--pixel);font-size:12px;color:var(--dim);letter-spacing:.1em;margin-right:2px}
   .controls button.ghost{padding:7px 13px;font-size:13px}
-  .controls input[type=range]{accent-color:var(--cyan);width:132px;height:22px;cursor:pointer}
+  .controls input[type=range]{accent-color:var(--cyan);width:124px;height:22px;cursor:pointer}
   .controls input[type=range]:disabled{opacity:.4;cursor:default}
   .controls .val{font-variant-numeric:tabular-nums;min-width:4.5ch;color:var(--ink)}
   select{font-family:var(--pixel);font-size:13px;background:var(--panel);color:var(--ink);
@@ -138,22 +122,17 @@
   .caveat b{color:var(--ink)}
   footer{margin-top:26px;font-size:13px;color:#5C6690}
   footer a{color:var(--cyan)}
-  @media (max-width:640px){
-    :root{--chip:64px}
-    .legend{display:none}
-    .lane{height:138px}
-  }
   @media (prefers-reduced-motion:reduce){*{animation-duration:.01ms !important;transition-duration:.01ms !important}}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:#4A5488">build 9</span></p>
-    <h1>打鍵ミライ × TextAlive</h1>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:#4A5488">build 10</span></p>
+    <h1>打鍵ミライ</h1>
     <p class="lede">
-      実楽曲の文字単位タイミングで判定エンジンを回す検証機。
-      入力は<b>タップとスライド上下左右の5種類だけ</b>。漢字は事前生成した読みデータでかなに開いて打ちます。
+      歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
+      かなを読まなくても打ち方が分かります。入力はタップとスライド上下左右の5種類だけ。
     </p>
     <p class="songmeta" id="songmeta">楽曲情報を読み込み中…</p>
   </header>
@@ -169,10 +148,14 @@
   </div>
 
   <div class="controls">
+    <label class="label" for="lead">先読み</label>
+    <input type="range" id="lead" min="1200" max="3000" step="100" value="2000" aria-label="先読み時間">
+    <span class="label val" id="leadVal">2.0秒</span>
+    <span style="width:10px"></span>
     <label class="label" for="speed">速度</label>
     <input type="range" id="speed" min="50" max="100" step="5" value="100" aria-label="再生速度">
     <span class="label val" id="speedVal">1.00×</span>
-    <span style="width:14px"></span>
+    <span style="width:10px"></span>
     <label class="label" for="vol">音量</label>
     <input type="range" id="vol" min="0" max="100" step="5" value="80" aria-label="音量">
     <span class="label val" id="volVal">80</span>
@@ -185,32 +168,25 @@
       <span class="stat combo">COMBO <b id="combo">0</b></span>
       <span class="spacer"></span>
       <div class="bar"><i id="progress"></i></div>
+      <button class="pause" id="pauseBtn">一時停止</button>
     </div>
 
     <div class="karaoke">
       <div class="mvslot"><span>MV LAYER (今後実装)</span></div>
-      <div class="line prev" id="kPrev"></div>
       <div class="line now" id="kNow"></div>
       <div class="line next" id="kNext"></div>
     </div>
 
-    <div class="lane" id="lane">
-      <div class="focus"></div>
-      <div class="track" id="track"></div>
-    </div>
-    <div class="cross" id="cross"></div>
-
-    <div class="footrow">
-      <div class="judge-line">
+    <div class="field" id="field">
+      <canvas id="notes"></canvas>
+      <div class="judgepop">
         <span class="judge" id="judge"></span>
         <span class="delta" id="delta"></span>
-        <span class="legend">
-          あ段=タップ ・ い段=← ・ う段=↑ ・ え段=→ ・ お段=↓<br>
-          「ん」=↑ ・ 「ー」=→ ・ 濁点/半濁点は元の文字と同じ方向 ・ 小書き(っ/ぁ/ゃ)は打たない
-        </span>
       </div>
-      <canvas id="miku" width="24" height="24" aria-label="ちゅねミク"></canvas>
+      <canvas id="miku" width="24" height="24" aria-label="はちゅねミク"></canvas>
     </div>
+
+    <div class="cross" id="cross"></div>
 
     <div class="overlay" id="overlay">
       <div>
@@ -219,6 +195,10 @@
         <p class="err" id="ovErr" hidden></p>
         <div class="result" id="ovResult" hidden></div>
         <button id="startBtn" disabled>スタート</button>
+        <p class="keyhint">
+          画面のどこでも タップ / スライド上下左右 で入力(指を離した瞬間に確定)<br>
+          PC は Space=タップ ・ 矢印キー=上下左右
+        </p>
       </div>
     </div>
   </div>
@@ -232,9 +212,10 @@
   </div>
 
   <p class="caveat">
-    <b>操作:</b> レーンをタップ / フリック(指を離した瞬間に確定+SE)。PC は <b>Space=タップ</b>、<b>矢印キー=上下左右</b>。<br>
-    <b>検証ポイント:</b> 文字の発声タイミングと入力時刻の突き合わせ精度。ズレはリザルトの平均デルタで確認できます。
-    課題曲以外の楽曲は読みデータが無いため、かな表記の文字だけが打鍵対象になります。
+    <b>入力:</b> あ段=タップ / い段=← / う段=↑ / え段=→ / お段=↓。「ん」=↑、「ー」=→。
+    濁点・半濁点は元の文字と同じ方向で、小書き文字(っ・ぁ・ゃ)は打ちません。<br>
+    <b>先読み</b>は落ちてくる時間(=どれだけ先まで見えるか)です。読みにくいときは長く、
+    詰まって見えるときは短くしてください。<b>速度</b>を1.00×未満にすると練習プレイ扱いになります。
   </p>
   <footer>
     合成音版のデモは <a href="./demo.html">demo.html</a>。判定コアは <code>src/judge.ts</code> と同一設計。<br>
@@ -249,12 +230,10 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 9;
+  var BUILD = 10;
 
   /* ============================================================
-     かな → 入力方向
-     方向は「母音の段」だけで決まる。濁点・半濁点・小文字は
-     元の文字と同じ方向(ナナメ入力は廃止)。入力は 5 種類のみ。
+     かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
      ============================================================ */
   var ROWS = [
     "あいうえお","かきくけこ","さしすせそ","たちつてと","なにぬねの",
@@ -262,67 +241,52 @@
     "がぎぐげご","ざじずぜぞ","だぢづでど","ばびぶべぼ","ぱぴぷぺぽ",
     "ぁぃぅぇぉ","ゔ"
   ];
-  var DIRS = ["c","l","u","r","d"];               // あ段, い段, う段, え段, お段
+  var DIRS = ["c","l","u","r","d"];                 // あ段, い段, う段, え段, お段
   var DIR_ICON = {c:"●", l:"←", u:"↑", r:"→", d:"↓"};
-  var DIR_NAME = {c:"タップ", l:"左", u:"上", r:"右", d:"下"};
+  // レーンは左から ← ↑ ● → ↓(タップが中央)
+  var LANE_ORDER = ["l","u","c","r","d"];
+  var LANE_OF = {l:0,u:1,c:2,r:3,d:4};
+  var DIR_COLOR = {l:"#4FA8FF", u:"#7BE87B", c:"#FF4FA3", r:"#FFC94D", d:"#B08BFF"};
 
-  var DIR_OF = {}, ROW_OF = {};
+  var DIR_OF = {};
   ROWS.forEach(function(row){
-    for(var i=0;i<row.length;i++){ DIR_OF[row[i]] = DIRS[i]; ROW_OF[row[i]] = row; }
+    for(var i=0;i<row.length;i++) DIR_OF[row[i]] = DIRS[i];
   });
-  // 例外行:や行/わ行と、段を持たない「ん」「ー」「っ」
-  ["や","ゆ","よ"].forEach(function(k,i){ DIR_OF[k]=["c","u","d"][i]; ROW_OF[k]="やゆよ"; });
-  ["ゃ","ゅ","ょ"].forEach(function(k,i){ DIR_OF[k]=["c","u","d"][i]; ROW_OF[k]="ゃゅょ"; });
-  DIR_OF["わ"]="c"; DIR_OF["を"]="d"; ROW_OF["わ"]="わ　　　を"; ROW_OF["を"]="わ　　　を";
+  ["や","ゆ","よ"].forEach(function(k,i){ DIR_OF[k]=["c","u","d"][i]; });
+  ["ゃ","ゅ","ょ"].forEach(function(k,i){ DIR_OF[k]=["c","u","d"][i]; });
+  DIR_OF["わ"]="c"; DIR_OF["を"]="d";
   DIR_OF["ゐ"]="l"; DIR_OF["ゑ"]="r";
-  DIR_OF["っ"]="u"; ROW_OF["っ"]="たちってと";       // つ と同じ入力
-  DIR_OF["ん"]="u"; ROW_OF["ん"]="　　ん　　";
-  DIR_OF["ー"]="r"; ROW_OF["ー"]="　　　ー　";
+  DIR_OF["っ"]="u"; DIR_OF["ん"]="u"; DIR_OF["ー"]="r";
 
-  /* 小書き文字(っ/ぁ/ゃ 等)は打鍵対象にしない。
-     促音・拗音は発声が短く、独立した1操作にするとリズムが取れないため
-     (歌詞表示には残し、直前のかなの一部として読ませる)。 */
+  /* 小書き文字(っ/ぁ/ゃ 等)は打鍵対象にしない。促音・拗音は発声が短く、
+     独立した1操作にするとリズムが取れないため(歌詞表示には残す)。 */
   var SMALL_KANA="ぁぃぅぇぉっゃゅょゎヵヶ";
   function dirOf(kana){ return DIR_OF[kana] || null; }
   function isTypable(kana){ return !!DIR_OF[kana] && SMALL_KANA.indexOf(kana)<0; }
-  /** 濁点・小文字などを「同じ入力になる基本の文字」に戻す(チップの補助表示用) */
+
   var BASE_OF = (function(){
-    var m={}, plain="あいうえお かきくけこ さしすせそ たちつてと なにぬねの はひふへほ".split(" ");
+    var m={};
     ["がぎぐげご","ざじずぜぞ","だぢづでど","ばびぶべぼ","ぱぴぷぺぽ"].forEach(function(row,ri){
       var base=["かきくけこ","さしすせそ","たちつてと","はひふへほ","はひふへほ"][ri];
       for(var i=0;i<row.length;i++) m[row[i]]=base[i];
     });
-    "ぁぃぅぇぉ".split("").forEach(function(k,i){ m[k]="あいうえお"[i]; });
-    "ゃゅょ".split("").forEach(function(k,i){ m[k]="やゆよ"[i]; });
-    m["っ"]="つ"; m["ゔ"]="う";
+    m["ゔ"]="う";
     return m;
   })();
 
-  /** 現在ターゲットの行を十字に並べる(濁点は行ごと濁点表示にして見た目を一致させる) */
-  function crossCells(kana){
-    var row = ROW_OF[kana] || kana, out = {};
-    if(row.length<=1){ out[dirOf(kana)] = kana; return out; }
-    for(var i=0;i<row.length && i<5;i++){
-      var ch=row[i];
-      if(ch===" "||ch==="　") continue;
-      out[DIRS[i]] = ch;
-    }
-    return out;
-  }
-
   /* ============ 判定(src/judge.ts と同一設計) ============ */
-  var WIN={just:100,great:250,good:450,late:1200};
+  var WIN={just:100,great:250,good:450,late:600};
   var MULT={JUST:2,GREAT:1.5,GOOD:1,TYPED:1,LATE:.5,MISS:0};
   function clampWindow(notes,i){
-    var t=notes[i].startTime;
-    var prev = i>0 ? (t-notes[i-1].startTime)/2 : Infinity;
-    var next = i<notes.length-1 ? (notes[i+1].startTime-t)/2 : Infinity;
+    var t=notes[i].time;
+    var prev = i>0 ? (t-notes[i-1].time)/2 : Infinity;
+    var next = i<notes.length-1 ? (notes[i+1].time-t)/2 : Infinity;
     var lim=Math.min(prev,next);
     return {just:Math.min(WIN.just,lim),great:Math.min(WIN.great,lim),
             good:Math.min(WIN.good,lim),late:WIN.late};
   }
   function grade(commitTime,note,w){
-    var d=commitTime-note.startTime, a=Math.abs(d);
+    var d=commitTime-note.time, a=Math.abs(d);
     if(d < -w.good) return {grade:"TYPED",delta:d};
     if(a<=w.just) return {grade:"JUST",delta:d};
     if(a<=w.great) return {grade:"GREAT",delta:d};
@@ -331,20 +295,9 @@
     return {grade:"MISS",delta:d};
   }
   function comboMult(c){ return Math.min(1+Math.floor(c/10)*0.1,2); }
-  // 1かな=1操作になったので、しきい値は「操作/秒」そのもの
-  var SUSTAIN={EASY:2.0,NORMAL:4.0,HARD:Infinity};
-  function selectIdx(notes,diff){
-    var ops=SUSTAIN[diff];
-    if(ops===Infinity) return notes.map(function(_,i){return i;});
-    var gap=1000/ops, out=[], last=-Infinity;
-    notes.forEach(function(n,i){
-      if(i===0 || n.startTime-last>=gap){ out.push(i); last=n.startTime; }
-    });
-    return out;
-  }
+  var SUSTAIN={EASY:2.0,NORMAL:4.0,HARD:Infinity};   // 1かな=1操作なので「操作/秒」
 
-  /* ============ 読みデータ(事前生成) ============ */
-  var KATA_START=0x30A1, KATA_END=0x30F6;
+  /* ============ 読みデータ(事前生成、data/readings/) ============ */
   function toHira(s){
     return String(s).replace(/[ァ-ヶ]/g,function(c){
       return String.fromCharCode(c.charCodeAt(0)-0x60);
@@ -352,9 +305,8 @@
   }
   var readingData=null, readingsIndexPromise=null, readingDiag="";
 
-  /* 読みデータの置き場。GitHub Pages のようにサブディレクトリ配下へ置かれても
-     正しく解決できるよう、相対パスではなく baseURI から絶対 URL を組み立てる。
-     ?v= はビルド番号でのキャッシュ避け(ontology/infra.yaml の stale-cache-misdiagnosis)。 */
+  /* GitHub Pages のようにサブディレクトリ配下へ置かれても解決できるよう、
+     相対パスではなく baseURI から絶対 URL を組み立てる。?v= はキャッシュ避け。 */
   function dataUrl(name){
     return new URL("data/readings/"+name+"?v="+BUILD, document.baseURI).href;
   }
@@ -364,7 +316,6 @@
       return r.json();
     });
   }
-  /** index.json は一度だけ読み、以降は同じ Promise を待つ(曲の準備と競合させない) */
   function readingIndex(){
     if(!readingsIndexPromise){
       var url=dataUrl("index.json");
@@ -390,11 +341,6 @@
       });
     });
   }
-
-  /**
-   * 読みデータ(歌詞全文の1文字=1読み)に、TextAlive の文字列を突き合わせるカーソル。
-   * 空白・改行を無視した圧縮列で照合し、ずれたら先読みで復帰する。
-   */
   function ReadingCursor(data){
     this.chars=[]; this.readings=[]; this.pos=0; this.hits=0; this.misses=0;
     if(!data) return;
@@ -407,13 +353,13 @@
   ReadingCursor.prototype.take=function(ch){
     if(!this.chars.length) return null;
     if(this.chars[this.pos]===ch){ this.hits++; return this.readings[this.pos++]; }
-    for(var d=1;d<=80;d++){                       // 歌詞にない字(記号等)を跨いで復帰
+    for(var d=1;d<=80;d++){
       if(this.chars[this.pos+d]===ch){ this.pos+=d+1; this.hits++; return this.readings[this.pos-1]; }
     }
     this.misses++; return null;
   };
 
-  /* ============ TextAlive のフレーズ → 表示行 + ノート列 ============ */
+  /* ============ フレーズ → 表示行 + ノート列 ============ */
   function convertPhrase(ph, cursor){
     var chars=[], notes=[], c=ph.firstChar;
     while(c){
@@ -422,13 +368,11 @@
       var reading = fromData!=null && fromData!=="" ? fromData : (isTypable(toHira(raw)) ? toHira(raw) : "");
       var st=c.startTime, en=(c.endTime && c.endTime>st) ? c.endTime : st+180;
       var kanas=[].concat(Array.prototype.slice.call(toHira(reading))).filter(isTypable);
-      var noteIdx=[];
       kanas.forEach(function(k,i){
-        noteIdx.push(notes.length);
-        notes.push({kana:k, dir:dirOf(k), base:(BASE_OF[k]||null),
-                    startTime: st + (en-st)*(i/kanas.length), charIdx: chars.length});
+        notes.push({kana:k, dir:dirOf(k), lane:LANE_OF[dirOf(k)], base:(BASE_OF[k]||null),
+                    time: st + (en-st)*(i/kanas.length), charIdx: chars.length});
       });
-      chars.push({text:raw, startTime:st, endTime:en, notes:noteIdx});
+      chars.push({text:raw, startTime:st, endTime:en});
       if(c===ph.lastChar) break;
       c=c.next;
     }
@@ -436,7 +380,7 @@
             text:chars.map(function(d){return d.text;}).join("")};
   }
 
-  /* ============ SE(Web Audio で合成。指を離した瞬間に鳴らす) ============ */
+  /* ============ SE(指を離した瞬間に鳴らす) ============ */
   var actx=null;
   function audio(){
     if(!actx){
@@ -458,7 +402,7 @@
     g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
     o.connect(g); g.connect(a.destination); o.start(t); o.stop(t+dur+0.02);
   }
-  var SE_SWEEP={c:1, l:0.72, u:1.5, r:1.32, d:0.6};   // 方向で音の動きを変える
+  var SE_SWEEP={c:1, l:0.72, u:1.5, r:1.32, d:0.6};
   function seInput(dir){ blip(dir==="c"?880:740, 0.075, "square", 0.16, SE_SWEEP[dir]||1); }
   function seJudge(g){
     if(g==="JUST"){ blip(1568,0.10,"triangle",0.2); blip(2093,0.12,"triangle",0.12,1.02); }
@@ -467,44 +411,38 @@
     else if(g==="LATE"||g==="TYPED"){ blip(660,0.07,"triangle",0.1); }
   }
 
-  /* ============ ちゅねミク(ドット絵の顔。表情+口パク) ============ */
+  /* ============ はちゅねミク(ドット絵。表情+口パク) ============ */
   var mikuCv=document.getElementById("miku"), mikuCtx=mikuCv.getContext("2d");
-  var P={ hair:"#39C5BB", hair2:"#2A9E96", skin:"#FBE3D4", line:"#0B1026",
+  var P={ hair:"#39C5BB", hair2:"#2A9E96", skin:"#FBE3D4",
           eye:"#1E3A5F", eyeHi:"#EAF6FF", mouth:"#8E2B47", tongue:"#FF7FA8", blush:"#FFB3C7" };
   var mikuExpr="normal", mikuExprUntil=0, mikuMouth=0;
   function px(x,y,w,h,color){ mikuCtx.fillStyle=color; mikuCtx.fillRect(x,y,w,h); }
   function drawMiku(){
     mikuCtx.clearRect(0,0,24,24);
-    // ツインテール(左右)
     px(1,7,3,15,P.hair); px(20,7,3,15,P.hair);
     px(1,20,3,2,P.hair2); px(20,20,3,2,P.hair2);
     px(2,22,2,1,P.hair2); px(20,22,2,1,P.hair2);
     px(3,6,2,3,P.hair2);  px(19,6,2,3,P.hair2);
-    // 髪(頭頂)と輪郭
     px(6,1,12,3,P.hair); px(5,2,14,3,P.hair);
     px(4,4,16,2,P.hair);
-    // 顔
     px(5,6,14,12,P.skin);
     px(5,5,14,1,P.hair2);
     px(4,6,1,11,P.hair2); px(19,6,1,11,P.hair2);
     px(5,18,14,1,P.hair2);
-    // 前髪
     px(5,6,14,2,P.hair); px(8,8,3,1,P.hair); px(14,8,3,1,P.hair);
-    // ほお
     px(6,13,2,1,P.blush); px(16,13,2,1,P.blush);
     var e=mikuExpr;
-    if(e==="ok"){                                   // ^ ^
+    if(e==="ok"){
       px(7,11,1,1,P.eye); px(8,10,2,1,P.eye); px(10,11,1,1,P.eye);
       px(14,11,1,1,P.eye); px(15,10,2,1,P.eye); px(17,11,1,1,P.eye);
-    } else if(e==="miss"){                          // > <
+    } else if(e==="miss"){
       px(7,10,1,1,P.eye); px(8,11,1,1,P.eye); px(7,12,1,1,P.eye);
       px(17,10,1,1,P.eye); px(16,11,1,1,P.eye); px(17,12,1,1,P.eye);
       px(9,10,1,1,P.eye); px(15,10,1,1,P.eye);
-    } else {                                        // 通常:大きめの目
+    } else {
       px(7,10,3,4,P.eye); px(15,10,3,4,P.eye);
       px(8,10,1,1,P.eyeHi); px(16,10,1,1,P.eyeHi);
     }
-    // 口(音量に応じて開く)
     var m=mikuMouth;
     if(m<=0){ px(11,15,3,1,P.mouth); }
     else if(m===1){ px(11,15,3,2,P.mouth); px(11,15,3,1,P.tongue); }
@@ -518,86 +456,202 @@
   drawMiku();
   window.DAKEN_MIKU=function(expr,mouth){ mikuExpr=expr; mikuMouth=mouth|0; drawMiku(); };
 
-  /* ============ ゲーム状態 ============ */
+  /* ============ 要素 ============ */
   var el={};
-  ["screen","kPrev","kNow","kNext","lane","track","cross","judge","delta","score","combo","progress",
+  ["screen","kNow","kNext","field","notes","judge","delta","score","combo","progress","pauseBtn",
    "overlay","ovTitle","ovText","ovErr","ovResult","startBtn","songmeta","songUrl","loadSong","songPick",
-   "speed","speedVal","vol","volVal","speedNote"]
+   "cross","lead","leadVal","speed","speedVal","vol","volVal","speedNote"]
     .forEach(function(id){ el[id]=document.getElementById(id); });
 
   var difficulty="NORMAL", player=null, videoPhrases=null, state=null;
 
+  /* ============ 再生速度・音量・先読み ============ */
+  var speedRate=1, volume=80, leadMs=2000;
+  function mediaAudio(){ return document.querySelector("#media audio"); }
+  function loadPrefs(){
+    try{
+      var s=localStorage.getItem("daken.speed"), v=localStorage.getItem("daken.volume"),
+          l=localStorage.getItem("daken.lead");
+      if(s) speedRate=Math.min(1,Math.max(.5,parseFloat(s)));
+      if(v!==null) volume=Math.min(100,Math.max(0,parseInt(v,10)));
+      if(l) leadMs=Math.min(3000,Math.max(1200,parseInt(l,10)));
+    }catch(e){}
+  }
+  function savePrefs(){
+    try{
+      localStorage.setItem("daken.speed",String(speedRate));
+      localStorage.setItem("daken.volume",String(volume));
+      localStorage.setItem("daken.lead",String(leadMs));
+    }catch(e){}
+  }
+  function applySpeed(){
+    var a=mediaAudio();
+    el.speed.value=String(Math.round(speedRate*100));
+    el.speedVal.textContent=speedRate.toFixed(2)+"×";
+    if(!a){ el.speed.disabled=true; el.speedNote.textContent="この楽曲は速度を変えられません"; return; }
+    el.speed.disabled=false;
+    el.speedNote.textContent = speedRate<1 ? "練習モード(等速ではありません)" : "";
+    try{
+      a.preservesPitch=true; a.mozPreservesPitch=true; a.webkitPreservesPitch=true;   // 音程は保つ
+      a.playbackRate=speedRate;
+    }catch(e){ el.speed.disabled=true; el.speedNote.textContent="この環境では速度を変えられません"; }
+  }
+  function applyVolume(){
+    el.vol.value=String(volume);
+    el.volVal.textContent=String(volume);
+    try{ if(player && typeof player.volume==="number") player.volume=volume; }catch(e){}
+    var a=mediaAudio(); if(a) a.volume=volume/100;
+  }
+  function applyLead(){
+    el.lead.value=String(leadMs);
+    el.leadVal.textContent=(leadMs/1000).toFixed(1)+"秒";
+  }
+  loadPrefs();
+  el.speed.addEventListener("input",function(){ speedRate=(+el.speed.value)/100; applySpeed(); savePrefs(); });
+  el.vol.addEventListener("input",function(){ volume=+el.vol.value; applyVolume(); savePrefs(); });
+  el.lead.addEventListener("input",function(){ leadMs=+el.lead.value; applyLead(); savePrefs(); });
+  applyLead();
+
+  /* ============ 譜面(全ノートを1本の時間軸で持つ) ============ */
+  function selectIdx(notes,diff){
+    var ops=SUSTAIN[diff];
+    if(ops===Infinity) return notes.map(function(_,i){return i;});
+    var gap=1000/ops, out=[], last=-Infinity;
+    notes.forEach(function(n,i){
+      if(i===0 || n.time-last>=gap){ out.push(i); last=n.time; }
+    });
+    return out;
+  }
   function buildState(){
-    var phrases=videoPhrases.map(function(vp){
+    var notes=[], phrases=[];
+    videoPhrases.forEach(function(vp){
       var picked=selectIdx(vp.notes,difficulty);
-      var notes=picked.map(function(i){ return vp.notes[i]; });
-      return {chars:vp.chars, allNotes:vp.notes, notes:notes,
-              pickedSet:picked.reduce(function(a,i){a[i]=1;return a;},{}),
-              idx:0, results:notes.map(function(){return null;}),
-              startTime:vp.startTime, endTime:vp.endTime, text:vp.text};
-    }).filter(function(p){ return p.notes.length>0; });
-    return {phrases:phrases, pi:0, score:0, combo:0, maxCombo:0, deltas:[],
-            counts:{JUST:0,GREAT:0,GOOD:0,TYPED:0,LATE:0,MISS:0}, running:false};
+      var pi=phrases.length, first=notes.length;
+      picked.forEach(function(i){
+        var n=vp.notes[i];
+        notes.push({kana:n.kana, dir:n.dir, lane:n.lane, base:n.base, time:n.time,
+                    phrase:pi, result:null, hitAt:0});
+      });
+      phrases.push({chars:vp.chars, text:vp.text, startTime:vp.startTime, endTime:vp.endTime,
+                    first:first, last:notes.length-1});
+    });
+    return {notes:notes, phrases:phrases, idx:0, pi:0, score:0, combo:0, maxCombo:0, deltas:[],
+            counts:{JUST:0,GREAT:0,GOOD:0,TYPED:0,LATE:0,MISS:0}, running:false, effects:[]};
   }
-
   function now(){ return player&&player.timer ? player.timer.position : 0; }
-  function cur(){ return state ? state.phrases[state.pi] : null; }
-  function target(){ var P=cur(); return (P && P.idx<P.notes.length) ? P.notes[P.idx] : null; }
+  function target(){ return state && state.idx<state.notes.length ? state.notes[state.idx] : null; }
 
-  /* ---- 打鍵レーン:現在フレーズ+次フレーズを並べ、ターゲットを中心に置く ---- */
-  var chipEls=[], chipPhraseKey=null;
-  function chipWidth(){
-    return parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--chip"))||76;
+  /* ============ 描画:5レーン落下フィールド ============ */
+  var PIXEL_FONT = '"DotGothic16","Courier New",monospace';
+  var cv=el.notes, ctx=cv.getContext("2d"), cw=0, ch=0, dpr=1;
+  function resizeCanvas(){
+    dpr=Math.min(window.devicePixelRatio||1, 2);
+    cw=el.field.clientWidth; ch=el.field.clientHeight;
+    cv.width=Math.round(cw*dpr); cv.height=Math.round(ch*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
   }
-  function buildTrack(){
-    var P=cur(); if(!P) return;
-    var N=state.phrases[state.pi+1];
-    var W=chipWidth(), html="", n=0;
-    chipEls=[];
-    P.notes.forEach(function(note){
-      html+=chipHtml(note, n++, W, "");
-    });
-    if(N) N.notes.forEach(function(note,i){
-      html+=chipHtml(note, n++, W, "next2"+(i===0?" first":""));
-    });
-    el.track.innerHTML=html;
-    chipEls=Array.prototype.slice.call(el.track.children);
-    chipPhraseKey=state.pi;
-    updateChips(true);
+  window.addEventListener("resize",function(){ resizeCanvas(); if(state) drawField(); });
+
+  function judgeY(){ return ch*0.80; }              // 判定ライン(下から20%)
+  /* 広い画面でレーンを画面幅いっぱいに広げると視線移動が大きくなるので、
+     プレイ面は中央に寄せて幅を制限する(スマホの見え方を基準にする)。 */
+  var FIELD_MAX=520;
+  function fieldW(){ return Math.min(cw, FIELD_MAX); }
+  function fieldX0(){ return (cw-fieldW())/2; }
+  function laneX(lane){ return fieldX0() + (lane+0.5)*(fieldW()/5); }
+  function roundRect(x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
   }
-  function chipHtml(note,i,W,extra){
-    var base = note.base ? "= "+note.base : "";
-    return '<div class="chip '+extra+'" style="left:'+(i*W)+'px">'+
-             '<div class="kana">'+note.kana+"</div>"+
-             '<div class="base">'+base+"</div>"+
-             '<div class="dir">'+DIR_ICON[note.dir]+"</div>"+
-           "</div>";
+  function drawNote(n,x,y,size,isNext){
+    var col=DIR_COLOR[n.dir], s=size*(isNext?1.08:1);
+    ctx.save();
+    ctx.fillStyle="rgba(11,16,38,.92)";
+    roundRect(x-s/2, y-s/2, s, s, 8); ctx.fill();
+    ctx.lineWidth = isNext?3:2;
+    ctx.strokeStyle=col;
+    if(isNext){ ctx.shadowColor=col; ctx.shadowBlur=14; }
+    roundRect(x-s/2, y-s/2, s, s, 8); ctx.stroke();
+    ctx.shadowBlur=0;
+    ctx.fillStyle="#fff";
+    ctx.font=Math.round(s*0.52)+'px '+PIXEL_FONT;
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText(n.kana, x, y-s*0.04);
+    ctx.fillStyle=col;                                   // 色だけに頼らず記号も出す
+    ctx.font=Math.round(s*0.26)+'px '+PIXEL_FONT;
+    ctx.fillText(DIR_ICON[n.dir], x, y+s*0.33);
+    ctx.restore();
   }
-  function updateChips(instant){
-    var P=cur(); if(!P||!chipEls.length) return;
-    for(var i=0;i<P.notes.length;i++){
-      var c=chipEls[i]; if(!c) continue;
-      var r=P.results[i];
-      c.className = "chip"+(r ? (r==="MISS"?" miss":" done") : (i===P.idx?" cur":""));
+  function drawField(){
+    if(!cw||!ch) return;
+    var t=now(), jy=judgeY(), fw=fieldW(), x0=fieldX0(), laneW=fw/5, i;
+    ctx.clearRect(0,0,cw,ch);
+
+    for(i=0;i<5;i++){
+      var x=x0+i*laneW;
+      ctx.fillStyle = (i%2===0) ? "rgba(255,255,255,.018)" : "rgba(255,255,255,.008)";
+      ctx.fillRect(x,0,laneW,ch);
+      ctx.strokeStyle="rgba(42,53,102,.7)"; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(x+.5,0); ctx.lineTo(x+.5,ch); ctx.stroke();
     }
-    var W=chipWidth();
-    var x=(el.lane.clientWidth/2) - (P.idx*W) - W/2;
-    if(instant) el.track.style.transition="none";
-    el.track.style.transform="translateX("+x+"px)";
-    if(instant){ void el.track.offsetWidth; el.track.style.transition=""; }
+    ctx.beginPath(); ctx.moveTo(x0+fw+.5,0); ctx.lineTo(x0+fw+.5,ch); ctx.stroke();
+
+    // フレーズの区切り(次のフレーズがどこから始まるか)
+    ctx.strokeStyle="rgba(255,201,77,.28)"; ctx.setLineDash([4,4]); ctx.lineWidth=1;
+    state.phrases.forEach(function(p){
+      var y=jy-(p.startTime-t)/leadMs*jy;
+      if(y>-20 && y<jy-2){ ctx.beginPath(); ctx.moveTo(x0,y); ctx.lineTo(x0+fw,y); ctx.stroke(); }
+    });
+    ctx.setLineDash([]);
+
+    // 判定ライン + レーンごとの受け皿
+    ctx.strokeStyle="rgba(255,79,163,.75)"; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(x0,jy); ctx.lineTo(x0+fw,jy); ctx.stroke();
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    for(i=0;i<5;i++){
+      var d=LANE_ORDER[i], cx=laneX(i);
+      ctx.globalAlpha=.5; ctx.fillStyle=DIR_COLOR[d];
+      roundRect(cx-laneW*0.34, jy-2, laneW*0.68, 4, 2); ctx.fill();
+      ctx.globalAlpha=1;
+      ctx.fillStyle="rgba(232,236,255,.55)";
+      ctx.font='16px '+PIXEL_FONT;
+      ctx.fillText(DIR_ICON[d], cx, jy+20);
+    }
+
+    // ノーツ(先読み時間ぶんだけ描く)
+    var size=Math.min(laneW*0.78, ch*0.17, 64);
+    for(var k=state.idx; k<state.notes.length; k++){
+      var n=state.notes[k], dt=n.time-t;
+      if(dt>leadMs) break;
+      if(dt < -WIN.late) continue;
+      drawNote(n, laneX(n.lane), jy-dt/leadMs*jy, size, k===state.idx);
+    }
+
+    // 当たり/外しのエフェクト
+    var np=performance.now();
+    state.effects=state.effects.filter(function(fx){ return np-fx.at<320; });
+    state.effects.forEach(function(fx){
+      var a=1-(np-fx.at)/320;
+      ctx.globalAlpha=a; ctx.strokeStyle=fx.color; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.arc(laneX(fx.lane), jy, size*(0.5+(1-a)*0.9), 0, Math.PI*2); ctx.stroke();
+      ctx.globalAlpha=1;
+    });
   }
 
-  /* ---- カラオケ(上段):発声位置で色が進む ---- */
+  /* ============ カラオケ(上段) ============ */
   function renderKaraoke(){
-    var P=cur(); if(!P) return;
-    if(el.kNow.dataset.pi!==String(state.pi)){
-      el.kNow.dataset.pi=String(state.pi);
+    var t=now(), pi=state.pi;
+    while(pi<state.phrases.length-1 && t>state.phrases[pi].endTime) pi++;
+    state.pi=pi;
+    var P=state.phrases[pi];
+    if(el.kNow.dataset.pi!==String(pi)){
+      el.kNow.dataset.pi=String(pi);
       el.kNow.innerHTML=P.chars.map(function(d){ return '<span class="ch">'+d.text+"</span>"; }).join("");
-      var prev=state.phrases[state.pi-1], next=state.phrases[state.pi+1];
-      el.kPrev.textContent=prev?prev.text:"";
+      var next=state.phrases[pi+1];
       el.kNext.textContent=next?next.text:"";
     }
-    var t=now(), nodes=el.kNow.children;
+    var nodes=el.kNow.children;
     for(var i=0;i<P.chars.length;i++){
       var d=P.chars[i], cls="ch";
       if(t>=d.startTime && t<d.endTime) cls="ch on";
@@ -606,6 +660,7 @@
     }
   }
 
+  /* ============ 判定 ============ */
   function showJudge(g,delta){
     el.judge.className="judge "+g;
     el.judge.textContent=g;
@@ -615,12 +670,10 @@
       (delta>=0?"+":"")+Math.round(delta)+" ms";
     seJudge(g); mikuReact(g);
   }
-
   function applyJudgement(i,commitTime){
-    var P=cur();
-    var w=clampWindow(P.notes,i);
-    var r=grade(commitTime,P.notes[i],w);
-    P.results[i]=r.grade;
+    var n=state.notes[i];
+    var r=grade(commitTime,n,clampWindow(state.notes,i));
+    n.result=r.grade; n.hitAt=performance.now();
     state.counts[r.grade]++;
     if(r.grade!=="TYPED"&&r.grade!=="MISS") state.deltas.push(r.delta);
     if(r.grade==="MISS"){ state.combo=0; }
@@ -629,13 +682,15 @@
     el.score.textContent=state.score;
     el.combo.textContent=state.combo;
     el.screen.classList.toggle("fever", state.combo>=12);
+    state.effects.push({lane:n.lane, at:performance.now(),
+                        color: r.grade==="MISS" ? "#FF6B6B" : DIR_COLOR[n.dir]});
     showJudge(r.grade,r.delta);
   }
-
-  function flashMiss(){
+  function flashMiss(dir){
     if(!state) return;
     state.combo=0; el.combo.textContent=0;
     el.screen.classList.remove("fever");
+    if(dir) state.effects.push({lane:LANE_OF[dir], at:performance.now(), color:"#FF6B6B"});
     showJudge("MISS",0);
   }
 
@@ -643,35 +698,26 @@
   function sendDir(dir){
     if(!state||!state.running) return;
     seInput(dir);
-    var P=cur(), note=target();
-    if(!note){ return; }
-    if(note.dir!==dir){ flashMiss(); return; }
-    applyJudgement(P.idx, now());
-    P.idx++;
-    updateChips(false);
+    var n=target();
+    if(!n) return;
+    if(n.dir!==dir){ flashMiss(dir); return; }     // 方向違いはノーツを消費しない
+    applyJudgement(state.idx, now());
+    state.idx++;
   }
 
-  /** 発声を大きく過ぎた未入力を MISS で流し、次フレーズの開始で強制的に送る */
+  /** 判定枠を過ぎたノーツを MISS で流す(曲は止まらない) */
   function reap(){
-    var t=now(), P=cur();
-    while(P.idx<P.notes.length && t-P.notes[P.idx].startTime>WIN.late){
-      P.results[P.idx]="MISS"; state.counts.MISS++;
+    var t=now();
+    while(state.idx<state.notes.length && t-state.notes[state.idx].time>WIN.late){
+      var n=state.notes[state.idx];
+      n.result="MISS"; n.hitAt=performance.now();
+      state.counts.MISS++;
       state.combo=0; el.combo.textContent=0;
       el.screen.classList.remove("fever");
-      P.idx++;
+      state.effects.push({lane:n.lane, at:performance.now(), color:"#FF6B6B"});
+      state.idx++;
       showJudge("MISS",0);
     }
-    // 次フレーズが始まったら、打ち残しを MISS にして強制的に次へ
-    var next=state.phrases[state.pi+1];
-    while(next && t>=next.startTime){
-      var dropped=P.notes.length-P.idx;
-      while(P.idx<P.notes.length){ P.results[P.idx]="MISS"; state.counts.MISS++; P.idx++; }
-      if(dropped>0){ state.combo=0; el.combo.textContent=0; el.screen.classList.remove("fever"); }
-      state.pi++;
-      P=cur(); next=state.phrases[state.pi+1];
-      buildTrack();
-    }
-    if(P.idx>=P.notes.length && !next && t>P.endTime+WIN.late) return;
   }
 
   function loop(){
@@ -680,7 +726,8 @@
     var dur=player.video?player.video.duration:0;
     if(dur) el.progress.style.width=Math.min(100,(t/dur)*100)+"%";
     reap();
-    if(chipPhraseKey!==state.pi) buildTrack(); else updateChips(false);
+    if(cw!==el.field.clientWidth || ch!==el.field.clientHeight) resizeCanvas();
+    drawField();
     renderKaraoke();
     // 口パク:ボーカル音量が取れればそれで、無ければ発声中かどうかで動かす
     var amp=0;
@@ -690,17 +737,16 @@
         amp=(player.getVocalAmplitude(t)||0)/(mx||1);
       }
     }catch(e){}
-    var P=cur(), singing=false;
+    var P=state.phrases[state.pi], singing=false;
     for(var i=0;i<P.chars.length;i++){
       if(t>=P.chars[i].startTime && t<P.chars[i].endTime){ singing=true; break; }
     }
     var m = amp>0.5?2 : amp>0.18?1 : (singing ? ((Math.floor(t/110)%2)+1) : 0);
     var expr = (performance.now()<mikuExprUntil) ? mikuExpr : "normal";
     if(m!==mikuMouth || expr!==mikuExpr){ mikuMouth=m; mikuExpr=expr; drawMiku(); }
-    var last=state.phrases[state.phrases.length-1];
-    if((dur>0 && t>=dur-200) || (state.pi===state.phrases.length-1 && P.idx>=P.notes.length && t>last.endTime+1500)){
-      finish(); return;
-    }
+
+    var last=state.notes[state.notes.length-1];
+    if((dur>0 && t>=dur-200) || (state.idx>=state.notes.length && t>last.time+1500)){ finish(); return; }
     requestAnimationFrame(loop);
   }
 
@@ -714,7 +760,7 @@
 
   function finish(){
     state.running=false;
-    el.screen.classList.remove("playing");
+    exitPlayLayout();
     try{ player.requestPause(); }catch(e){}
     var c=state.counts;
     var avg = state.deltas.length ?
@@ -739,16 +785,26 @@
     el.overlay.style.display="grid";
   }
 
-  /* タブが隠れると requestAnimationFrame が止まり、曲だけ進んで総崩れになる。
-     裏に回ったら曲ごと一時停止し、戻ったら「再開」で続きから遊べるようにする。 */
+  function enterPlayLayout(){
+    el.screen.classList.add("playing");
+    document.body.classList.add("playing");
+    try{ el.startBtn.blur(); window.focus(); el.screen.focus({preventScroll:true}); }catch(e){}
+    resizeCanvas();
+  }
+  function exitPlayLayout(){
+    el.screen.classList.remove("playing");
+    document.body.classList.remove("playing");
+    setTimeout(function(){ resizeCanvas(); if(state) drawField(); },0);
+  }
+
+  /* タブが隠れると rAF が止まり、曲だけ進んで総崩れになるので一時停止する */
   var paused=false;
-  function pauseForHidden(){
+  function pauseGame(reason){
     if(!state||!state.running) return;
     state.running=false; paused=true;
-    el.screen.classList.remove("playing");
     try{ player.requestPause(); }catch(e){}
     el.ovTitle.textContent="PAUSE";
-    el.ovText.textContent="タブが非表示になったため一時停止しました。";
+    el.ovText.textContent=reason||"一時停止しました。";
     el.ovResult.hidden=true;
     el.startBtn.textContent="再開";
     el.startBtn.disabled=false;
@@ -756,84 +812,43 @@
   }
   function resume(){
     paused=false; state.running=true;
-    el.screen.classList.add("playing");
+    enterPlayLayout();
     el.overlay.style.display="none";
     try{ player.requestPlay(); }catch(e){}
     applySpeed(); applyVolume();
     requestAnimationFrame(loop);
   }
-  document.addEventListener("visibilitychange",function(){ if(document.hidden) pauseForHidden(); });
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden) pauseGame("タブが非表示になったため一時停止しました。");
+  });
+  el.pauseBtn.addEventListener("click",function(){ pauseGame("一時停止中です。"); });
 
   function start(){
     if(!videoPhrases) return;
     audio();                                   // ユーザー操作起点で AudioContext を起こす
     paused=false;
     state=buildState();
+    window.DAKEN_STATE=state;                       // 検証用フック
     el.score.textContent="0"; el.combo.textContent="0";
     el.judge.textContent=""; el.delta.textContent="";
     el.screen.classList.remove("fever");
     el.overlay.style.display="none";
     el.kNow.dataset.pi="";
     state.running=true;
-    el.screen.classList.add("playing");
-    // 楽曲プレイヤーの iframe 等にフォーカスが残るとキー入力が届かないので取り返す
-    try{ el.startBtn.blur(); window.focus(); el.screen.focus({preventScroll:true}); }catch(e){}
-    try{ el.screen.scrollIntoView({block:"center",behavior:"smooth"}); }catch(e){}
-    buildTrack(); renderKaraoke();
+    enterPlayLayout();
+    renderKaraoke(); drawField();
     player.requestMediaSeek(0);
     player.requestPlay();
     applySpeed(); applyVolume();
-    setTimeout(function(){ applySpeed(); applyVolume(); },300);   // 再生開始で作り直される場合に備える
+    setTimeout(function(){ applySpeed(); applyVolume(); },300);
     requestAnimationFrame(loop);
   }
 
-  /* ============ 再生速度・音量 ============
-     TextAlive の Player は <audio> を mediaElement 配下に作る。
-     速度は audio.playbackRate をそのまま使う(timer.position は追従する)。
-     YouTube/niconico の楽曲は iframe になり playbackRate を触れないため、
-     その場合はスライダーを無効化して理由を表示する。 */
-  var speedRate=1, volume=80;
-  function mediaAudio(){ return document.querySelector("#media audio"); }
-  function loadPrefs(){
-    try{
-      var s=localStorage.getItem("daken.speed"), v=localStorage.getItem("daken.volume");
-      if(s) speedRate=Math.min(1,Math.max(.5,parseFloat(s)));
-      if(v!==null) volume=Math.min(100,Math.max(0,parseInt(v,10)));
-    }catch(e){}
-  }
-  function savePrefs(){
-    try{
-      localStorage.setItem("daken.speed",String(speedRate));
-      localStorage.setItem("daken.volume",String(volume));
-    }catch(e){}
-  }
-  function applySpeed(){
-    var a=mediaAudio();
-    el.speed.value=String(Math.round(speedRate*100));
-    el.speedVal.textContent=speedRate.toFixed(2)+"×";
-    if(!a){ el.speed.disabled=true; el.speedNote.textContent="この楽曲は速度を変えられません"; return; }
-    el.speed.disabled=false;
-    el.speedNote.textContent = speedRate<1 ? "練習モード(等速ではありません)" : "";
-    try{
-      a.preservesPitch=true; a.mozPreservesPitch=true; a.webkitPreservesPitch=true;  // 音程は保つ
-      a.playbackRate=speedRate;
-    }catch(e){ el.speed.disabled=true; el.speedNote.textContent="この環境では速度を変えられません"; }
-  }
-  function applyVolume(){
-    el.vol.value=String(volume);
-    el.volVal.textContent=String(volume);
-    try{ if(player && typeof player.volume==="number") player.volume=volume; }catch(e){}
-    var a=mediaAudio(); if(a) a.volume=volume/100;
-  }
-  loadPrefs();
-  el.speed.addEventListener("input",function(){ speedRate=(+el.speed.value)/100; applySpeed(); savePrefs(); });
-  el.vol.addEventListener("input",function(){ volume=+el.vol.value; applyVolume(); savePrefs(); });
-
   /* ============ 入力:タップ / スライド上下左右 の5種類だけ ============ */
   (function(){
-    /* 入力面はレーンだけでなく画面全体。細い帯を狙わせると、スマホでは
-       指が外れて「フリックが効かない」状態になるため。 */
-    var lane=el.screen, cross=el.cross;
+    /* 入力面は画面全体。細い帯を狙わせると、スマホでは指が外れて
+       「フリックが効かない」状態になるため。 */
+    var surface=el.screen, cross=el.cross;
     var sx=0, sy=0, active=false, THRESH=22;
     function ignore(e){
       if(!state||!state.running) return true;                       // 開始前はページ操作を優先
@@ -841,12 +856,11 @@
       return !!(t && t.closest && t.closest(".overlay,.hud,button,select,input,a"));
     }
     function renderCross(x,y){
-      var note=target(); if(!note) return;
-      var cells=crossCells(note.kana), html="";
-      for(var dir in cells){
-        var tgt = cells[dir]===note.kana ? " tgt" : "";
-        html+='<div class="cell '+dir+tgt+'" data-dir="'+dir+'">'+cells[dir]+"</div>";
-      }
+      var n=target(), html="";
+      DIRS.forEach(function(dir){
+        var tgt = (n && n.dir===dir) ? " tgt" : "";
+        html+='<div class="cell '+dir+tgt+'" data-dir="'+dir+'">'+DIR_ICON[dir]+"</div>";
+      });
       cross.style.left=x+"px"; cross.style.top=y+"px";
       cross.innerHTML=html;
       cross.classList.add("show");
@@ -866,7 +880,7 @@
     function down(e){
       if(ignore(e)) return;
       e.preventDefault();
-      var rect=lane.getBoundingClientRect(), p=pt(e);
+      var rect=surface.getBoundingClientRect(), p=pt(e);
       sx=p.clientX; sy=p.clientY; active=true;
       renderCross(p.clientX-rect.left, p.clientY-rect.top);
       highlight("c");
@@ -885,21 +899,20 @@
       var p=pt(e);
       sendDir(resolveDir(p.clientX-sx, p.clientY-sy));   // 離した瞬間に確定+SE
     }
-    lane.addEventListener("touchstart",down,{passive:false});
-    lane.addEventListener("touchmove",move,{passive:false});
-    lane.addEventListener("touchend",up,{passive:false});
-    lane.addEventListener("mousedown",down);
-    lane.addEventListener("mousemove",move);
-    lane.addEventListener("mouseup",up);
-    lane.addEventListener("mouseleave",function(){ active=false; cross.classList.remove("show"); });
+    surface.addEventListener("touchstart",down,{passive:false});
+    surface.addEventListener("touchmove",move,{passive:false});
+    surface.addEventListener("touchend",up,{passive:false});
+    surface.addEventListener("mousedown",down);
+    surface.addEventListener("mousemove",move);
+    surface.addEventListener("mouseup",up);
+    surface.addEventListener("mouseleave",function(){ active=false; cross.classList.remove("show"); });
   })();
 
-  // PC は Space=タップ / 矢印キー=上下左右。キーを離した時点で確定(フリックと同じ作法)
   var KEY_DIR={" ":"c","Spacebar":"c","Enter":"c",
                ArrowLeft:"l",ArrowUp:"u",ArrowRight:"r",ArrowDown:"d"};
   var keyHeld={};
-  /* 矢印キー・スペースでページがスクロールしないよう、capture 段階で既定動作を止める。
-     フォーム部品(スライダー・選曲・URL入力)にフォーカスがあるときは通常操作を優先する。 */
+  /* 矢印キー・スペースでページがスクロールしないよう capture 段階で既定動作を止める。
+     フォーム部品にフォーカスがあるときは通常操作を優先する。 */
   function formFocused(e){
     var t=e.target, tag=t&&t.tagName;
     return tag==="INPUT"||tag==="SELECT"||tag==="TEXTAREA";
@@ -921,12 +934,14 @@
       Array.prototype.forEach.call(document.querySelectorAll("[data-diff]"),function(o){
         o.setAttribute("aria-pressed", String(o===b));
       });
-      if(state){ state.running=false; try{ player.requestPause(); }catch(e){} }
+      if(state){ state.running=false; exitPlayLayout(); try{ player.requestPause(); }catch(e){} }
+      paused=false;
       el.ovTitle.textContent=difficulty+" で挑戦";
       el.ovText.textContent="スタートで曲の頭から始まります。";
       el.ovResult.hidden=true;
       el.startBtn.textContent="スタート";
       el.overlay.style.display="grid";
+      if(videoPhrases){ state=buildState(); renderKaraoke(); drawField(); }
     });
   });
 
@@ -958,6 +973,7 @@
 
   function beginLoad(url){
     if(state) state.running=false;
+    exitPlayLayout();
     videoPhrases=null; readingData=null;
     el.startBtn.disabled=true;
     el.ovTitle.textContent="LOADING…";
@@ -974,7 +990,6 @@
     createFromSong(u,{}).catch(function(e){ showError("楽曲の読み込みに失敗: "+e); });
   });
   el.startBtn.addEventListener("click",function(){ if(paused&&state) resume(); else start(); });
-  window.addEventListener("resize",function(){ if(state) updateChips(true); });
 
   /* 失敗した通信を記録し、エラー表示に添える(原因調査用) */
   var netDiag=[];
@@ -999,9 +1014,8 @@
 
   /**
    * 楽曲読み込み。サーバーが /cards/resolve に 302 を返す構成に
-   * クライアント v0.5.2 が追従できない(redirect:"manual" で status 0 →
-   * "Card data resolver is unavailable")ため、失敗時は自前でリダイレクトを
-   * 追従し、確定したカード URL を createFromCardUrl に渡す。
+   * クライアント v0.5.2 が追従できない("Card data resolver is unavailable")ため、
+   * 失敗時は自前でリダイレクトを追従して createFromCardUrl に渡す。
    */
   function createFromSong(url,opts){
     lastSongUrl=url;
@@ -1033,6 +1047,7 @@
     return;
   }
   readingIndex();          // 先に取りに行くだけ。待ち合わせは loadReadings が行う
+  resizeCanvas();
 
   function rebuildFromVideo(v){
     var code=null;
@@ -1048,17 +1063,18 @@
         ph=ph.next;
       }
       if(!videoPhrases.length){ showError("この楽曲から打鍵対象のかなを抽出できませんでした。"); return; }
-      var notes=videoPhrases.reduce(function(a,p){ return a+p.notes.length; },0);
+      var total=videoPhrases.reduce(function(a,p){ return a+p.notes.length; },0);
       var mark = data ? "(読みデータあり)"
                       : readingDiag ? "(読みデータ取得失敗:かな表記のみ)"
                                     : "(読みデータ無し:かな表記のみ)";
       el.songmeta.textContent="♪ "+player.data.song.name+" / "+player.data.song.artist.name+
-        "  —  "+videoPhrases.length+"フレーズ / "+notes+"かな"+mark;
+        "  —  "+videoPhrases.length+"フレーズ / "+total+"かな"+mark;
       el.songmeta.title=readingDiag||"";
       if(readingDiag){ netDiag.push(readingDiag); console.warn("[daken] "+readingDiag); }
       window.DAKEN_DEBUG={phrases:videoPhrases, readings:data, cursor:cursor, player:player};
       state=buildState();
-      buildTrack(); renderKaraoke();
+      window.DAKEN_STATE=state;                     // 検証用フック
+      resizeCanvas(); renderKaraoke(); drawField();
     });
   }
 
@@ -1083,8 +1099,8 @@
       onTimerReady:function(){
         applySpeed(); applyVolume();
         el.ovTitle.textContent="準備完了";
-        el.ovText.textContent="レーン中央の文字を、表示された方向(タップ/上下左右)で歌に合わせて入力してください。"+
-          "PC は Space と矢印キーでも遊べます。";
+        el.ovText.textContent="かなが上から降ってきます。判定ラインに重なる瞬間に、"+
+          "そのノーツの横位置と同じ方向で入力してください(左から ← ↑ ● → ↓)。";
         el.startBtn.disabled=false;
       },
       // 準備段階で onPlay が飛ぶことがあるため、プレイ中以外はオーバーレイを閉じない
