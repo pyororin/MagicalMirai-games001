@@ -73,26 +73,32 @@ concepts:
     songs:
       - title: ロンリーラン / 海風太陽
         url: https://piapro.jp/t/CyPO/20250128183915
+        card: https://api.textalive.jp/cards/Rv6F3kEafnB2ZmKC
         video: { beatId: 4694280, chordId: 2830735, repetitiveSegmentId: 2946483, lyricId: 67815, lyricDiffId: 20659 }
         source: TextAliveJp/textalive-app-basic
       - title: ストリートライト / 加賀(ネギシャワーP)
         url: https://piapro.jp/t/ULcJ/20250205120202
+        card: https://api.textalive.jp/cards/mOVlJ15TwK3mGacP
         video: { beatId: 4694275, chordId: 2830730, repetitiveSegmentId: 2946478, lyricId: 67810, lyricDiffId: 20654 }
         source: TextAliveJp/textalive-app-lyric-sheet
       - title: アリフレーション / 雨良 Amala
         url: https://piapro.jp/t/SuQO/20250127235813
+        card: https://api.textalive.jp/cards/tHF561bSn3il7uGQ
         video: { beatId: 4694276, chordId: 2830731, repetitiveSegmentId: 2946479, lyricId: 67811, lyricDiffId: 20655 }
         source: TextAliveJp/textalive-app-p5js
       - title: インフォーマルダイブ / 99piano
         url: https://piapro.jp/t/Ppc9/20241224135843
+        card: https://api.textalive.jp/cards/H3zE3TtWn8pMU4Qd
         video: { beatId: 4694277, chordId: 2830732, repetitiveSegmentId: 2946480, lyricId: 67812, lyricDiffId: 20656 }
         source: TextAliveJp/textalive-app-mosaic
       - title: ハロー、フェルミ。/ ど～ぱみん
         url: https://piapro.jp/t/oTaJ/20250204234235
+        card: https://api.textalive.jp/cards/ekhSl1QaKHtRrBCW
         video: { beatId: 4694278, chordId: 2830733, repetitiveSegmentId: 2946481, lyricId: 67813, lyricDiffId: 20657 }
         source: TextAliveJp/textalive-app-char-cube
       - title: パレードレコード / きさら
         url: https://piapro.jp/t/GCgy/20250202202635
+        card: https://api.textalive.jp/cards/fAoEqWsPQx12kZsC
         video: { beatId: 4694279, chordId: 2830734, repetitiveSegmentId: 2946482, lyricId: 67814, lyricDiffId: 20658 }
         source: TextAliveJp/textalive-app-lyric-tiles
     verified: 2026-08-30 (miku-twintail。公式サンプルを clone して採取、piapro のページタイトルで曲名を照合)
@@ -107,21 +113,55 @@ concepts:
 pitfalls:
   - id: card-data-resolver-unavailable
     symptom: >
-      画面が「読み込み中」のまま進まず、コンソールに
-      "Card data resolver is unavailable" が出る。
+      createFromSongUrl が "Card data resolver is unavailable" で失敗し、
+      画面が「読み込み中」のまま進まない。ネットワークは正常に見えるのに起きる。
     cause: >
-      Player 初期化時の api.textalive.jp への接続が失敗したまま
-      createFromSongUrl が呼ばれた（ライブラリ内の card マネージャ未初期化）。
-      ネットワーク到達性（ドメイン未許可・ブロッカー）が典型原因。コードのバグではないことが多い。
+      api.textalive.jp/cards/resolve はカード URL への 302 を返すが、
+      クライアント v0.5.2 は redirect:"manual" で叩くため status 0 となり、
+      リゾルバ利用不可と判定してしまう（サーバーとクライアントの挙動不一致）。
+      ネットワーク到達性の問題ではないので、ドメイン許可を足しても直らない。
+      別要因として、required-domains のホストが本当に遮断されている場合も同じ症状になる。
     solution: >
-      required-domains の 3 ホストへの到達性を確認する。加えてライブラリ読み込みを
-      unpkg 依存にしない（バージョン未固定でブロッカーの影響も受けやすい）。
-      npm でバンドルするか、検証済みバージョンを vendor/ に同梱して同一オリジン配信する。
+      曲ごとにカード URL を事前解決しておき、createFromSongUrl が
+      "Card data resolver" で失敗したら createFromCardUrl(カードURL) にフォールバックする。
+      これならブラウザのリダイレクト追従も CORS プリフライトも不要になる。
+      事前解決コマンド:
+        curl -sS -o /dev/null -w "%{redirect_url}" \
+          "https://api.textalive.jp/cards/resolve?url=<URLエンコードした曲URL>" \
+          -H "x-ta-app-token: <トークン>"
+      実装例: miku-twintail/app/src/main.js の loadSong、
+      別解（実行時にリダイレクトを自前追従）: typing-game/prototype/textalive.html の createFromSong。
+      カード URL は contest-songs-2025 に記録済み。
     detection: >
       createFromSongUrl に .catch を付け、window の error / unhandledrejection を拾い、
-      15 秒のウォッチドッグで 3 ホストへ fetch 疎通チェックして画面に表示する
+      15 秒のウォッチドッグで 3 ホストへ疎通チェックして画面に表示する
       （実装例: miku-twintail/app/src/main.js の「起動診断」）。
-    verified: 2026-08-30 (miku-twintail / typing-game)
+      疎通は OK なのに読み込みだけ失敗する → この 302 問題。疎通自体が失敗 → ドメイン遮断。
+    verified: 2026-08-30 (miku-twintail: 302 を再現するテストで全6曲のフォールバック成功 / typing-game: 原因特定)
+
+  - id: cors-probe-false-positive
+    symptom: >
+      到達性チェックで api.songle.jp / songle.jp が「接続失敗」と出るが、
+      実際にはアプリは通信できている（誤診）。
+    cause: >
+      これらは script タグで読む前提のリソースで CORS ヘッダを返さないため、
+      fetch(url, { mode: "cors" }) は到達できていても必ず失敗する。
+    solution: >
+      到達性だけを見たいときは mode:"no-cors" で叩く（成功すれば到達可能。
+      内容は読めないが、遮断との区別はつく）。api.textalive.jp は CORS 対応なので cors のままでよい。
+    verified: 2026-08-30 (miku-twintail)
+
+  - id: relay-test-hides-redirect-bugs
+    symptom: >
+      サンドボックスのテストでは動くのに、ユーザーのブラウザでだけ楽曲読み込みが失敗する。
+    cause: >
+      sandbox-headless-chromium-tls の回避策（Playwright route + Node fetch 中継）で
+      redirect:"follow" を使うと、ブラウザには 302 が届かず 200 に見える。
+      リダイレクト絡みの不具合が中継に隠蔽されてしまう。
+    solution: >
+      リダイレクトを返すエンドポイント（/cards/resolve など）は中継でも
+      redirect:"manual" にして 302 をそのままブラウザへ返し、本番条件を再現する。
+    verified: 2026-08-30 (miku-twintail。この再現でフォールバックの動作を確認できた)
 
   - id: songle-jp-missing
     symptom: >
