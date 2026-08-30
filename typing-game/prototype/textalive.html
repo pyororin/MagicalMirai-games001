@@ -176,7 +176,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 15</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 16</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -190,6 +190,7 @@
     <button class="ghost" data-diff="EASY" aria-pressed="false">EASY</button>
     <button class="ghost" data-diff="NORMAL" aria-pressed="true">NORMAL</button>
     <button class="ghost" data-diff="HARD" aria-pressed="false">HARD</button>
+    <button class="ghost" id="tutorial">あそびかた</button>
     <span style="flex:1"></span>
     <label class="label" for="songPick">課題曲</label>
     <select id="songPick" aria-label="課題曲"></select>
@@ -288,7 +289,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 15;
+  var BUILD = 16;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -575,7 +576,7 @@
   var el={};
   ["screen","kNow","kNext","field","notes","judge","delta","score","combo","progress","pauseBtn",
    "overlay","ovTitle","ovText","ovErr","ovResult","startBtn","songmeta","songUrl","loadSong","songPick",
-   "cross","lead","leadVal","speed","speedVal","vol","volVal","speedNote","offset","offsetVal","autoCal","share"]
+   "cross","lead","leadVal","speed","speedVal","vol","volVal","speedNote","offset","offsetVal","autoCal","share","tutorial"]
     .forEach(function(id){ el[id]=document.getElementById(id); });
 
   var difficulty="NORMAL", player=null, videoPhrases=null, state=null;
@@ -665,8 +666,13 @@
     return {notes:notes, phrases:phrases, idx:0, pi:0, score:0, combo:0, maxCombo:0, deltas:[],
             counts:{JUST:0,GREAT:0,GOOD:0,TYPED:0,LATE:0,MISS:0}, running:false, effects:[], voices:[]};
   }
-  /* 端末ごとの入力・音声遅延を吸収するオフセット。判定にも描画にも同じ時計を使う */
-  function now(){ return (player&&player.timer ? player.timer.position : 0) - offsetMs; }
+  /* 端末ごとの入力・音声遅延を吸収するオフセット。判定にも描画にも同じ時計を使う。
+     チュートリアル中は楽曲を使わず、自前の時計で同じ判定パイプラインを回す。 */
+  var tutorial=false, tutT0=0;
+  function now(){
+    if(tutorial) return performance.now()-tutT0;
+    return (player&&player.timer ? player.timer.position : 0) - offsetMs;
+  }
   function target(){ return state && state.idx<state.notes.length ? state.notes[state.idx] : null; }
 
   /* ============================================================
@@ -1122,7 +1128,7 @@
   function loop(){
     if(!state||!state.running) return;
     var t=now();
-    var dur=player.video?player.video.duration:0;
+    var dur=(!state.isTutorial && player.video)?player.video.duration:0;
     if(dur) el.progress.style.width=Math.min(100,(t/dur)*100)+"%";
     reap();
     if(cw!==el.field.clientWidth || ch!==el.field.clientHeight) resizeCanvas();
@@ -1131,7 +1137,7 @@
     // 口パク:ボーカル音量が取れればそれで、無ければ発声中かどうかで動かす
     var amp=0;
     try{
-      if(player.getVocalAmplitude){
+      if(!state.isTutorial && player.getVocalAmplitude){
         var mx=player.getMaxVocalAmplitude?player.getMaxVocalAmplitude():1;
         amp=(player.getVocalAmplitude(t)||0)/(mx||1);
       }
@@ -1149,6 +1155,10 @@
     }
 
     var last=state.notes[state.notes.length-1];
+    if(state.isTutorial){
+      if(state.idx>=state.notes.length && t>last.time+1200){ finishTutorial(); return; }
+      requestAnimationFrame(loop); return;
+    }
     if((dur>0 && t>=dur-200) || (state.idx>=state.notes.length && t>last.time+1500)){ finish(); return; }
     requestAnimationFrame(loop);
   }
@@ -1244,6 +1254,7 @@
 
   function start(){
     if(!videoPhrases) return;
+    tutorial=false;
     audio();                                   // ユーザー操作起点で AudioContext を起こす
     paused=false;
     state=buildState();
@@ -1265,6 +1276,56 @@
     setTimeout(function(){ applySpeed(); applyVolume(); },300);
     requestAnimationFrame(loop);
   }
+
+  /* ============ チュートリアル(曲を使わず5方向を1回ずつ) ============ */
+  function buildTutorialState(){
+    var kana=["あ","い","う","え","お"], notes=[], chars=[], t=2600;
+    kana.forEach(function(k,i){
+      var st=t+i*1500;
+      notes.push({kana:k, dir:dirOf(k), lane:LANE_OF[dirOf(k)], base:null, time:st,
+                  phrase:0, result:null, hitAt:0});
+      chars.push({text:k, reading:"", startTime:st, endTime:st+700});
+    });
+    return {notes:notes, phrases:[{chars:chars, text:"あいうえお", startTime:t, endTime:t+7500,
+              first:0, last:notes.length-1}],
+            idx:0, pi:0, score:0, combo:0, maxCombo:0, deltas:[],
+            counts:{JUST:0,GREAT:0,GOOD:0,TYPED:0,LATE:0,MISS:0}, running:false, effects:[], voices:[],
+            seekPending:false, seekDeadline:0, isTutorial:true};
+  }
+  function startTutorial(){
+    audio();
+    stopAttract();
+    try{ player.requestPause(); }catch(e){}
+    tutorial=true; tutT0=performance.now();
+    paused=false;
+    state=buildTutorialState();
+    window.DAKEN_STATE=state;
+    el.score.textContent="0"; el.combo.textContent="0";
+    el.judge.textContent=""; el.delta.textContent="";
+    el.screen.classList.remove("fever");
+    el.overlay.style.display="none";
+    el.share.hidden=true;
+    el.kNow.dataset.pi="";
+    state.running=true;
+    enterPlayLayout();
+    renderKaraoke(); drawField();
+    requestAnimationFrame(loop);
+  }
+  function finishTutorial(){
+    state.running=false;
+    tutorial=false;
+    exitPlayLayout();
+    startAttract();
+    var c=state.counts, hit=c.JUST+c.GREAT+c.GOOD+c.TYPED+c.LATE;
+    el.ovTitle.textContent="あそびかた";
+    el.ovText.textContent="5方向を "+hit+"/5 でした。ノーツの横位置がそのまま入力方向です"+
+      "(左から ← ↑ ● → ↓)。判定ラインに重なる瞬間に、指を離してください。";
+    el.ovResult.hidden=true;
+    el.startBtn.textContent="曲であそぶ";
+    el.startBtn.disabled=!videoPhrases;
+    el.overlay.style.display="grid";
+  }
+  el.tutorial.addEventListener("click",startTutorial);
 
   /* ============ 入力:タップ / スライド上下左右 の5種類だけ ============ */
   (function(){
