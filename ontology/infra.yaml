@@ -168,3 +168,27 @@ pitfalls:
       数えると、ループが回っていないことを一発で切り分けられる。
     verified: 2026-08-31 (typing-game build 12)
     refs: [typing-game/prototype/textalive.html]
+
+  - id: webaudio-se-silent-on-mobile
+    symptom: >
+      楽曲(HTMLMediaElement / iframe プレイヤー)は鳴っているのに、
+      Web Audio で合成した効果音だけが実機のスマホで鳴らない。
+      PC ブラウザやヘッドレス検証では鳴るため再現しにくい。
+    cause: >
+      3つの原因が重なりうる。
+      (1) AudioContext を作っただけでユーザー操作の中で resume() しておらず
+          suspended のまま(自動再生ポリシー)。
+      (2) iOS のマナースイッチ。<audio> 由来の音は鳴るが Web Audio だけ消音される。
+      (3) suspended の間は currentTime が進まないため、その時点の currentTime を
+          基準に予約した音は、resume 後には「過去の予約」になって鳴らない。
+    solution: >
+      ・document に capture で touchstart/pointerdown/mousedown/keydown を張り、
+        最初の操作で必ず resume() + 無音バッファ(1サンプル)再生を通す。
+      ・navigator.audioSession があれば type="playback" にする(iOS 16.4+)。
+      ・音の予約は currentTime + 数ms 先に置く。
+      ・出力は master GainNode 経由にまとめ、状態を画面に出す。
+    detection: >
+      画面のビルド番号の隣に actx.state を出す(snd:running / suspended / none)。
+      ユーザーからの「鳴らない」報告を、コード経路の問題か出力の問題かで切り分けられる。
+    verified: 2026-08-31 (typing-game build 21)
+    refs: [typing-game/prototype/textalive.html]
