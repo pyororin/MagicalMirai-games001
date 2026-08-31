@@ -213,7 +213,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 29</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 30</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -327,7 +327,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 29;
+  var BUILD = 30;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -804,6 +804,21 @@
     });
     return out;
   }
+  /* 歌詞の文字ごとの発声区間を一列に並べ、隣り合うものは繋げる。
+     口パクはこれをなぞる(ノーツは難易度で間引かれるので使えない)。 */
+  function mouthSegments(phrases){
+    var segs=[];
+    phrases.forEach(function(p){
+      p.chars.forEach(function(c){
+        var s=c.startTime, e=(c.endTime>c.startTime)?c.endTime:c.startTime+180;
+        var last=segs[segs.length-1];
+        if(last && s-last.e <= 60) last.e=Math.max(last.e,e);   // 息継ぎ未満は繋ぐ
+        else segs.push({s:s, e:e});
+      });
+    });
+    return segs;
+  }
+
   function buildState(){
     var notes=[], phrases=[];
     videoPhrases.forEach(function(vp){
@@ -821,7 +836,8 @@
     });
     return {notes:notes, phrases:phrases, idx:0, pi:0, score:0, combo:0, maxCombo:0, deltas:[],
             counts:{JUST:0,GREAT:0,GOOD:0,TYPED:0,LATE:0,MISS:0}, running:false, effects:[], voices:[],
-            progress:0, outroAt:0, outroMsg:"", fading:false, mouthCur:0};
+            progress:0, outroAt:0, outroMsg:"", fading:false,
+            mouthSegs:mouthSegments(phrases), mouthCur:0};
   }
   /* 端末ごとの入力・音声遅延を吸収するオフセット。判定にも描画にも同じ時計を使う。
      チュートリアル中は楽曲を使わず、自前の時計で同じ判定パイプラインを回す。 */
@@ -1573,10 +1589,10 @@
     if(cw!==el.field.clientWidth || ch!==el.field.clientHeight) resizeCanvas();
     drawField();
     renderKaraoke();
-    /* 口パクは「その字が判定ライン(タイミングバー)に来ている間」だけ。
-       フレーズの発声区間で動かすと、打つ場所と口が合わずに歌っている感じが出ない。
-       打ったかどうかとは無関係に、ノーツの時刻そのもので判断する
-       (先に打っても、打ち逃しても、ミクはその字を歌っている)。
+    /* 口パクは楽曲の歌詞そのもの(TextAlive の文字ごとの発声区間)に合わせる。
+       ノーツは難易度で間引かれるうえ、小書き文字や記号はノーツにならないので、
+       ノーツだけで動かすと歌詞を歌い切っていないように見える。
+       打ったかどうかとは無関係(先に打っても、打ち逃しても歌は進む)。
        口の開き方だけはボーカル音量があればそれで選ぶ。 */
     var amp=0;
     try{
@@ -1585,10 +1601,10 @@
         amp=(player.getVocalAmplitude(t)||0)/(mx||1);
       }
     }catch(e){}
-    var atBar=false, notes=state.notes;
-    while(state.mouthCur<notes.length && notes[state.mouthCur].time < t-WIN.good) state.mouthCur++;
-    if(state.mouthCur<notes.length) atBar = Math.abs(notes[state.mouthCur].time-t) <= WIN.good;
-    var m = !atBar ? 0 : (amp>0.5 ? 2 : amp>0.18 ? 1 : (Math.floor(t/110)%2)+1);
+    var singing=false, seg=state.mouthSegs;
+    while(state.mouthCur<seg.length && seg[state.mouthCur].e <= t) state.mouthCur++;
+    if(state.mouthCur<seg.length) singing = (t >= seg[state.mouthCur].s);
+    var m = !singing ? 0 : (amp>0.5 ? 2 : amp>0.18 ? 1 : (Math.floor(t/110)%2)+1);
     // アウトロ中は「話している」口に。歌が終わってもミクが動いている感じを残す
     if(state.outroAt) m=(Math.floor((performance.now()-state.outroAt)/150)%2)+1;
     var live=performance.now()<mikuExprUntil;
@@ -1760,8 +1776,9 @@
                   phrase:0, charIdx:i, result:null, hitAt:0});
       chars.push({text:k, reading:"", startTime:st, endTime:st+700});
     });
-    return {notes:notes, phrases:[{chars:chars, text:"あいうえお", startTime:t, endTime:t+7500,
-              first:0, last:notes.length-1}],
+    var phrases=[{chars:chars, text:"あいうえお", startTime:t, endTime:t+7500,
+                  first:0, last:notes.length-1}];
+    return {notes:notes, phrases:phrases, mouthSegs:mouthSegments(phrases),
             idx:0, pi:0, score:0, combo:0, maxCombo:0, deltas:[],
             counts:{JUST:0,GREAT:0,GOOD:0,TYPED:0,LATE:0,MISS:0}, running:false, effects:[], voices:[],
             progress:0, outroAt:0, outroMsg:"", fading:false, mouthCur:0,
