@@ -219,7 +219,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 37</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 38</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -337,7 +337,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 37;
+  var BUILD = 38;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -1097,21 +1097,22 @@
      「残り時間の比率」で距離を決める(全軸が同時にリングへ着く)。
      ============================================================ */
   var AXIS={l:[-1,0], r:[1,0], u:[0,-1], d:[0,1], c:[0,0]};
-  /* ステージの手前(フッター)。曲名・スコア・進捗をここに納める */
-  function footerH(){ return Math.round(Math.min(ch*0.14, G*30)/G)*G; }
+  /* レーン式でだけ使う下端の余白(リフレクト式は下も客席に使う) */
+  function footerH(){ return isReflect() ? 0 : Math.round(Math.min(ch*0.14, G*30)/G)*G; }
   /* ステージの寸法。4方向の助走距離を完全に等しくするため、
      いちばん狭い軸(縦長画面では左右)に全軸を合わせる。
      縦に余った上下は、上=照明のトラス、下=客席として使う。 */
   function ring(){
     var fw=fieldW(), x0=fieldX0();
     var cx=Math.round((x0+fw/2)/G)*G;
-    var R =Math.round(Math.min(fw*0.17, ch*0.09)/G)*G;          // ふた回り小さいリング
-    var travel=Math.round(Math.max(G*20, Math.min(fw/2-G*6-R, ch*0.28))/G)*G;
-    var usable=ch-footerH(), need=(R+travel)*2;
-    var top=Math.round(Math.max(G*6, (usable-need)*0.45)/G)*G;  // 上(照明)に割く帯
-    var cy=Math.round((top+R+travel)/G)*G;
+    var cy=Math.round((ch/2)/G)*G;                              // ミクは画面のちょうど中心
+    var R =Math.round(Math.min(fw*0.17, ch*0.09)/G)*G;
+    /* 4方向の助走は同じ長さ。上下に取れる幅も画面中心からの距離で決まるので、
+       上(照明・電光掲示板)と下(客席)が自然に同じ広さになる。 */
+    var travel=Math.round(Math.max(G*20, Math.min(fw/2-G*6-R, cy-R-G*24))/G)*G;
+    var top=cy-R-travel;
     return {cx:cx, cy:cy, R:R, travel:travel, top:top,
-            front:cy+R+travel, floorTop:top, usable:usable};
+            front:cy+R+travel, floorTop:top, usable:ch};
   }
   /* どの方向のノーツも、湧いてから中心に着くまでの時間は同じ(先読み時間ぴったり)。
      上下はリングを盤面の中央に置いたので距離も等しい。
@@ -1146,16 +1147,60 @@
   /* 打ち返したかなは客席へ飛んでいき、ペンライトが1本増える。
      スコアの数字ではなく「景色が光で埋まる」ことで積み上がりを返す。 */
   var lights=[];
-  /* 打ち返したかなが届いた先=客席。ステージの手前(フッターのすぐ上)に並べる。
-     打ち返した方向で左右に散らして、どちらへ返したかが景色にも残るようにする。 */
-  function addLight(dir, col, delay){
-    var x0=fieldX0(), fw=fieldW(), g=ring(), fy=ch-footerH();
+  /* 打ち返したかなが届く先=客席の席。打ち返した方向で左右に散らして、
+     どちらへ返したかが景色にも残るようにする。 */
+  function seatFor(dir){
+    var x0=fieldX0(), fw=fieldW(), g=ring();
     var band = dir==="l" ? [0, 0.38] : dir==="r" ? [0.62, 1] : [0.25, 0.75];
-    var x = x0 + fw*(band[0] + Math.random()*(band[1]-band[0]));
-    var top = g.front+G*6, bot = Math.max(top+G*4, fy-G*4);
-    var y = top + Math.random()*(bot-top);
-    lights.push({x:x, y:y, col:col, at:performance.now()+(delay||0)});
+    var top = g.front+G*8, bot = Math.max(top+G*6, ch-G*8);
+    return {x: x0 + fw*(band[0] + Math.random()*(band[1]-band[0])),
+            y: top + Math.random()*(bot-top)};
+  }
+  function addLight(dir, col, delay){
+    var seat=seatFor(dir);
+    lights.push({x:seat.x, y:seat.y, col:col, at:performance.now()+(delay||0)});
     if(lights.length>70) lights.shift();
+  }
+
+  /* 打ち返したかなが客席へ飛び、道中でペンライトに変わって席に着く。
+     「自分が返した声が客席の灯りになった」という因果を、途切れさせずに見せる。 */
+  var flyers=[], FLY_MS=560;
+  function launchFlyer(dir, kana, from){
+    var seat=seatFor(dir);
+    flyers.push({kana:kana, x0:from.x, y0:from.y, x1:seat.x, y1:seat.y,
+                 col:DIR_COL[dir].lit, at:performance.now()});
+    if(flyers.length>40) flyers.shift();
+  }
+  function drawFlyers(){
+    if(!flyers.length) return;
+    var np=performance.now(), size=noteSize();
+    flyers=flyers.filter(function(f){
+      var p=(np-f.at)/FLY_MS;
+      if(p>=1){ lights.push({x:f.x1, y:f.y1, col:f.col, at:0}); return false; }  // 着席=灯りになる
+      var x=f.x0+(f.x1-f.x0)*p;
+      var y=f.y0+(f.y1-f.y0)*p - Math.sin(p*Math.PI)*G*10;                       // 弧を描いて飛ぶ
+      ctx.save();
+      if(p<0.62){                                   // 前半:かな(だんだん小さく薄く)
+        var a=1-p/0.62;
+        ctx.globalAlpha=0.25+0.75*a;
+        ctx.fillStyle=PAL.ink;
+        ctx.font=Math.round(size*0.5*(0.5+0.5*a))+'px '+PIXEL_FONT;
+        ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillText(f.kana, x, y);
+      }
+      if(p>0.38){                                   // 後半:ペンライトへ変わって立ち上がる
+        var q=(p-0.38)/0.62;
+        var ang=-Math.PI/2 + (1-q)*Math.atan2(f.y1-f.y0, f.x1-f.x0);             // 進行方向→垂直
+        var len=G*2+G*3*q;
+        ctx.globalAlpha=Math.min(1, 0.3+q);
+        for(var i=0;i<=3;i++){
+          var k=i/3;
+          dot(x+Math.cos(ang)*len*k, y+Math.sin(ang)*len*k, G, G, i>=2?PAL.ink:f.col);
+        }
+      }
+      ctx.restore();
+      return true;
+    });
   }
   function loseLight(){ if(lights.length) lights.splice(Math.floor(Math.random()*lights.length),1); }
   /* 客席のペンライトは、拍に合わせて全員でワイパーのように左右へ振る。
@@ -1327,11 +1372,7 @@
        どちらも指で隠れる側を避けた配置になる。
        リフレクト式はミクが中央なので、持ち手と反対の下隅へ置く。 */
     var x, maxW;
-    if(mk && mk.center){                     // リフレクト式:ステージ手前のフッターに納める
-      maxW=Math.round(fieldW()*0.46);
-      x = mikuOnLeft() ? (fieldX0()+G*2) : (fieldX0()+fieldW()-G*2-maxW);
-      top = ch-footerH()+G*4;
-    }
+    if(mk && mk.center) return;              // リフレクト式は電光掲示板に出すのでここでは描かない
     else if(mk && mikuOnLeft()){ x=mk.x+mk.w+G*2; maxW=cw-G-x; }
     else if(mk){ x=fieldX0()+G; maxW=(mk.x-G*2)-x; }
     else { x=fieldX0()+G; maxW=cw-G-x; }
@@ -1498,6 +1539,7 @@
     requestAnimationFrame(drawAttract);
   }
   function stopAttract(){ attractOn=false; }
+  window.DAKEN_FX=function(){ return {flyers:flyers.length, lights:lights.length}; };   // 検証用
   window.DAKEN_LEAD=function(){ return leadMs; };                          // 検証用
   window.DAKEN_RING=function(){ var g=ring(); return {cy:g.cy, R:g.R, travel:g.travel, top:g.top, front:g.front, ch:ch}; };
   window.DAKEN_ADDLIGHT=function(d){ addLight(d, DIR_COL[d].lit, 0); };   // 検証用
@@ -1655,11 +1697,63 @@
     dot(0,fy,cw,G,PAL.rail);
   }
 
+  /* ステージ奥、照明の下に吊るした電光掲示板。曲名とスコアはここで読ませる。
+     盤面の隅に小さく置くより、ライブの掲示板として画に馴染む。 */
+  function drawScoreboard(g){
+    var bw=Math.round(Math.min(fieldW()-G*6, G*100)/G)*G;
+    var bx=Math.round((cw-bw)/2/G)*G;
+    var by=G*15;
+    var bh=Math.round(Math.max(G*16, Math.min(G*24, g.floorTop-by-G*6))/G)*G;
+    if(bh<G*12 || bw<G*30) return;
+    dot(bx-G*2, by-G*2, bw+G*4, bh+G*4, "oklch(30% 0.02 270)");     // 筐体
+    dot(bx-G, by-G, bw+G*2, bh+G*2, "oklch(18% 0.02 268)");
+    dot(bx, by, bw, bh, "oklch(9% 0.02 268)");                      // 表示面
+    dot(bx+bw/2-G, by-G*4, G*2, G*3, PAL.grid);                     // 吊り金具
+    var u=Math.max(2, Math.round(G*0.9));
+    ctx.save();
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    // 1段目:曲名(電球色)
+    ctx.font=Math.round(u*4)+"px "+PIXEL_FONT;
+    ctx.fillStyle="oklch(82% 0.13 85)";
+    var title=songTitle||"打鍵ミライ", tw=ctx.measureText(title).width;
+    while(tw>bw-G*4 && title.length>4){ title=title.slice(0,-2)+"…"; tw=ctx.measureText(title).width; }
+    ctx.fillText(title, bx+bw/2, by+G*4);
+    // 2段目:スコア(大きく)。ラベルは左に添えて数字と重ならないようにする
+    ctx.textAlign="left";
+    ctx.font=Math.round(u*3.4)+"px "+PIXEL_FONT;
+    ctx.fillStyle="oklch(62% 0.03 268)";
+    ctx.fillText("SCORE", bx+G*3, by+G*11);
+    ctx.font=Math.round(u*8)+"px "+PIXEL_FONT;
+    ctx.fillStyle=DIR_COL.u.lit;
+    ctx.fillText(String(state?state.score:0), bx+G*3, by+bh-G*8);
+    if(state && state.combo>=2){
+      var fever=state.combo>=12;
+      ctx.textAlign="right";
+      ctx.fillStyle=fever?DIR_COL.r.lit:"oklch(62% 0.03 268)";
+      ctx.font=Math.round(u*3.4)+"px "+PIXEL_FONT;
+      ctx.fillText(fever?"FEVER":"COMBO", bx+bw-G*3, by+G*11);
+      ctx.font=Math.round(u*6)+"px "+PIXEL_FONT;
+      ctx.fillStyle=fever?DIR_COL.c.lit:PAL.ink;
+      ctx.fillText(String(state.combo), bx+bw-G*3, by+bh-G*8);
+    }
+    ctx.restore();
+    // LED の目地(1ドットおきに暗い線を重ねて電光掲示板らしくする)
+    ctx.save(); ctx.globalAlpha=0.5;
+    for(var yy=by; yy<by+bh; yy+=G*2) dot(bx, yy, bw, G, "oklch(9% 0.02 268)");
+    ctx.restore();
+    // 進捗(掲示板の下辺)
+    var pw=Math.max(G, (bw-G*4)*Math.max(0,Math.min(1,(state&&state.progress)||0)));
+    dot(bx+G*2, by+bh-G*2, bw-G*4, G, PAL.grid);
+    dot(bx+G*2, by+bh-G*2, pw, G, DIR_COL.u.lit);
+  }
+
   function drawReflectField(t){
     var g=ring(), size=noteSize(), k, i;
     drawReflectStage(g);
     var mk=drawMikuCenter();                       // ミクはリングの内側(背面)
+    drawScoreboard(g);                             // 照明の下の電光掲示板
     drawLights();                                  // 客席の灯り(打ち返した記録)
+    drawFlyers();                                  // 打ち返したかな→ペンライトの変身
 
     // 4本の軸。ノーツが通る道を薄く見せて、見る場所を4箇所に固定する
     ["l","u","r","d"].forEach(function(d){
@@ -1761,7 +1855,7 @@
   /* リフレクト式のミクはリングの内側。歌の発生源に歌詞が集まる形にする */
   function drawMikuCenter(){
     var g=ring();
-    var scale=Math.max(2, Math.min(4, Math.floor(g.R*1.1/40)));   // ふた回り小さく
+    var scale=Math.max(3, Math.min(5, Math.floor(g.R*1.6/40)));   // 中心の主役なので一回り大きく
     var w=32*scale, h=40*scale;
     var idle=calmMotion ? 0.5 : (Math.sin(performance.now()/620)+1)/2;
     var bounce=Math.round((beatPulse*2+idle*0.6)*G);
@@ -1928,8 +2022,8 @@
       state.voices=state.voices||[];
       /* 打ち返したかなは、リフレクト式では来た方向へ飛び去り、客席の
          ペンライトが1本増える。レーン式では下段の歌詞バーへ落ちる。 */
-      state.voices.push({kana:n.kana, lane:n.lane, dir:n.dir, x:hp.x, y:hp.y, at:performance.now()});
-      if(isReflect()) addLight(n.dir, DIR_COL[n.dir].lit, 380);
+      if(isReflect()) launchFlyer(n.dir, n.kana, hp);
+      else state.voices.push({kana:n.kana, lane:n.lane, dir:n.dir, x:hp.x, y:hp.y, at:performance.now()});
     }
     showJudge(r.grade,r.delta,n.dir);
     return r.grade;                               // 呼び出し側のフィードバック表示に使う
