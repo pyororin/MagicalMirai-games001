@@ -213,7 +213,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 26</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 27</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -323,7 +323,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 26;
+  var BUILD = 27;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -388,7 +388,11 @@
   })();
 
   /* ============ 判定(src/judge.ts と同一設計) ============ */
-  var WIN={just:100,great:250,good:450,late:600};
+  /* 判定窓。late は「まだ打てる」限界であり、同時に「取りこぼしを MISS と
+     確定するまでの待ち時間」でもある。600ms もあると、失敗音がリズムから
+     半拍以上遅れて鳴り、音ゲーとして違和感になる。打ちやすさを残しつつ、
+     フィードバックがリズムに乗る範囲まで詰める。 */
+  var WIN={just:80,great:180,good:300,late:360};
   var MULT={JUST:2,GREAT:1.5,GOOD:1,TYPED:1,LATE:.5,MISS:0};
   function clampWindow(notes,i){
     var t=notes[i].time;
@@ -545,7 +549,9 @@
     }
     b.textContent="build "+BUILD+" / snd:"+(actx?actx.state:"none")+lat;
   }
-  ["touchstart","pointerdown","mousedown","keydown"].forEach(function(ev){
+  /* click も入れておく: スタートやチュートリアルのボタンを押した時点で
+     解錠と波形の焼き込みを済ませ、最初の一打が生成待ちで遅れないようにする。 */
+  ["touchstart","pointerdown","mousedown","keydown","click"].forEach(function(ev){
     document.addEventListener(ev, unlockAudio, {capture:true, passive:true});
   });
   document.addEventListener("visibilitychange", function(){
@@ -587,31 +593,32 @@
   /* レーンごとに音階を割り当てる(ヨナ抜き五音音階)。打鍵そのものが旋律になり、
      方向が音でも区別できる。上フリックほど高い音にして直感と合わせる。 */
   var SE_PITCH={d:523.25, l:587.33, c:659.25, r:783.99, u:880.00};   // ド レ ミ ソ ラ
-  /* 指を離した瞬間に鳴らす「フリック音」。方向を音でも伝えるため、
-     スライド方向にピッチを動かす(上=上がる/下=下がる/左右=軽く開く)。
-     タップだけは掃引なしの短いクリックにして、区別できるようにする。
-     判定音(seJudge)より前に鳴るので、当たり外れに関係なく操作の手応えが返る。 */
+  /* 指を離した瞬間の音。方向を音でも伝えるため、スライド方向にピッチを動かす
+     (上=上がる/下=下がる/左右=軽く開く)。タップだけは掃引なし。 */
   var SE_SWEEP={u:1.7, d:0.6, l:0.82, r:1.22, c:1};
-  function seInput(dir){
-    var f=(SE_PITCH[dir]||659.25)*0.75;
-    if(dir==="c"){ blip(f, 0.05, "square", 0.24); return; }
-    blip(f, 0.09, "triangle", 0.26, SE_SWEEP[dir]||1);
-    blip(f*2, 0.05, "square", 0.09, SE_SWEEP[dir]||1);   // 倍音を薄く足して抜けを良くする
-  }
+  /* 空打ち(打つノーツが無いとき)。当たり外れではないので、ごく短い無色の音。 */
+  function seFree(){ blip(330, 0.035, "square", 0.10); }
+  /* 実際に鳴らす波形をすべて先に焼いておく。初回だけ生成で詰まると、
+     その一打だけ遅れて聞こえる。 */
   function prewarmTones(a){
+    toneBuffer(a,330,0.035,"square",0.10,undefined);
+    toneBuffer(a,170,0.09,"sawtooth",0.22,0.55);
     Object.keys(SE_PITCH).forEach(function(d){
-      var f=SE_PITCH[d]*0.75;
-      if(d==="c") toneBuffer(a,f,0.05,"square",0.24,undefined);
-      else{ toneBuffer(a,f,0.09,"triangle",0.26,SE_SWEEP[d]); toneBuffer(a,f*2,0.05,"square",0.09,SE_SWEEP[d]); }
+      var f=SE_PITCH[d];
+      toneBuffer(a,f,0.06,"triangle",0.26,SE_SWEEP[d]);
+      toneBuffer(a,f*2,0.07,"square",0.13,1.02);
+      toneBuffer(a,f*1.5,0.05,"square",0.08,undefined);
     });
   }
-  function seJudge(g,dir){
+  /* 打鍵の音は1発だけ。方向(音階)と判定(重ねる倍音)を同時に鳴らす。
+     方向音のあとに判定音を重ねると、音の塊が尾を引いて「遅れて鳴った」と
+     感じられる。リズムゲームでは短く切ることが遅延の体感に効く。 */
+  function seResult(g,dir){
     var f=SE_PITCH[dir]||659.25;
-    if(g==="JUST"){ blip(f,0.10,"triangle",0.20); blip(f*2,0.13,"triangle",0.10,1.02); }
-    else if(g==="GREAT"){ blip(f,0.09,"triangle",0.16); }
-    else if(g==="GOOD"){ blip(f,0.08,"triangle",0.12); }
-    else if(g==="MISS"){ blip(150,0.16,"sawtooth",0.16,0.5); }
-    else if(g==="LATE"||g==="TYPED"){ blip(f*0.75,0.07,"triangle",0.09); }
+    if(g==="MISS"){ blip(170,0.09,"sawtooth",0.22,0.55); return; }
+    blip(f, 0.06, "triangle", 0.26, SE_SWEEP[dir]||1);
+    if(g==="JUST")       blip(f*2,   0.07, "square", 0.13, 1.02);
+    else if(g==="GREAT") blip(f*1.5, 0.05, "square", 0.08);
   }
 
   /* ============================================================
@@ -1441,7 +1448,7 @@
        「はやい/おそい」だけ返せば、次のノーツで直せる。 */
     el.delta.textContent = (g==="MISS") ? "" : (g==="TYPED") ? "先行入力" :
       (Math.abs(delta)<30 ? "ジャスト" : delta>0 ? "おそい" : "はやい");
-    seJudge(g,dir); mikuReact(g); kick(g);
+    seResult(g,dir); mikuReact(g); kick(g);
   }
   /* 打ち損じた場所を歌詞側にも返す。どの字で転んだのかが後から分かる。
      方向違いはノーツを消費しないので一時的な警告色、
@@ -1490,11 +1497,10 @@
   /** 入力(方向)を1つ受け取る。フリックは指を離した時点で呼ばれる */
   function sendDir(dir){
     if(!state||!state.running||state.outroAt) return;
-    seInput(dir);                                 // 離した瞬間の手応え(方向で音が変わる)
     mikuSway=1; mikuSwayDir=dir;                 // 入力方向へ髪がなびく
     var n=target();
     // 打つべきノーツが無いときの空打ちも、無反応にせず「からうち」と伝える
-    if(!n){ showFlickFeedback(dir,"free",null,null); return; }
+    if(!n){ seFree(); showFlickFeedback(dir,"free",null,null); return; }
     if(n.dir!==dir){                              // 方向違いはノーツを消費しない
       showFlickFeedback(dir,"ng",null,n.dir);
       markLyric(n,"warn");
@@ -1513,8 +1519,8 @@
       早めに指を置いて、タイミングで離す、という打ち方ができる必要がある。
       置いている最中に勝手に MISS になると、その打ち方が成立しない。
       ただし置きっぱなしで曲が進むと、離した瞬間に溜まった MISS が一度に出るので、
-      猶予は HOLD_GRACE までに留める。 */
-  var HOLD_GRACE=1200;
+      猶予は HOLD_GRACE までに留める(長すぎると失敗音がさらに遅れる)。 */
+  var HOLD_GRACE=400;
   var heldCount=0;                                   // いま画面に触れている指(＋マウス)の数
   function reap(){
     var t=now();
