@@ -214,4 +214,21 @@ pitfalls:
       期待した挙動にならないとき、まず該当箇所を grep して実ファイルの値を見る。
       ログを仕込んで「呼ばれるはずの関数が呼ばれていない」ことを先に確定させると速い。
     verified: 2026-08-31 (miku-twintail build 5。離し忘れ判定の削除が2度silentに失敗していた)
-    refs: [miku-twintail/prototype/rhythm.html]
+    refs: [miku-twintail/app/src/game/core.js]
+  - id: pages-unreachable-from-sandbox
+    symptom: >
+      デプロイ後の反映確認のために sandbox から公開 URL(*.github.io)を curl すると
+      `CONNECT tunnel failed, response 403` になり、いつまでも成功しない。
+      「まだ反映されていない」と誤解して延々ポーリングしてしまう。
+    cause: >
+      エージェントの外向きプロキシが github.io への CONNECT を許可していない。
+      Pages の配信状況とは無関係で、待っても解消しない。
+    solution: >
+      反映確認は GitHub Actions のワークフロー実行(list_workflow_runs)の
+      conclusion=success で行う。ページの中身の確認はローカルファイルを
+      ヘッドレスブラウザで開いて行い、公開 URL は利用者に提示するだけにする。
+    detection: >
+      curl の終了コード 56 と "CONNECT tunnel failed, response 403"。
+      $HTTPS_PROXY/__agentproxy/status でも許可状況を確認できる。
+    verified: 2026-08-31 (typing-game build 24)
+    refs: [.github/workflows/pages-typing-game.yml]

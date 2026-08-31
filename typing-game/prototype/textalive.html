@@ -74,14 +74,21 @@
   /* ---- 中段:5レーン落下フィールド(横位置=入力方向 / 縦位置=時間) ---- */
   .field{position:relative;flex:1 1 auto;min-height:200px}
   #notes{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .judgepop{position:absolute;left:0;right:0;bottom:40%;text-align:center;pointer-events:none;z-index:2}
-  .judge{font-family:var(--pixel);font-size:clamp(20px,5vw,30px);letter-spacing:.16em;opacity:0;
-    -webkit-text-stroke:3px var(--night);paint-order:stroke fill}
-  .judge.show{animation:pop .42s ease-out}
-  @keyframes pop{0%{opacity:0;transform:translateY(6px) scale(.9)}18%{opacity:1;transform:translateY(0) scale(1.1)}100%{opacity:0;transform:translateY(-6px) scale(1)}}
+  /* 判定は「見逃しようがない」大きさで判定ラインのすぐ上に出す。
+     小さく薄いと、指を動かしている最中の視野には入らない。 */
+  /* 指のそばに出るフィードバックと重ならないよう、落下領域の真ん中に置く */
+  .judgepop{position:absolute;left:0;right:0;bottom:52%;text-align:center;pointer-events:none;z-index:2}
+  .judge{font-family:var(--pixel);font-size:clamp(38px,13vw,72px);letter-spacing:.14em;opacity:0;
+    -webkit-text-stroke:6px var(--night);paint-order:stroke fill;font-weight:700}
+  .judge.show{animation:pop .52s ease-out}
+  @keyframes pop{0%{opacity:0;transform:translateY(10px) scale(.8)}
+    14%{opacity:1;transform:translateY(0) scale(1.22)}
+    30%{opacity:1;transform:scale(1)}
+    100%{opacity:0;transform:translateY(-10px) scale(1)}}
   .judge.JUST{color:var(--hot)} .judge.GREAT{color:var(--key)} .judge.GOOD{color:var(--good)}
   .judge.TYPED{color:var(--dim)} .judge.LATE{color:var(--warn)} .judge.MISS{color:var(--bad)}
-  .delta{display:block;font-family:var(--pixel);font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums;min-height:1.2em}
+  .delta{display:block;font-family:var(--pixel);font-size:15px;color:var(--ink);
+    -webkit-text-stroke:4px var(--night);paint-order:stroke fill;font-variant-numeric:tabular-nums;min-height:1.2em}
   /* はちゅねはフィールドの canvas に直接描くので、この要素はスプライト置き場 */
   #miku{position:absolute;width:0;height:0;opacity:0;pointer-events:none}
 
@@ -167,10 +174,16 @@
   .result td+td{text-align:right;color:var(--ink);font-variant-numeric:tabular-nums}
   .result td .chip{display:inline-block;width:9px;height:9px;margin-right:7px;vertical-align:-1px}
   .overlay .err{color:var(--bad);font-family:var(--pixel);font-size:13px;max-width:52ch;margin:0 auto 14px;word-break:break-all;white-space:pre-line;text-align:left}
+  /* 一時停止中だけ出る「中断してメニューへ」。誤爆しないよう控えめな見た目にする */
+  .overlay .quit{margin-left:8px;background:transparent;border:2px solid var(--line);color:var(--dim)}
+  .overlay .quit:hover{border-color:var(--bad);color:var(--bad)}
   .overlay .share{display:inline-block;margin-left:8px;font-family:var(--pixel);font-size:14px;
     letter-spacing:.08em;padding:11px 18px;color:var(--ink);text-decoration:none;
     border:2px solid var(--line)}
   .overlay .share:hover{border-color:var(--key);color:var(--key)}
+  /* display を指定したぶん [hidden] が効かなくなるので明示的に消す
+     (結果が出る前から共有リンクが見えていた) */
+  .overlay .share[hidden]{display:none}
   .keyhint{font-family:var(--pixel);font-size:11px;color:var(--dim);letter-spacing:.08em;line-height:1.9;margin:10px 0 0}
 
   button{font-family:var(--pixel);font-size:15px;letter-spacing:.08em;background:var(--key);color:var(--night);
@@ -206,7 +219,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 22</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 39</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -221,19 +234,24 @@
     <button class="ghost" data-diff="NORMAL" aria-pressed="true">NORMAL</button>
     <button class="ghost" data-diff="HARD" aria-pressed="false">HARD</button>
     <button class="ghost" id="tutorial">あそびかた</button>
+    <span style="width:10px"></span>
+    <span class="label">持ち手</span>
+    <button class="ghost" data-hand="right" aria-pressed="true" title="右手で打つ(ミクとスコアを左に寄せる)">右</button>
+    <button class="ghost" data-hand="left" aria-pressed="false" title="左手で打つ(ミクとスコアを右に寄せる)">左</button>
+    <span style="width:10px"></span>
+    <span class="label">ノーツ</span>
+    <button class="ghost" data-mode="lane" aria-pressed="true" title="5レーンを上から落ちてくる">レーン</button>
+    <button class="ghost" data-mode="reflect" aria-pressed="false" title="四方から中心へ集まるノーツを打ち返す">リフレクト</button>
     <span style="flex:1"></span>
     <label class="label" for="songPick">課題曲</label>
     <select id="songPick" aria-label="課題曲"></select>
   </div>
 
   <div class="controls">
-    <label class="label" for="lead">先読み</label>
-    <input type="range" id="lead" min="1200" max="3000" step="100" value="2000" aria-label="先読み時間">
-    <span class="label val" id="leadVal">2.0秒</span>
-    <span style="width:10px"></span>
-    <label class="label" for="speed">速度</label>
-    <input type="range" id="speed" min="50" max="100" step="5" value="100" aria-label="再生速度">
-    <span class="label val" id="speedVal">1.00×</span>
+    <label class="label" for="speed">速度倍率</label>
+    <input type="range" id="speed" min="50" max="400" step="25" value="100" aria-label="速度倍率">
+    <span class="label val" id="speedVal">1.0×</span>
+    <input type="range" id="lead" hidden aria-hidden="true"><span id="leadVal" hidden></span>
     <span style="width:10px"></span>
     <label class="label" for="vol">音量</label>
     <input type="range" id="vol" min="0" max="100" step="5" value="80" aria-label="音量">
@@ -276,6 +294,7 @@
         <p class="err" id="ovErr" hidden></p>
         <div class="result" id="ovResult" hidden></div>
         <button id="startBtn" disabled>スタート</button>
+        <button class="quit" id="quitBtn" hidden>メニューへ戻る</button>
         <a class="share" id="share" hidden target="_blank" rel="noopener">結果を共有</a>
         <p class="keyhint">
           <b style="color:var(--key)">←</b> い段 ・
@@ -300,8 +319,10 @@
   <p class="caveat">
     <b>入力:</b> あ段=タップ / い段=← / う段=↑ / え段=→ / お段=↓。「ん」=↑、「ー」=→。
     濁点・半濁点は元の文字と同じ方向で、小書き文字(っ・ぁ・ゃ)は打ちません。<br>
-    <b>先読み</b>は落ちてくる時間(=どれだけ先まで見えるか)です。読みにくいときは長く、
-    詰まって見えるときは短くしてください。<b>速度</b>を1.00×未満にすると練習プレイ扱いになります。
+    <b>ノーツ</b>を「リフレクト」にすると、ノーツが四方から中心のリングへ集まってきます。
+    来た方向へフリックして打ち返す形で、あ段は縮んでくる輪をタップします。<br>
+    <b>速度倍率</b>はノーツの流れる速さです。上げるほどノーツの間隔が広がって読みやすくなり、
+    そのぶん見えている時間は短くなります。1.0×未満にすると曲もゆっくりになり、練習プレイ扱いです。
   </p>
   <footer>
     合成音版のデモは <a href="./demo.html">demo.html</a>。判定コアは <code>src/judge.ts</code> と同一設計。<br>
@@ -316,7 +337,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 22;
+  var BUILD = 39;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -381,7 +402,11 @@
   })();
 
   /* ============ 判定(src/judge.ts と同一設計) ============ */
-  var WIN={just:100,great:250,good:450,late:600};
+  /* 判定窓。late は「まだ打てる」限界であり、同時に「取りこぼしを MISS と
+     確定するまでの待ち時間」でもある。600ms もあると、失敗音がリズムから
+     半拍以上遅れて鳴り、音ゲーとして違和感になる。打ちやすさを残しつつ、
+     フィードバックがリズムに乗る範囲まで詰める。 */
+  var WIN={just:80,great:170,good:250,late:300};
   var MULT={JUST:2,GREAT:1.5,GOOD:1,TYPED:1,LATE:.5,MISS:0};
   function clampWindow(notes,i){
     var t=notes[i].time;
@@ -404,7 +429,6 @@
   var SUSTAIN={EASY:2.0,NORMAL:4.0,HARD:8.0};        // 1かな=1操作なので「操作/秒」
   // HARD でも 8操作/秒(125ms間隔)が上限。実測で最小48msの箇所があり、
   // それは指が物理的に追いつかないため落とす(理論値挑戦であって不可能ではない、に寄せる)
-  var LEAD_DEFAULT={EASY:2500,NORMAL:2000,HARD:1600};
 
   /* ============ 読みデータ(事前生成、data/readings/) ============ */
   function toHira(s){
@@ -500,12 +524,15 @@
      いずれも「最初のタッチで確実に起こす」ことで潰せるので、
      画面のどのタッチ/クリック/キーでも unlockAudio() を通す。
      さらに状態を画面(build 表示の隣)に出して、鳴らないときに切り分けられるようにする。 */
-  var actx=null, seBus=null;
+  var actx=null, seBus=null, unlocked=false;
   function audio(){
     if(!actx){
       var C=window.AudioContext||window.webkitAudioContext;
       if(!C) return null;
-      try{ actx=new C({latencyHint:"interactive"}); }catch(e){ actx=new C(); }
+      /* latencyHint に秒数を渡すと、対応環境では出力バッファをより小さく取る。
+         受け付けない環境のために "interactive" → 引数なし の順で落とす。 */
+      try{ actx=new C({latencyHint:0}); }
+      catch(e1){ try{ actx=new C({latencyHint:"interactive"}); }catch(e2){ actx=new C(); } }
       seBus=actx.createGain(); seBus.gain.value=1.0; seBus.connect(actx.destination);
     }
     if(actx.state!=="running"){
@@ -517,56 +544,94 @@
     // iOS 16.4+ : マナースイッチで Web Audio が消えるのを防ぐ
     try{ if(navigator.audioSession) navigator.audioSession.type="playback"; }catch(e){}
     var a=audio(); if(!a) return;
+    if(unlocked) return;                   // 一度開けたら、以降のタッチでは何もしない
     try{                                   // 無音1サンプルを鳴らして出力経路をこじ開ける
       var b=a.createBuffer(1,1,22050), src=a.createBufferSource();
       src.buffer=b; src.connect(seBus||a.destination); src.start(0);
     }catch(e){}
+    try{ prewarmTones(a); }catch(e){}      // 初回だけ波形生成で詰まるのを避ける
+    if(a.state==="running") unlocked=true;
     soundBadge();
   }
   function soundBadge(){
     var b=document.getElementById("build"); if(!b) return;
-    b.textContent="build "+BUILD+" / snd:"+(actx?actx.state:"none");
+    var lat="";
+    if(actx){                              // 出力遅延の実測(端末差の切り分け用)
+      var ms=Math.round(((actx.outputLatency||actx.baseLatency||0))*1000);
+      if(ms) lat=" "+ms+"ms";
+    }
+    b.textContent="build "+BUILD+" / snd:"+(actx?actx.state:"none")+lat;
   }
-  ["touchstart","pointerdown","mousedown","keydown"].forEach(function(ev){
+  /* click も入れておく: スタートやチュートリアルのボタンを押した時点で
+     解錠と波形の焼き込みを済ませ、最初の一打が生成待ちで遅れないようにする。 */
+  ["touchstart","pointerdown","mousedown","keydown","click"].forEach(function(ev){
     document.addEventListener(ev, unlockAudio, {capture:true, passive:true});
   });
   document.addEventListener("visibilitychange", function(){
     if(!document.hidden && actx && actx.state!=="running") audio();
   });
+  /* 音は毎回オシレータを組むのではなく、波形を焼いた AudioBuffer を使い回す。
+     打鍵のたびにノードグラフを作ると、端末によっては組み立てとパラメータ予約の
+     ぶんだけ遅れて聞こえる。バッファなら start() 一発で、予約時刻も置かない。
+     (出力そのものの遅延は端末側の問題なので、ビルド表示に実測値を出しておく) */
+  var toneCache={};
+  function toneBuffer(a, freq, dur, type, gain, sweep){
+    var key=freq+"|"+dur+"|"+type+"|"+gain+"|"+(sweep||1);
+    if(toneCache[key]) return toneCache[key];
+    var sr=a.sampleRate, n=Math.max(1, Math.round(sr*dur)), buf=a.createBuffer(1,n,sr);
+    var d=buf.getChannelData(0), ph=0, i;
+    for(i=0;i<n;i++){
+      var tt=i/sr, k=tt/dur;
+      var f=freq*(sweep ? Math.pow(sweep,k) : 1);
+      ph+=2*Math.PI*f/sr;
+      var v;
+      if(type==="square") v=(Math.sin(ph)>=0?1:-1)*0.7;
+      else if(type==="triangle") v=2/Math.PI*Math.asin(Math.sin(ph));
+      else if(type==="sawtooth") v=2*(((ph/(2*Math.PI))%1)-0.5);
+      else v=Math.sin(ph);
+      // 立ち上がり 1.5ms の鋭いアタック(遅れて聞こえないように)+ 二次で減衰
+      var env=(tt<0.0015) ? tt/0.0015 : Math.pow(1-Math.min(1,k), 2);
+      d[i]=v*env*gain;
+    }
+    toneCache[key]=buf;
+    return buf;
+  }
   function blip(freq, dur, type, gain, sweep){
     var a=audio(); if(!a) return;
-    /* suspended のまま予約すると currentTime が固まっているので、
-       再開後に「過去の予約」となって無音になる。わずかに先に置いて回避する。 */
-    var o=a.createOscillator(), g=a.createGain(), t=a.currentTime+0.005;
-    o.type=type||"square";
-    o.frequency.setValueAtTime(freq,t);
-    if(sweep) o.frequency.exponentialRampToValueAtTime(Math.max(60,freq*sweep), t+dur);
-    g.gain.setValueAtTime(0.0001,t);
-    g.gain.exponentialRampToValueAtTime(gain||0.18, t+0.006);
-    g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
-    o.connect(g); g.connect(seBus||a.destination); o.start(t); o.stop(t+dur+0.02);
+    var src=a.createBufferSource();
+    src.buffer=toneBuffer(a, freq, dur||0.08, type||"square", gain||0.18, sweep);
+    src.connect(seBus||a.destination);
+    src.start();                       // 予約せず即時に鳴らす
   }
   /* レーンごとに音階を割り当てる(ヨナ抜き五音音階)。打鍵そのものが旋律になり、
      方向が音でも区別できる。上フリックほど高い音にして直感と合わせる。 */
   var SE_PITCH={d:523.25, l:587.33, c:659.25, r:783.99, u:880.00};   // ド レ ミ ソ ラ
-  /* 指を離した瞬間に鳴らす「フリック音」。方向を音でも伝えるため、
-     スライド方向にピッチを動かす(上=上がる/下=下がる/左右=軽く開く)。
-     タップだけは掃引なしの短いクリックにして、区別できるようにする。
-     判定音(seJudge)より前に鳴るので、当たり外れに関係なく操作の手応えが返る。 */
+  /* 指を離した瞬間の音。方向を音でも伝えるため、スライド方向にピッチを動かす
+     (上=上がる/下=下がる/左右=軽く開く)。タップだけは掃引なし。 */
   var SE_SWEEP={u:1.7, d:0.6, l:0.82, r:1.22, c:1};
-  function seInput(dir){
-    var f=(SE_PITCH[dir]||659.25)*0.75;
-    if(dir==="c"){ blip(f, 0.05, "square", 0.24); return; }
-    blip(f, 0.09, "triangle", 0.26, SE_SWEEP[dir]||1);
-    blip(f*2, 0.05, "square", 0.09, SE_SWEEP[dir]||1);   // 倍音を薄く足して抜けを良くする
+  /* 空打ち(打つノーツが無いとき)。当たり外れではないので、ごく短い無色の音。 */
+  function seFree(){ blip(330, 0.035, "square", 0.10); }
+  /* 実際に鳴らす波形をすべて先に焼いておく。初回だけ生成で詰まると、
+     その一打だけ遅れて聞こえる。 */
+  function prewarmTones(a){
+    toneBuffer(a,330,0.035,"square",0.10,undefined);
+    toneBuffer(a,170,0.09,"sawtooth",0.22,0.55);
+    Object.keys(SE_PITCH).forEach(function(d){
+      var f=SE_PITCH[d];
+      toneBuffer(a,f,0.06,"triangle",0.26,SE_SWEEP[d]);
+      toneBuffer(a,f*2,0.07,"square",0.13,1.02);
+      toneBuffer(a,f*1.5,0.05,"square",0.08,undefined);
+    });
   }
-  function seJudge(g,dir){
+  /* 打鍵の音は1発だけ。方向(音階)と判定(重ねる倍音)を同時に鳴らす。
+     方向音のあとに判定音を重ねると、音の塊が尾を引いて「遅れて鳴った」と
+     感じられる。リズムゲームでは短く切ることが遅延の体感に効く。 */
+  function seResult(g,dir){
     var f=SE_PITCH[dir]||659.25;
-    if(g==="JUST"){ blip(f,0.10,"triangle",0.20); blip(f*2,0.13,"triangle",0.10,1.02); }
-    else if(g==="GREAT"){ blip(f,0.09,"triangle",0.16); }
-    else if(g==="GOOD"){ blip(f,0.08,"triangle",0.12); }
-    else if(g==="MISS"){ blip(150,0.16,"sawtooth",0.16,0.5); }
-    else if(g==="LATE"||g==="TYPED"){ blip(f*0.75,0.07,"triangle",0.09); }
+    if(g==="MISS"){ blip(170,0.09,"sawtooth",0.22,0.55); return; }
+    blip(f, 0.06, "triangle", 0.26, SE_SWEEP[dir]||1);
+    if(g==="JUST")       blip(f*2,   0.07, "square", 0.13, 1.02);
+    else if(g==="GREAT") blip(f*1.5, 0.05, "square", 0.08);
   }
 
   /* ============================================================
@@ -666,37 +731,58 @@
   /* ============ 要素 ============ */
   var el={};
   ["screen","field","notes","judge","delta","score","combo","progress","pauseBtn","veil",
-   "overlay","ovTitle","ovText","ovErr","ovResult","startBtn","songmeta","songUrl","loadSong","songPick","hudTitle",
+   "overlay","ovTitle","ovText","ovErr","ovResult","startBtn","quitBtn","songmeta","songUrl","loadSong","songPick","hudTitle",
    "cross","flickfb","lead","leadVal","speed","speedVal","vol","volVal","speedNote","offset","offsetVal","autoCal","share","tutorial"]
     .forEach(function(id){ el[id]=document.getElementById(id); });
 
   var difficulty="NORMAL", player=null, videoPhrases=null, state=null;
 
   /* ============ 再生速度・音量・先読み ============ */
-  var speedRate=1, volume=80, leadMs=2000, offsetMs=0, lastAvgDelta=null;
+  /* 速度倍率ひとつで「ノーツの流れる速さ」を決める。
+     倍率を上げる = 先読み時間が短くなる = 同じ時間差のノーツが遠くに離れる
+     (画面上の間隔 = 速度 x 時間差)。1.0× 未満では曲もゆっくりにして練習に使う。 */
+  var BASE_LEAD=2200;
+  var speedMult=1, speedRate=1, volume=80, leadMs=BASE_LEAD, offsetMs=0, lastAvgDelta=null;
+  function applyMult(){
+    speedRate=Math.min(1, speedMult);                      // 1.0× 未満なら曲もゆっくり
+    leadMs=Math.round(Math.max(400, Math.min(6000, BASE_LEAD/speedMult)));
+    el.speed.value=String(Math.round(speedMult*100));
+    el.speedVal.textContent=speedMult.toFixed(2).replace(/0$/,"")+"×";
+  }
+  /* 持ち手。打つ指で画面の片側が隠れるので、ミクとスコアを反対側へ寄せる。
+     right = 右手で打つ → 右下が指で隠れるので、ミクとスコアは左へ。 */
+  var handed="right";
+  function mikuOnLeft(){ return handed==="right"; }
+  /* ノーツの振り方。lane = 5レーン落下、reflect = 四方から中心へ集まるのを打ち返す。
+     判定(かな→方向・判定窓・密度制御)は共通で、変わるのは湧く場所と描画だけ。 */
+  var mode="lane";
+  function isReflect(){ return mode==="reflect"; }
   function mediaAudio(){ return document.querySelector("#media audio"); }
   function loadPrefs(){
     try{
       var s=localStorage.getItem("daken.speed"), v=localStorage.getItem("daken.volume"),
-          l=localStorage.getItem("daken.lead"), o=localStorage.getItem("daken.offset");
+          l=localStorage.getItem("daken.lead"), o=localStorage.getItem("daken.offset"),
+          h=localStorage.getItem("daken.hand"), md=localStorage.getItem("daken.mode");
+      if(h==="left"||h==="right") handed=h;
+      if(md==="lane"||md==="reflect") mode=md;
       if(o) offsetMs=Math.min(150,Math.max(-150,parseInt(o,10)));
-      if(s) speedRate=Math.min(1,Math.max(.5,parseFloat(s)));
+      if(s) speedMult=Math.min(4,Math.max(.5,parseFloat(s)));
       if(v!==null) volume=Math.min(100,Math.max(0,parseInt(v,10)));
-      if(l) leadMs=Math.min(3000,Math.max(1200,parseInt(l,10)));
+
     }catch(e){}
   }
   function savePrefs(){
     try{
-      localStorage.setItem("daken.speed",String(speedRate));
+      localStorage.setItem("daken.speed",String(speedMult));
       localStorage.setItem("daken.volume",String(volume));
-      localStorage.setItem("daken.lead",String(leadMs));
+
       localStorage.setItem("daken.offset",String(offsetMs));
+      localStorage.setItem("daken.hand",handed);
+      localStorage.setItem("daken.mode",mode);
     }catch(e){}
   }
   function applySpeed(){
     var a=mediaAudio();
-    el.speed.value=String(Math.round(speedRate*100));
-    el.speedVal.textContent=speedRate.toFixed(2)+"×";
     if(!a){ el.speed.disabled=true; el.speedNote.textContent="この楽曲は速度を変えられません"; return; }
     el.speed.disabled=false;
     el.speedNote.textContent = speedRate<1 ? "練習モード(等速ではありません)" : "";
@@ -711,26 +797,25 @@
     try{ if(player && typeof player.volume==="number") player.volume=volume; }catch(e){}
     var a=mediaAudio(); if(a) a.volume=volume/100;
   }
-  function applyLead(){
-    el.lead.value=String(leadMs);
-    el.leadVal.textContent=(leadMs/1000).toFixed(1)+"秒";
-  }
+  function applyLead(){ applyMult(); }                     // 先読みは速度倍率から決まる
   function applyOffset(){
     el.offset.value=String(offsetMs);
     el.offsetVal.textContent=(offsetMs>0?"+":"")+offsetMs+"ms";
     el.autoCal.disabled = (lastAvgDelta==null);
   }
   loadPrefs();
-  el.speed.addEventListener("input",function(){ speedRate=(+el.speed.value)/100; applySpeed(); savePrefs(); });
+  el.speed.addEventListener("input",function(){
+    speedMult=(+el.speed.value)/100; applyMult(); applySpeed(); savePrefs();
+    if(state) drawField();
+  });
   el.vol.addEventListener("input",function(){ volume=+el.vol.value; applyVolume(); savePrefs(); });
-  el.lead.addEventListener("input",function(){ leadMs=+el.lead.value; applyLead(); savePrefs(); });
   el.offset.addEventListener("input",function(){ offsetMs=+el.offset.value; applyOffset(); savePrefs(); });
   el.autoCal.addEventListener("click",function(){
     if(lastAvgDelta==null) return;
     offsetMs=Math.max(-150,Math.min(150,Math.round((offsetMs+lastAvgDelta)/5)*5));
     applyOffset(); savePrefs();
   });
-  applyLead(); applyOffset();
+  applyMult(); applyOffset(); applyHand(); applyMode();   // 保存された設定をボタンに反映
 
   /* ============ 譜面(全ノートを1本の時間軸で持つ) ============ */
   function selectIdx(notes,diff){
@@ -741,6 +826,21 @@
     });
     return out;
   }
+  /* 歌詞の文字ごとの発声区間を一列に並べ、隣り合うものは繋げる。
+     口パクはこれをなぞる(ノーツは難易度で間引かれるので使えない)。 */
+  function mouthSegments(phrases){
+    var segs=[];
+    phrases.forEach(function(p){
+      p.chars.forEach(function(c){
+        var s=c.startTime, e=(c.endTime>c.startTime)?c.endTime:c.startTime+180;
+        var last=segs[segs.length-1];
+        if(last && s-last.e <= 60) last.e=Math.max(last.e,e);   // 息継ぎ未満は繋ぐ
+        else segs.push({s:s, e:e});
+      });
+    });
+    return segs;
+  }
+
   function buildState(){
     var notes=[], phrases=[];
     videoPhrases.forEach(function(vp){
@@ -758,7 +858,8 @@
     });
     return {notes:notes, phrases:phrases, idx:0, pi:0, score:0, combo:0, maxCombo:0, deltas:[],
             counts:{JUST:0,GREAT:0,GOOD:0,TYPED:0,LATE:0,MISS:0}, running:false, effects:[], voices:[],
-            progress:0, outroAt:0, outroMsg:"", fading:false};
+            progress:0, outroAt:0, outroMsg:"", fading:false,
+            mouthSegs:mouthSegments(phrases), mouthCur:0};
   }
   /* 端末ごとの入力・音声遅延を吸収するオフセット。判定にも描画にも同じ時計を使う。
      チュートリアル中は楽曲を使わず、自前の時計で同じ判定パイプラインを回す。 */
@@ -827,7 +928,15 @@
     var h=Math.round(vv ? vv.height : window.innerHeight);
     if(h>0) document.documentElement.style.setProperty("--app-h", h+"px");
   }
-  function relayout(){ syncViewportHeight(); resizeCanvas(); if(state) drawField(); }
+  /* 判定文字の位置。リフレクト式ではリングとミクに重なるので、リングの上へ逃がす */
+  function syncJudgePop(){
+    var pop=document.querySelector(".judgepop"); if(!pop||!ch) return;
+    if(isReflect()){
+      var g=ring();
+      pop.style.bottom=Math.round(ch-(g.cy-g.R-G*6))+"px";
+    } else pop.style.bottom="52%";
+  }
+  function relayout(){ syncViewportHeight(); resizeCanvas(); syncJudgePop(); if(state) drawField(); }
   syncViewportHeight();
   window.addEventListener("resize", relayout);
   window.addEventListener("orientationchange", relayout);
@@ -959,17 +1068,189 @@
       dot(X-G, Y-G, s+G*2, G, PAL.ink); dot(X-G, Y+s, s+G*2, G, PAL.ink);
       dot(X-G, Y, G, s, PAL.ink); dot(X+s, Y, G, s, PAL.ink);
     }
-    // かな
-    ctx.fillStyle=PAL.ink;
-    ctx.font=Math.round(s*0.46)+'px '+PIXEL_FONT;
+    /* 上 6 割がかな、下 4 割が方向記号。台座がかなに掛かると読めなくなるので、
+       それぞれの領域を分けて置く。 */
+    var as=Math.max(3,Math.round(s*0.075));
+    var ax=X+half, ay=Y+s-as*2.8;
+    /* 方向記号。色違いの矢印を同系色の上に置くと明度差が出ず読めないので、
+       暗い台座を敷いて白抜きで描く(どの方向色でもコントラストが同じ)。 */
+    dot(ax-as*2.5-G, ay-as*2.5-G/2, as*5+G*2, as*5+G, PAL.night);
+    spriteCentered(ARROW[n.dir], ax, ay, as, PAL.ink);
+    // かな(矢印より上に、影を敷いて確実に読ませる)
+    ctx.font=Math.round(s*0.44)+'px '+PIXEL_FONT;
     ctx.textAlign="center"; ctx.textBaseline="middle";
-    ctx.fillText(n.kana, X+half, Y+half-s*0.13);
-    // 方向記号(ドット絵)。かなの下に中心を合わせて置く
-    var as=Math.max(2,Math.round(s*0.055));
-    spriteCentered(ARROW[n.dir], X+half, Y+s-as*3.2, as, col.lit);
+    ctx.fillStyle=PAL.shade;
+    ctx.fillText(n.kana, X+half+G, Y+half-s*0.17+G);
+    ctx.fillStyle=PAL.ink;
+    ctx.fillText(n.kana, X+half, Y+half-s*0.17);
     // 歌詞=声、を示す吹き出しの尻尾
     dot(X+half-G, Y+s, G*2, G, col.dark);
     dot(X+half, Y+s+G, G, G, col.dark);
+  }
+
+  /* ============================================================
+     リフレクト式の幾何。ノーツは四辺から中心の判定リングへ収束し、
+     プレイヤーは「来た方向へ」フリックして打ち返す。
+     方向(かなの段)と湧く辺が一致するので、かなを読まなくても打ち方が分かる、
+     という性質はレーン式のまま引き継げる。
+     縦長の画面では軸ごとに距離が違うので、px の速度ではなく
+     「残り時間の比率」で距離を決める(全軸が同時にリングへ着く)。
+     ============================================================ */
+  var AXIS={l:[-1,0], r:[1,0], u:[0,-1], d:[0,1], c:[0,0]};
+  /* レーン式でだけ使う下端の余白(リフレクト式は下も客席に使う) */
+  function footerH(){ return isReflect() ? 0 : Math.round(Math.min(ch*0.14, G*30)/G)*G; }
+  /* ステージの寸法。4方向の助走距離を完全に等しくするため、
+     いちばん狭い軸(縦長画面では左右)に全軸を合わせる。
+     縦に余った上下は、上=照明のトラス、下=客席として使う。 */
+  function ring(){
+    var fw=fieldW(), x0=fieldX0();
+    var cx=Math.round((x0+fw/2)/G)*G;
+    /* ミクはほぼ画面中央。歌詞板を置く上側(照明エリア)を少しだけ広く取るため、
+       中心をわずかに下げる(そのぶん客席が狭くなる)。 */
+    var cy=Math.round((ch*0.53)/G)*G;
+    var R =Math.round(Math.min(fw*0.17, ch*0.09)/G)*G;
+    /* 4方向の助走は同じ長さ。上下に取れる幅も画面中心からの距離で決まるので、
+       上(照明・電光掲示板)と下(客席)が自然に同じ広さになる。 */
+    var travel=Math.round(Math.max(G*20, Math.min(fw/2-G*6-R, cy-R-G*24))/G)*G;
+    var top=cy-R-travel;
+    return {cx:cx, cy:cy, R:R, travel:travel, top:top,
+            front:cy+R+travel, floorTop:top, usable:ch};
+  }
+  /* どの方向のノーツも、湧いてから中心に着くまでの時間は同じ(先読み時間ぴったり)。
+     上下はリングを盤面の中央に置いたので距離も等しい。
+     左右は縦長画面のぶん距離が短いので、そのままだと「遅い」ように見える。
+     ステージの奥から出てくるものとして扱い、遠いうちはゆっくり・手前で加速し、
+     大きさも小さい→大きいと変える(奥行きで速度差を吸収する)。 */
+  function axisR(dir, g){ return g.R + g.travel; }            // 4方向とも同じ長さ・同じ速度
+  function progressOf(dt){ return Math.max(-0.35, Math.min(1, dt/leadMs)); }
+  /** 残り時間 dt のノーツが、いま中心からどれだけ離れているか */
+  function noteRadius(dir, dt, g){
+    return g.R + g.travel*progressOf(dt);
+  }
+  /** 奥から手前へ来るように、遠いほど小さく見せる(一点透視の見え方に合わせる) */
+  function noteScale(dir, dt){
+    return 0.62 + 0.38*(1-Math.max(0,Math.min(1,progressOf(dt))));
+  }
+  /** ノーツ(または判定成立点)の画面座標。効果の位置もここで決める */
+  function notePos(dir, dt, g){
+    g=g||ring();
+    var v=AXIS[dir]||AXIS.c, r=noteRadius(dir, dt||0, g);
+    if(dir==="c") return {x:g.cx, y:g.cy, r:r};
+    return {x:g.cx+v[0]*r, y:g.cy+v[1]*r, r:r};
+  }
+  /** 判定が成立した瞬間の位置(リング上)。打ち返しの起点になる */
+  function hitPos(dir){
+    if(!isReflect()) return {x:laneX(LANE_OF[dir]), y:judgeY()};
+    var g=ring(), v=AXIS[dir]||AXIS.c;
+    if(dir==="c") return {x:g.cx, y:g.cy};
+    return {x:g.cx+v[0]*g.R, y:g.cy+v[1]*g.R};
+  }
+
+  /* 打ち返したかなは客席へ飛んでいき、ペンライトが1本増える。
+     スコアの数字ではなく「景色が光で埋まる」ことで積み上がりを返す。 */
+  var lights=[];
+  /* 打ち返したかなが届く先=客席の席。打ち返した方向で左右に散らして、
+     どちらへ返したかが景色にも残るようにする。 */
+  function seatFor(dir){
+    var x0=fieldX0(), fw=fieldW(), g=ring();
+    var band = dir==="l" ? [0, 0.38] : dir==="r" ? [0.62, 1] : [0.25, 0.75];
+    var top = g.front+G*8, bot = Math.max(top+G*6, ch-G*8);
+    return {x: x0 + fw*(band[0] + Math.random()*(band[1]-band[0])),
+            y: top + Math.random()*(bot-top)};
+  }
+  function addLight(dir, col, delay){
+    var seat=seatFor(dir);
+    lights.push({x:seat.x, y:seat.y, col:col, at:performance.now()+(delay||0)});
+    if(lights.length>70) lights.shift();
+  }
+
+  /* 打ち返したかなが客席へ飛び、道中でペンライトに変わって席に着く。
+     「自分が返した声が客席の灯りになった」という因果を、途切れさせずに見せる。 */
+  var flyers=[], FLY_MS=560;
+  function launchFlyer(dir, kana, from){
+    var seat=seatFor(dir);
+    flyers.push({kana:kana, x0:from.x, y0:from.y, x1:seat.x, y1:seat.y,
+                 col:DIR_COL[dir].lit, at:performance.now()});
+    if(flyers.length>40) flyers.shift();
+  }
+  function drawFlyers(){
+    if(!flyers.length) return;
+    var np=performance.now(), size=noteSize();
+    flyers=flyers.filter(function(f){
+      var p=(np-f.at)/FLY_MS;
+      if(p>=1){ lights.push({x:f.x1, y:f.y1, col:f.col, at:0}); return false; }  // 着席=灯りになる
+      var x=f.x0+(f.x1-f.x0)*p;
+      var y=f.y0+(f.y1-f.y0)*p - Math.sin(p*Math.PI)*G*10;                       // 弧を描いて飛ぶ
+      ctx.save();
+      if(p<0.62){                                   // 前半:かな(だんだん小さく薄く)
+        var a=1-p/0.62;
+        ctx.globalAlpha=0.25+0.75*a;
+        ctx.fillStyle=PAL.ink;
+        ctx.font=Math.round(size*0.5*(0.5+0.5*a))+'px '+PIXEL_FONT;
+        ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillText(f.kana, x, y);
+      }
+      if(p>0.38){                                   // 後半:ペンライトへ変わって立ち上がる
+        var q=(p-0.38)/0.62;
+        var ang=-Math.PI/2 + (1-q)*Math.atan2(f.y1-f.y0, f.x1-f.x0);             // 進行方向→垂直
+        var len=G*2+G*3*q;
+        ctx.globalAlpha=Math.min(1, 0.3+q);
+        for(var i=0;i<=3;i++){
+          var k=i/3;
+          dot(x+Math.cos(ang)*len*k, y+Math.sin(ang)*len*k, G, G, i>=2?PAL.ink:f.col);
+        }
+      }
+      ctx.restore();
+      return true;
+    });
+  }
+  function loseLight(){ if(lights.length) lights.splice(Math.floor(Math.random()*lights.length),1); }
+  /* 客席のペンライトは、拍に合わせて全員でワイパーのように左右へ振る。
+     一本ずつバラバラに揺れると「客席」に見えないので、位相は全体で揃える
+     (2拍で左→右→左の1往復)。 */
+  var wiperPh=0, wiperLast=0;
+  function drawLights(){
+    var np2=performance.now();
+    var beatDur=(beatNow&&beatNow.duration)?beatNow.duration:500;
+    var dtm=wiperLast ? Math.min(120, np2-wiperLast) : 0;
+    wiperLast=np2;
+    wiperPh += dtm/(beatDur*4)*Math.PI*2;          // 4拍で1往復(ゆったり振る)
+    if(!lights.length) return;
+    var swing=(calmMotion?0.25:1)*0.55*Math.sin(wiperPh);   // 振れ角(ラジアン)
+    var len=G*5;
+    lights.forEach(function(L){
+      if(np2<L.at) return;                      // 打ち返したかなが届くまでは灯らない
+      var ang=-Math.PI/2 + swing;               // 真上を基準に左右へ倒す
+      var ex=Math.cos(ang)*len, ey=Math.sin(ang)*len;
+      for(var q=0;q<=4;q++){                    // 根本から先端までドットを並べる
+        var f=q/4;
+        dot(L.x+ex*f, L.y+ey*f, G, G, q>=3 ? PAL.ink : L.col);
+      }
+    });
+  }
+
+  /* ---- 打った/取りこぼしたときの画面の手応え ----
+     判定文字だけでは、指を動かしている最中の視野に入らない。
+     盤面ごと揺らして色をかぶせると、見ていなくても失敗が分かる。 */
+  var shake=0, flash=0, flashCol=PAL.miss;
+  function kick(g){
+    if(g==="MISS"){ shake=1; flash=1; flashCol=PAL.miss; }
+    else if(g==="JUST"){ flash=0.45; flashCol=DIR_COL.c.lit; }
+    else if(g==="GREAT"){ flash=0.3; flashCol=DIR_COL.u.lit; }
+    if(calmMotion) shake=0;                      // モーション低減設定では揺らさない
+  }
+  function drawFlash(){
+    if(flash<=0) return;
+    var a=flash;
+    ctx.save();
+    ctx.globalAlpha=a*0.16; ctx.fillStyle=flashCol; ctx.fillRect(0,0,cw,ch);
+    ctx.globalAlpha=a*0.85;                       // 画面のふちを太く光らせる
+    var b=G*3;
+    ctx.fillStyle=flashCol;
+    ctx.fillRect(0,0,cw,b); ctx.fillRect(0,ch-b,cw,b);
+    ctx.fillRect(0,0,b,ch); ctx.fillRect(cw-b,0,b,ch);
+    ctx.restore();
+    flash=Math.max(0, flash-0.055);
   }
 
   /* ---- 判定ライン:5つのスピーカー ---- */
@@ -983,8 +1264,9 @@
       var w=Math.round(laneW*0.62/G)*G;
       dot(cx-w/2, jy+G*2-p*G, w, h, col.dark);
       dot(cx-w/2+G, jy+G*3-p*G, w-G*2, h-G*2, p>0.2?col.lit:col.base);
-      var as=Math.max(2,Math.round(G*0.9));
-      sprite(ARROW[d], cx-as*2.5, jy+G*4-p*G, as, PAL.shade);
+      var as=Math.max(3,Math.round(G*1.2));
+      sprite(ARROW[d], cx-as*2.5+G, jy+G*4-p*G+G, as, PAL.shade);   // 縁取り
+      sprite(ARROW[d], cx-as*2.5, jy+G*4-p*G, as, PAL.ink);
       pump[i]=Math.max(0,p-0.08);
     }
   }
@@ -1005,8 +1287,9 @@
     var w=32*scale, h=40*scale;
     var idle=calmMotion ? 0.5 : (Math.sin(performance.now()/620)+1)/2;
     var bounce=Math.round((beatPulse*2+idle*0.6)*G);
+    /* 打つ手と反対側へ置く。右手で打つなら右下が指と手のひらで隠れるので左へ。 */
     var x = inMargin ? Math.round((fieldX0()+fieldW()+(marginW-w)/2)/G)*G
-                     : Math.round((cw-w-G*2)/G)*G;
+                     : Math.round((mikuOnLeft() ? G*2 : cw-w-G*2)/G)*G;
     // 下端で切れないよう、必ずスピーカー帯より下・キャンバス内に収める
     var y = Math.round((inMargin ? ch-h-G*3
                                  : Math.min(ch-h-G, jy+speakerBandH()))/G)*G - bounce;
@@ -1029,12 +1312,14 @@
      歌詞は「ミクが何を歌っているか」なので盤面の中にあるほうが視線が動かない。
      ただし読み取るべきはノーツなので、歌詞はノーツより先に描いて必ず下に潜らせ、
      透明度も落とす。歌っている文字だけ明るくし、打ち損じた文字は赤く残す。 */
-  function drawLyrics(t, jy){
+  function drawLyrics(t, topY, opt){
     var P=state.phrases[state.pi];
     if(!P || !P.chars.length) return;
-    var fw=fieldW(), x0=fieldX0(), pad=G*3;
-    var size=Math.max(13, Math.min(Math.round(fw/13), 26));
-    var lh=Math.round(size*1.7), maxW=fw-pad*2;
+    opt=opt||{};
+    var fw=opt.w||fieldW(), x0=(opt.x!=null)?opt.x:fieldX0(), pad=(opt.pad!=null)?opt.pad:G*3;
+    var size=opt.size||Math.max(20, Math.min(Math.round(fieldW()/9), 40));
+    var lh=Math.round(size*(opt.lh||1.7)), maxW=fw-pad*2;
+    var maxLines=opt.maxLines||99;
     ctx.save();
     ctx.textAlign="left"; ctx.textBaseline="alphabetic";
     ctx.font=size+"px "+PIXEL_FONT;
@@ -1045,7 +1330,8 @@
       lines[lines.length-1].push({d:P.chars[i], w:wch});
       used+=wch;
     }
-    var top=Math.round(Math.max(size*2.2, jy*0.26));
+    if(lines.length>maxLines) lines.length=maxLines;      // 枠に収まる行数だけ出す
+    var top=Math.round((opt.x!=null) ? topY : Math.max(size*2.2, topY));
     var np=performance.now();
     lines.forEach(function(ln, li){
       var total=ln.reduce(function(a,c){ return a+c.w; },0);
@@ -1086,10 +1372,15 @@
      ミクの隣なら「見なくてもいい情報」として端に置いておける。 */
   function drawInfoPanel(jy, mk){
     var top=jy+speakerBandH()+G*2;
-    if(top>ch-G*6) return;
-    var x=fieldX0()+G;
-    var right=(mk ? mk.x-G*2 : cw-G);
-    var maxW=right-x;
+    if(!(mk&&mk.center) && top>ch-G*6) return;
+    /* ミクの隣に置く。ミクが左なら情報は右、ミクが右なら情報は左。
+       どちらも指で隠れる側を避けた配置になる。
+       リフレクト式はミクが中央なので、持ち手と反対の下隅へ置く。 */
+    var x, maxW;
+    if(mk && mk.center) return;              // リフレクト式は電光掲示板に出すのでここでは描かない
+    else if(mk && mikuOnLeft()){ x=mk.x+mk.w+G*2; maxW=cw-G-x; }
+    else if(mk){ x=fieldX0()+G; maxW=(mk.x-G*2)-x; }
+    else { x=fieldX0()+G; maxW=cw-G-x; }
     if(maxW<60) return;
     var u=Math.max(2, Math.round(G*0.9));                 // 文字サイズの基準
     ctx.save();
@@ -1131,12 +1422,12 @@
   /* ---- ミクのひとこと(曲終わりの吹き出し) ---- */
   function drawSpeech(text, mk, alpha){
     if(!mk || !text) return;
-    var u=Math.max(2, Math.round(G*0.9)), size=Math.round(u*4.2), lh=Math.round(size*1.5);
+    var u=Math.max(2, Math.round(G*0.9)), size=Math.round(u*7), lh=Math.round(size*1.45);
     ctx.save();
     ctx.font=size+"px "+PIXEL_FONT;
     ctx.textAlign="left"; ctx.textBaseline="top";
-    var maxW=Math.min(mk.x-fieldX0()-G*4, cw*0.62);
-    if(maxW<size*4) maxW=cw*0.62;
+    var maxW=Math.min(mk.x-fieldX0()-G*4, cw*0.8);
+    if(maxW<size*5) maxW=cw*0.8;                    // ミクの左が狭ければ上に大きく出す
     var lines=[""], chars=[].concat(Array.prototype.slice.call(text));
     chars.forEach(function(c){
       var cand=lines[lines.length-1]+c;
@@ -1146,15 +1437,21 @@
     var tw=0;
     lines.forEach(function(l){ tw=Math.max(tw, ctx.measureText(l).width); });
     var bw=Math.round((tw+G*6)/G)*G, bh=Math.round((lines.length*lh+G*5)/G)*G;
-    var bx=Math.max(G*2, Math.min(mk.x-bw+G*4, cw-bw-G*2));
+    // しっぽがミクの頭の上に来る位置へ寄せる(誰が話しているかを迷わせない)。
+    // ミクが左にいるときは右へ、右にいるときは左へ伸ばす。
+    var anchor = mk.center ? Math.round(mk.x+mk.w/2-bw/2)
+               : mikuOnLeft() ? Math.round(mk.x+mk.w*0.55)
+                              : Math.round(mk.x+mk.w*0.45-bw);
+    var bx=Math.max(G*2, Math.min(anchor, cw-bw-G*2));
     var by=Math.max(G*2, mk.y-bh-G*3);
     ctx.globalAlpha=alpha;
     dot(bx+G, by+G, bw, bh, PAL.shade);                   // 影
     dot(bx, by, bw, bh, PAL.night2);                      // 本体
     dot(bx, by, bw, G, PAL.ink); dot(bx, by+bh-G, bw, G, PAL.ink);
     dot(bx, by, G, bh, PAL.ink); dot(bx+bw-G, by, G, bh, PAL.ink);
-    dot(bx+bw-G*5, by+bh, G*2, G, PAL.ink);               // しっぽ(ミクの方へ)
-    dot(bx+bw-G*4, by+bh+G, G*2, G, PAL.ink);
+    var tail = mk.center ? bx+bw/2-G : (mikuOnLeft() ? bx+G*3 : bx+bw-G*5);   // しっぽ(ミクの方へ)
+    dot(tail, by+bh, G*2, G, PAL.ink);
+    dot(mikuOnLeft() ? tail+G : tail+G, by+bh+G, G*2, G, PAL.ink);
     ctx.fillStyle=PAL.ink;
     lines.forEach(function(l,i){ ctx.fillText(l, bx+G*3, by+G*2+i*lh); });
     ctx.restore();
@@ -1163,6 +1460,59 @@
   /* 待機中もステージを動かし続ける(アトラクトモード)。
      デモのノーツが5方向を順に落ちてくるので、押す前に遊び方が伝わる。 */
   var attractOn=false, attractT0=0;
+  /* 待機中のデモ。選んでいる方式のまま見せる(遊ぶ前に画面の作りが伝わる) */
+  function drawAttractLane(t){
+    drawStage(t);
+    var jy=judgeY(), fw=fieldW(), x0=fieldX0(), laneW=fw/5;
+    for(var i=0;i<5;i++){
+      ctx.fillStyle = (i===2) ? "oklch(26% 0.05 300 / .55)" : "oklch(24% 0.04 275 / .45)";
+      ctx.fillRect(Math.round(x0+i*laneW), 0, Math.round(laneW), jy);
+      dot(x0+i*laneW, 0, G, jy, PAL.grid);
+    }
+    dot(x0+fw, 0, G, jy, PAL.grid);
+    drawSpeakers(jy);
+    var size=Math.min(laneW*0.72, ch*0.15, 60), cyc=1400;
+    for(var k=0;k<3;k++){
+      var age=(t - k*cyc/1.2) % (cyc*5);
+      if(age<0) continue;
+      var idx=Math.floor(((t/cyc)|0)+k)%5, dir=LANE_ORDER[idx];
+      var prog=(age%cyc)/cyc;
+      if(prog<0.9) drawNote({kana:"ミク"[k%2]||"ミ", dir:dir, lane:idx},
+                            laneX(idx), prog/0.9*jy, size, false);
+    }
+    drawMikuOnStage(jy);
+  }
+
+  function drawAttractReflect(t){
+    var g=ring(), size=noteSize(), i;
+    drawReflectStage(g);
+    drawMikuCenter();
+    var pulse=Math.round(beatPulse*G*1.5);
+    var rseg=Math.max(48, Math.round(2*Math.PI*g.R/(G*1.6)));
+    for(i=0;i<rseg;i++){                            // 判定リング
+      var a=i/rseg*Math.PI*2;
+      dot(g.cx+Math.cos(a)*(g.R+pulse), g.cy+Math.sin(a)*(g.R+pulse), G, G,
+          (i%6<4) ? PAL.ink : PAL.rail);
+    }
+    // デモノーツ:5種類を順に、外から中心へ寄せる
+    var cyc=1400, kana="ミクとうたう";
+    for(var k=0;k<3;k++){
+      var age=(t - k*cyc/1.4) % (cyc*5);
+      if(age<0) continue;
+      var idx=Math.floor(((t/cyc)|0)+k)%5, dir=LANE_ORDER[idx];
+      var prog=(age%cyc)/cyc;
+      if(prog>=0.92) continue;
+      var p=1-prog/0.92;                            // 1=遠い 0=リング上
+      var n={kana:kana[(idx+k)%kana.length], dir:dir, lane:LANE_OF[dir]};
+      var r=g.R+g.travel*p;
+      if(dir==="c") drawTapRingAt(n, r, g, size, false);
+      else {
+        var v=AXIS[dir];
+        drawNote(n, g.cx+v[0]*r, g.cy+v[1]*r, size*(0.62+0.38*(1-p)), false);
+      }
+    }
+  }
+
   function drawAttract(){
     if(!attractOn) return;
     if(!cw||!ch){                       // レイアウト確定前でもループを止めない
@@ -1174,34 +1524,17 @@
     beatPulse=Math.max(0,1-((t%600)/600)*1.6);
     beatNow={startTime:0,duration:600,position:1+Math.floor(t/600)%4,length:4};
     ctx.clearRect(0,0,cw,ch);
-    drawStage(t);
-    var jy=judgeY(), fw=fieldW(), x0=fieldX0(), laneW=fw/5;
-    for(var i=0;i<5;i++){
-      ctx.fillStyle = (i===2) ? "oklch(26% 0.05 300 / .55)" : "oklch(24% 0.04 275 / .45)";
-      ctx.fillRect(Math.round(x0+i*laneW), 0, Math.round(laneW), jy);
-      dot(x0+i*laneW, 0, G, jy, PAL.grid);
-    }
-    dot(x0+fw, 0, G, jy, PAL.grid);
-    drawSpeakers(jy);
-    // デモノーツ:5方向を順番に落とす
-    var size=Math.min(laneW*0.72, ch*0.15, 60), cyc=1400;
-    for(var k=0;k<3;k++){
-      var age=(t - k*cyc/1.2) % (cyc*5);
-      if(age<0) continue;
-      var idx=Math.floor(((t/cyc)|0)+k)%5, dir=LANE_ORDER[idx];
-      var prog=(age%cyc)/cyc;
-      if(prog<0.9) drawNote({kana:"ミク"[k%2]||"ミ", dir:dir, lane:idx},
-                            laneX(idx), prog/0.9*jy, size, false);
-    }
-    drawMikuOnStage(jy);
+    var logoY;
+    if(isReflect()){ drawAttractReflect(t); logoY=ring().front+G*10; }
+    else { drawAttractLane(t); logoY=ch*0.30; }
     // ロゴ
     ctx.save();
     ctx.textAlign="center"; ctx.textBaseline="middle";
     ctx.fillStyle=PAL.shade;
     ctx.font='bold '+Math.round(Math.min(cw*0.14,64))+'px '+PIXEL_FONT;
-    ctx.fillText("打鍵ミライ", cw/2+G, ch*0.30+G);
+    ctx.fillText("打鍵ミライ", cw/2+G, logoY+G);
     ctx.fillStyle=PAL.ink;
-    ctx.fillText("打鍵ミライ", cw/2, ch*0.30);
+    ctx.fillText("打鍵ミライ", cw/2, logoY);
     ctx.restore();
     if(attractOn) requestAnimationFrame(drawAttract);
   }
@@ -1211,6 +1544,10 @@
     requestAnimationFrame(drawAttract);
   }
   function stopAttract(){ attractOn=false; }
+  window.DAKEN_FX=function(){ return {flyers:flyers.length, lights:lights.length}; };   // 検証用
+  window.DAKEN_LEAD=function(){ return leadMs; };                          // 検証用
+  window.DAKEN_RING=function(){ var g=ring(); return {cy:g.cy, R:g.R, travel:g.travel, top:g.top, front:g.front, ch:ch}; };
+  window.DAKEN_ADDLIGHT=function(d){ addLight(d, DIR_COL[d].lit, 0); };   // 検証用
   window.DAKEN_ATTRACT={start:startAttract, stop:stopAttract,
     peek:function(){ return {attractOn:attractOn, cw:cw, ch:ch, t:attractT0}; }};
 
@@ -1219,8 +1556,40 @@
     var t=now(), jy=judgeY(), fw=fieldW(), x0=fieldX0(), laneW=fw/5, i;
     updateMusic(t); tickHue();
     ctx.clearRect(0,0,cw,ch);
+    ctx.save();
+    if(shake>0){                                   // ミスで盤面ごと揺らす
+      ctx.translate(Math.round((Math.random()-0.5)*G*2.4*shake),
+                    Math.round((Math.random()-0.5)*G*2.4*shake));
+      shake=Math.max(0, shake-0.16);
+    }
     drawStage(t);
 
+    var mk=null;
+    if(isReflect()) mk=drawReflectField(t);   // ステージ→ミク→リング→ノーツ の順に描く
+    else drawLaneField(t, jy, fw, x0, laneW);
+
+    var size=noteSize();
+    var np=performance.now();                 // ↓の演出はどちらも実時間で減衰させる
+    drawVoices(t, np, size, jy);
+    drawHitEffects(np, size);
+    if(!isReflect()) mk=drawMikuOnStage(jy);
+    drawInfoPanel(jy, mk);             // 曲名・スコア・コンボ・進捗はミクの左へ
+    if(state.outroAt){                 // 曲の終わり:ミクがひとこと話す
+      var oa=Math.min(1,(performance.now()-state.outroAt)/260);
+      drawSpeech(state.outroMsg, mk, oa);
+    }
+    ctx.restore();                     // 揺れの分の平行移動を戻す
+    drawFlash();                       // 色かぶせは揺れの影響を受けない位置で
+  }
+
+  function noteSize(){
+    return isReflect() ? Math.min(fieldW()*0.16, ch*0.10, 56)
+                       : Math.min(fieldW()/5*0.72, ch*0.15, 60);
+  }
+
+  /* ---- レーン式(上から落ちてくる) ---- */
+  function drawLaneField(t, jy, fw, x0, laneW){
+    var i;
     // レーン(床の帯)。中央の●レーンだけ少し明るくして基準にする
     for(i=0;i<5;i++){
       var x=x0+i*laneW;
@@ -1236,55 +1605,338 @@
       if(y>-20 && y<jy-G*2) for(var x3=x0;x3<x0+fw;x3+=G*3) dot(x3,y,G,G,PAL.rail);
     });
 
-    drawLyrics(t, jy);                 // ノーツより先に描く = 必ずノーツの下になる
+    drawLyrics(t, Math.round(Math.max(noteSize()*1.4, jy*0.26)));  // ノーツより先 = 必ず下になる
     drawSpeakers(jy);
 
-    // 最初のノーツが来るまでのカウントイン
-    var first=state.notes[state.idx];
-    if(first){
-      var until=first.time-t;
-      if(until>0 && until<4000 && state.idx===0){
-        var beats=Math.ceil(until/((beatNow&&beatNow.duration)||500));
-        ctx.save();
-        ctx.textAlign="center"; ctx.textBaseline="middle";
-        ctx.fillStyle=PAL.ink;
-        ctx.font=Math.round(Math.min(cw*0.16,72))+'px '+PIXEL_FONT;
-        ctx.globalAlpha=Math.min(0.8,until/600);
-        ctx.fillText(String(Math.min(9,beats)), fieldX0()+fieldW()/2, ch*0.42);
-        ctx.font=Math.round(Math.min(cw*0.05,20))+'px '+PIXEL_FONT;
-        ctx.fillText("READY", fieldX0()+fieldW()/2, ch*0.42+Math.min(cw*0.13,58));
-        ctx.restore();
-      }
-    }
-
     // ノーツ
-    var size=Math.min(laneW*0.72, ch*0.15, 60);
+    var size=noteSize();
     for(var k=state.idx; k<state.notes.length; k++){
       var n=state.notes[k], dt=n.time-t;
       if(dt>leadMs) break;
       if(dt < -WIN.late) continue;
       drawNote(n, laneX(n.lane), jy-dt/leadMs*jy, size, k===state.idx);
     }
+  }
 
-    // 打ったかなが下段の歌詞バーへ落ちていく(ミクの口元へ運ばれる)
-    var np=performance.now();                 // ↓の演出はどちらも実時間で減衰させる
-    state.voices=(state.voices||[]).filter(function(v){ return np-v.at<620; });
-    state.voices.forEach(function(v){
-      var a=1-(np-v.at)/620;
-      ctx.save();
-      ctx.globalAlpha=a*a;
-      ctx.fillStyle=PAL.ink;
-      ctx.font=Math.round(size*0.42)+'px '+PIXEL_FONT;
-      ctx.textAlign="center"; ctx.textBaseline="middle";
-      ctx.fillText(v.kana, laneX(v.lane), jy+(1-a)*(ch-jy)*0.85);
+  /* ---- リフレクト式(四方から中心へ集まるのを打ち返す) ---- */
+  /* ステージとして組み立てる: 奥(地平線と背面のトラス)、左右(袖のスピーカー)、
+     手前(フッター= 曲名とスコア)。ミクはその中央に立っている。 */
+  function drawReflectStage(g){
+    var hz=g.floorTop, front=g.front, fy=ch-footerH(), i, q;
+
+    /* ---- 奥: 照明のトラス ---- */
+    dot(0,0,cw,hz,PAL.night);
+    ctx.save(); ctx.globalAlpha=0.5;               // 奥の壁。下ほど明るくして距離を出す
+    for(var wy=G*14; wy<hz; wy+=G*2){
+      var k=(wy-G*14)/Math.max(1,hz-G*14);
+      for(var wx=(wy/G%2)*G; wx<cw; wx+=G*2) if(((wx*7+wy*13)%97)/97 < k*0.5) dot(wx,wy,G,G,PAL.night2);
+    }
+    ctx.restore();
+    for(i=0;i<3;i++) dot(0, G*(2+i*3), cw, G, i===1?PAL.rail:PAL.grid);   // トラスの桁
+    var lampN=Math.max(4, Math.floor(cw/(G*14)));
+    for(i=0;i<lampN;i++){
+      var lx=Math.round((cw*(i+0.5)/lampN)/G)*G;
+      var col=DIR_COL[LANE_ORDER[i%5]];
+      var on=beatPulse>0.35 || chorusNow;
+      dot(lx-G, G*8, G*3, G*3, "oklch(24% 0.02 270)");
+      dot(lx, G*10, G, G*2, on?col.lit:col.base);
+      if(!calmMotion){                             // 奥から手前へ落ちるビーム(拍で強くなる)
+        ctx.save(); ctx.globalAlpha=0.05+(on?0.10:0)+beatPulse*0.10;
+        for(q=1;q<=7;q++){
+          var by=G*12+q*Math.round((hz-G*12)/7);
+          var half=G*2+q*G*2;
+          dot(lx-half, by, half*2, G, col.base);
+        }
+        ctx.restore();
+      }
+    }
+    dot(0,hz-G,cw,G,PAL.rail);                     // 奥の壁と床の境目
+
+    /* ---- ステージ床: 一点透視。消失点はミクの立ち位置(リング中心) ---- */
+    dot(0,hz,cw,front-hz,PAL.night2);
+    ctx.save(); ctx.globalAlpha=0.55;
+    for(i=0;i<28;i++){                             // 消失点から放射する床の目地
+      var a=i/28*Math.PI*2, cs=Math.cos(a), sn=Math.sin(a);
+      var r=g.R*1.15, step=G*1.2;
+      while(r < Math.max(cw,ch)*1.2){
+        var x=g.cx+cs*r, y=g.cy+sn*r;
+        if(y>=hz && y<=front && x>=0 && x<=cw) dot(x,y,G,G,PAL.grid);
+        else if(y>front || y<hz) break;
+        step*=1.09; r+=step;                       // 手前ほど間隔が広い = 奥行き
+      }
+    }
+    for(q=1;q<=9;q++){                             // 同心の床リング(手前ほど広い)
+      var rr=g.R*1.15*Math.pow(1.33,q);
+      var seg=Math.max(30, Math.round(2*Math.PI*rr/(G*6)));
+      for(i=0;i<seg;i++){
+        var aa=i/seg*Math.PI*2;
+        var px=g.cx+Math.cos(aa)*rr, py=g.cy+Math.sin(aa)*rr;
+        if(py<hz || py>front || px<0 || px>cw) continue;
+        dot(px,py,G,G,PAL.grid);
+      }
+    }
+    ctx.restore();
+
+    /* ---- 左右: 袖のスピーカー。奥から手前へ広がって見えるように台形に積む ---- */
+    [0,1].forEach(function(sideI){
+      var right=!!sideI;
+      for(q=0;q<4;q++){
+        var t0=q/4, t1=(q+1)/4;
+        var y0=hz+(front-hz)*t0, y1=hz+(front-hz)*t1;
+        var w0=G*3+G*7*t0, w1=G*3+G*7*t1;
+        var x0a=right?cw-w0:0, x1a=right?cw-w1:0;
+        dot(x0a, y0, w0, y1-y0, "oklch(21% 0.03 272)");
+        dot(right?x1a:w1-G, y1-G*2, G, G*2, PAL.rail);
+        dot(right?cw-w1+G*2:w1-G*4, y0+G*2, G*2, G*2,
+            beatPulse>0.4?DIR_COL.c.dark:PAL.grid);
+      }
+    });
+
+    /* ---- 手前: ステージの前端と客席 ---- */
+    dot(0,front,cw,G*2,PAL.ink);                   // 前端(エッジ)
+    for(var fx2=G*2; fx2<cw; fx2+=G*9) dot(fx2, front+G*2, G*3, G, DIR_COL.c.dark);  // フットライト
+    dot(0,front+G*3,cw,fy-front-G*3,"oklch(11% 0.025 268)");                          // 客席
+
+    /* ---- いちばん手前: 情報を置くフッター ---- */
+    dot(0,fy,cw,ch-fy,"oklch(9% 0.02 268)");
+    dot(0,fy,cw,G,PAL.rail);
+  }
+
+  /* ステージ奥、照明の下に吊るした電光掲示板。曲名とスコアはここで読ませる。
+     盤面の隅に小さく置くより、ライブの掲示板として画に馴染む。 */
+  function scoreboardBox(g){
+    var bw=Math.round(Math.min(fieldW()-G*6, G*100)/G)*G;
+    return {x:Math.round((cw-bw)/2/G)*G, y:G*15, w:bw,
+            h:Math.round(Math.max(G*14, Math.min(G*20, (g.floorTop-G*15)*0.34))/G)*G};
+  }
+  function drawScoreboard(g){
+    var box=scoreboardBox(g);
+    var bw=box.w, bx=box.x, by=box.y, bh=box.h;
+    if(bh<G*12 || bw<G*30) return;
+    dot(bx-G*2, by-G*2, bw+G*4, bh+G*4, "oklch(30% 0.02 270)");     // 筐体
+    dot(bx-G, by-G, bw+G*2, bh+G*2, "oklch(18% 0.02 268)");
+    dot(bx, by, bw, bh, "oklch(9% 0.02 268)");                      // 表示面
+    dot(bx+bw/2-G, by-G*4, G*2, G*3, PAL.grid);                     // 吊り金具
+    /* 3段組み。高さから行位置を決めて、板が縮んでも重ならないようにする */
+    var u=Math.max(2, Math.round(G*0.9));
+    var rTitle=by+bh*0.17, rLabel=by+bh*0.48, rNum=by+bh*0.76;
+    ctx.save();
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.font=Math.round(u*3.6)+"px "+PIXEL_FONT;      // 1段目:曲名(電球色)
+    ctx.fillStyle="oklch(82% 0.13 85)";
+    var title=songTitle||"打鍵ミライ", tw=ctx.measureText(title).width;
+    while(tw>bw-G*4 && title.length>4){ title=title.slice(0,-2)+"…"; tw=ctx.measureText(title).width; }
+    ctx.fillText(title, bx+bw/2, rTitle);
+    ctx.textAlign="left";                              // 2〜3段目:スコア(左)
+    ctx.font=Math.round(u*3)+"px "+PIXEL_FONT;
+    ctx.fillStyle="oklch(62% 0.03 268)";
+    ctx.fillText("SCORE", bx+G*3, rLabel);
+    ctx.font=Math.round(u*6)+"px "+PIXEL_FONT;
+    ctx.fillStyle=DIR_COL.u.lit;
+    ctx.fillText(String(state?state.score:0), bx+G*3, rNum);
+    if(state && state.combo>=2){                       // コンボ(右)
+      var fever=state.combo>=12;
+      ctx.textAlign="right";
+      ctx.fillStyle=fever?DIR_COL.r.lit:"oklch(62% 0.03 268)";
+      ctx.font=Math.round(u*3)+"px "+PIXEL_FONT;
+      ctx.fillText(fever?"FEVER":"COMBO", bx+bw-G*3, rLabel);
+      ctx.font=Math.round(u*5)+"px "+PIXEL_FONT;
+      ctx.fillStyle=fever?DIR_COL.c.lit:PAL.ink;
+      ctx.fillText(String(state.combo), bx+bw-G*3, rNum);
+    }
+    ctx.restore();
+    // LED の目地(1ドットおきに暗い線を重ねて電光掲示板らしくする)
+    ctx.save(); ctx.globalAlpha=0.5;
+    for(var yy=by; yy<by+bh; yy+=G*2) dot(bx, yy, bw, G, "oklch(9% 0.02 268)");
+    ctx.restore();
+    // 進捗(掲示板の下辺)
+    var pw=Math.max(G, (bw-G*4)*Math.max(0,Math.min(1,(state&&state.progress)||0)));
+    dot(bx+G*2, by+bh-G*1.5, bw-G*4, G, PAL.grid);
+    dot(bx+G*2, by+bh-G*1.5, pw, G, DIR_COL.u.lit);
+  }
+
+  /* 歌詞の掲示板。曲名・スコアの掲示板の下に、もう一枚吊るす。
+     客席側に置くと視線が判定リングから遠く離れるので、
+     ノーツ・ミク・歌詞がすべて画面の上半分に収まるようにする。 */
+  function lyricBoardBox(g){
+    var bw=Math.round(Math.min(fieldW()-G*4, G*116)/G)*G;
+    var bx=Math.round((cw-bw)/2/G)*G;
+    var by=scoreboardBox(g).y + scoreboardBox(g).h + G*5;
+    var bh=Math.round(Math.max(G*14, Math.min(G*30, g.floorTop-by-G*4))/G)*G;
+    return {x:bx, y:by, w:bw, h:bh};
+  }
+  function drawLyricBoard(t, g){
+    var b=lyricBoardBox(g);
+    if(b.h<G*12 || b.w<G*30) return;
+    dot(b.x-G*2, b.y-G*2, b.w+G*4, b.h+G*4, "oklch(30% 0.02 270)");   // 筐体
+    dot(b.x-G, b.y-G, b.w+G*2, b.h+G*2, "oklch(18% 0.02 268)");
+    dot(b.x, b.y, b.w, b.h, "oklch(9% 0.02 268)");                    // 表示面
+    dot(b.x+G*6, b.y-G*4, G*2, G*3, PAL.grid);                        // 吊り金具
+    dot(b.x+b.w-G*8, b.y-G*4, G*2, G*3, PAL.grid);
+    var size=Math.max(13, Math.min(Math.round(b.w/16), 26));
+    drawLyrics(t, b.y+G*2+size, {x:b.x, w:b.w, pad:G*2, size:size, lh:1.55, maxLines:2});
+    ctx.save(); ctx.globalAlpha=0.5;                                  // LED の目地
+    for(var yy=b.y; yy<b.y+b.h; yy+=G*2) dot(b.x, yy, b.w, G, "oklch(9% 0.02 268)");
+    ctx.restore();
+  }
+
+  function drawReflectField(t){
+    var g=ring(), size=noteSize(), k, i;
+    drawReflectStage(g);
+    var mk=drawMikuCenter();                       // ミクはリングの内側(背面)
+    drawScoreboard(g);                             // 照明の下の電光掲示板
+    drawLights();                                  // 客席の灯り(打ち返した記録)
+    drawFlyers();                                  // 打ち返したかな→ペンライトの変身
+
+    // 4本の軸。ノーツが通る道を薄く見せて、見る場所を4箇所に固定する
+    ["l","u","r","d"].forEach(function(d){
+      var v=AXIS[d], col=DIR_COL[d], R=axisR(d,g);
+      ctx.save(); ctx.globalAlpha=0.3;
+      for(var q=g.R+G*3; q<R; q+=G*3){
+        dot(g.cx+v[0]*q, g.cy+v[1]*q, G, G, col.dark);
+        dot(g.cx+v[0]*q+(v[1]?G*2:0), g.cy+v[1]*q+(v[0]?G*2:0), G, G, PAL.grid);
+        dot(g.cx+v[0]*q-(v[1]?G*2:0), g.cy+v[1]*q-(v[0]?G*2:0), G, G, PAL.grid);
+      }
       ctx.restore();
     });
 
+    drawLyricBoard(t, g);                          // 歌詞は照明エリアの掲示板に出す
+
+    // 判定リング
+    var pulse=Math.round(beatPulse*G*1.5);
+    var rseg=Math.max(48, Math.round(2*Math.PI*g.R/(G*1.6)));
+    for(i=0;i<rseg;i++){
+      var a=i/rseg*Math.PI*2;
+      dot(g.cx+Math.cos(a)*(g.R+pulse), g.cy+Math.sin(a)*(g.R+pulse), G, G,
+          (i%6<4) ? PAL.ink : PAL.rail);
+    }
+    /* 次に打つ方向は、リングの「その辺」を光らせて示す。
+       中心はミクが立つので、そこに置くと読めない。 */
+    var nx=state.notes[state.idx];
+    if(nx){
+      var col=DIR_COL[nx.dir];
+      var as=Math.max(3, Math.round(g.R*0.10));
+      if(nx.dir==="c"){                            // あ段はリング全体を光らせる
+        for(i=0;i<rseg;i++){
+          var ac=i/rseg*Math.PI*2;
+          dot(g.cx+Math.cos(ac)*(g.R+pulse), g.cy+Math.sin(ac)*(g.R+pulse), G, G, col.lit);
+        }
+      } else {
+        var base={l:Math.PI, r:0, u:-Math.PI/2, d:Math.PI/2}[nx.dir];
+        for(i=-10;i<=10;i++){
+          var aa=base+i/10*0.6;
+          dot(g.cx+Math.cos(aa)*(g.R+pulse), g.cy+Math.sin(aa)*(g.R+pulse), G*2, G*2, col.lit);
+        }
+        var v2=AXIS[nx.dir];
+        var ix=g.cx+v2[0]*(g.R-as*2.8), iy=g.cy+v2[1]*(g.R-as*2.8);
+        dot(ix-as*2.5-G, iy-as*2.5-G, as*5+G*2, as*5+G*2, PAL.night);
+        spriteCentered(ARROW[nx.dir], ix, iy, as, PAL.ink);
+      }
+    }
+
+    // ノーツ
+    for(k=state.idx; k<state.notes.length; k++){
+      var n=state.notes[k], dt=n.time-t;
+      if(dt>leadMs) break;
+      if(dt < -WIN.late) continue;
+      if(n.dir==="c") drawTapRing(n, dt, g, size, k===state.idx);
+      else {
+        var p=notePos(n.dir, dt, g);
+        drawNote(n, p.x, p.y, size*noteScale(n.dir, dt), k===state.idx);
+      }
+    }
+    return mk;
+  }
+
+  /* あ段は「4方向のノーツが円で繋がって一緒に降りてくる」形。
+     他の4方向と同じタイミングでリングに着くので、タップの瞬間が同じ基準で読める。
+     内側から広がる方式は、いつ来るのかが他と別基準になって分かりづらかった。 */
+  function drawTapRing(n, dt, g, size, isNext){
+    drawTapRingAt(n, noteRadius("c", dt, g), g, size, isNext);
+  }
+  function drawTapRingAt(n, r, g, size, isNext){
+    var col=DIR_COL.c;
+    if(r<=G) return;
+    var seg=Math.max(28, Math.round(2*Math.PI*r/(G*2.4)));
+    ctx.save();
+    ctx.globalAlpha=isNext?0.95:0.6;
+    for(var i=0;i<seg;i++){                        // 4点を繋ぐ円
+      var a=i/seg*Math.PI*2, cs=Math.cos(a), sn=Math.sin(a);
+      dot(g.cx+cs*r, g.cy+sn*r, G, G, isNext?col.lit:col.base);
+      dot(g.cx+cs*(r-G), g.cy+sn*(r-G), G, G, col.dark);
+    }
+    ctx.restore();
+    var hs=Math.round(size*0.42);                  // 4方向の頭
+    ["l","u","r","d"].forEach(function(d){
+      var v=AXIS[d], hx=g.cx+v[0]*r, hy=g.cy+v[1]*r;
+      dot(hx-hs/2, hy-hs/2, hs, hs, col.dark);
+      dot(hx-hs/2+G, hy-hs/2+G, hs-G*2, hs-G*2, isNext?col.lit:col.base);
+    });
+    // かなは斜め上(45°)。上下左右は4方向の通り道なので置かない
+    var kx=g.cx-r*0.707, ky=g.cy-r*0.707;
+    ctx.save();
+    ctx.font=Math.round(size*0.5)+'px '+PIXEL_FONT;
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    var kw=ctx.measureText(n.kana).width;
+    dot(kx-kw/2-G, ky-size*0.32, kw+G*2, size*0.64, PAL.night);
+    ctx.fillStyle=isNext?PAL.ink:col.lit;
+    ctx.fillText(n.kana, kx, ky);
+    ctx.restore();
+  }
+
+  /* リフレクト式のミクはリングの内側。歌の発生源に歌詞が集まる形にする */
+  function drawMikuCenter(){
+    var g=ring();
+    var scale=Math.max(3, Math.min(5, Math.floor(g.R*1.6/40)));   // 中心の主役なので一回り大きく
+    var w=32*scale, h=40*scale;
+    var idle=calmMotion ? 0.5 : (Math.sin(performance.now()/620)+1)/2;
+    var bounce=Math.round((beatPulse*2+idle*0.6)*G);
+    var x=Math.round((g.cx-w/2)/G)*G, y=Math.round((g.cy-h/2)/G)*G-bounce;
+    ctx.save();
+    ctx.imageSmoothingEnabled=false;
+    ctx.globalAlpha=0.9;
+    if(mikuSway>0){
+      ctx.globalAlpha=mikuSway*0.3;
+      var dx=(mikuSwayDir==="l"?-1:mikuSwayDir==="r"?1:0)*G*2;
+      var dy=(mikuSwayDir==="u"?-1:mikuSwayDir==="d"?1:0)*G*2;
+      ctx.drawImage(mikuCv, x+dx, y+dy, w, h);
+      ctx.globalAlpha=0.9;
+      mikuSway=Math.max(0,mikuSway-0.06);
+    }
+    ctx.drawImage(mikuCv, x, y, w, h);
+    ctx.restore();
+    return {x:x, y:y, w:w, h:h, scale:scale, center:true};
+  }
+
+  /* ---- 打ったかなの行方(モードで向きが変わる) ---- */
+  function drawVoices(t, np, size, jy){
+    state.voices=(state.voices||[]).filter(function(v){ return np-v.at<620; });
+    state.voices.forEach(function(v){
+      var a=1-(np-v.at)/620, x, y;
+      if(isReflect()){                       // 来た方向へ打ち返して客席まで飛んでいく
+        var vec=AXIS[v.dir]||AXIS.c, fly=(1-a)*Math.max(cw,ch)*0.75;
+        x=(v.x||0)+vec[0]*fly; y=(v.y||0)+vec[1]*fly;
+        if(v.dir==="c"){ x=v.x; y=v.y-(1-a)*ch*0.25; }
+      } else {                               // 下段の歌詞バーへ落ちていく
+        x=laneX(v.lane); y=jy+(1-a)*(ch-jy)*0.85;
+      }
+      ctx.save();
+      ctx.globalAlpha=a*a;
+      ctx.fillStyle=PAL.ink;
+      ctx.font=Math.round(size*(isReflect()?0.5:0.42))+'px '+PIXEL_FONT;
+      ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText(v.kana, x, y);
+      ctx.restore();
+    });
+  }
+
+  function drawHitEffects(np, size){
     // ノーツが消えるときの破裂。JUST/GREAT ほど大きく、リングと破片で「消えた」を伝える
     var FX_MS=420;
     state.effects=state.effects.filter(function(fx){ return np-fx.at<FX_MS; });
     state.effects.forEach(function(fx){
-      var age=(np-fx.at)/FX_MS, a=1-age, cx=laneX(fx.lane);
+      var age=(np-fx.at)/FX_MS, a=1-age;
+      var cx=(fx.x!=null)?fx.x:laneX(fx.lane), cy=(fx.y!=null)?fx.y:judgeY();
       var miss=fx.color==="MISS";
       var col=miss ? PAL.miss : DIR_COL[fx.dir].lit;
       var big=(fx.grade==="JUST"||fx.grade==="GREAT") ? 1.25 : 1;
@@ -1292,7 +1944,7 @@
       if(age<0.35){
         var fs=size*(1-age/0.35)*0.9*big;
         ctx.save(); ctx.globalAlpha=0.9*(1-age/0.35);
-        dot(cx-fs/2, jy-fs/2, fs, fs, miss?PAL.miss:PAL.ink);
+        dot(cx-fs/2, cy-fs/2, fs, fs, miss?PAL.miss:PAL.ink);
         ctx.restore();
       }
       // 広がるリング(2重)+ 破片
@@ -1301,23 +1953,16 @@
       rings.forEach(function(rg){
         for(var q=0;q<rg.n;q++){
           var ang=q/rg.n*Math.PI*2 + (miss?0:age*0.6);
-          dot(cx+Math.cos(ang)*rg.r, jy+Math.sin(ang)*rg.r*0.62, G, G, col);
+          dot(cx+Math.cos(ang)*rg.r, cy+Math.sin(ang)*rg.r*(isReflect()?1:0.62), G, G, col);
         }
       });
       // 上へ抜ける破片(打てた手応え)
       if(!miss) for(var q2=0;q2<5;q2++){
         var sp=(q2-2)*size*0.20;
-        dot(cx+sp*(0.6+age), jy-age*size*1.5-Math.abs(sp)*0.3, G, G, PAL.ink);
+        dot(cx+sp*(0.6+age), cy-age*size*1.5-Math.abs(sp)*0.3, G, G, PAL.ink);
       }
       ctx.restore();
     });
-
-    var mk=drawMikuOnStage(jy);
-    drawInfoPanel(jy, mk);             // 曲名・スコア・コンボ・進捗はミクの左へ
-    if(state.outroAt){                 // 曲の終わり:ミクがひとこと話す
-      var oa=Math.min(1,(performance.now()-state.outroAt)/260);
-      drawSpeech(state.outroMsg, mk, oa);
-    }
   }
 
   /* ============ カラオケ(いまどのフレーズか) ============
@@ -1369,9 +2014,11 @@
     el.judge.textContent=g;
     void el.judge.offsetWidth;
     el.judge.classList.add("show");
+    /* ms の数値は演奏中に読めないし、読めても次の一手に活かせない。
+       「はやい/おそい」だけ返せば、次のノーツで直せる。 */
     el.delta.textContent = (g==="MISS") ? "" : (g==="TYPED") ? "先行入力" :
-      (delta>=0?"+":"")+Math.round(delta)+" ms";
-    seJudge(g,dir); mikuReact(g);
+      (Math.abs(delta)<30 ? "ジャスト" : delta>0 ? "おそい" : "はやい");
+    seResult(g,dir); mikuReact(g); kick(g);
   }
   /* 打ち損じた場所を歌詞側にも返す。どの字で転んだのかが後から分かる。
      方向違いはノーツを消費しないので一時的な警告色、
@@ -1398,13 +2045,17 @@
     el.screen.classList.toggle("fever", state.combo>=12);
     /* 判定が成立したノーツは列から外れて即座に消える(描画は state.idx 以降だけ)。
        消えたことが分かるよう、消えた場所で弾ける演出を出す。かなは下段の歌詞へ運ぶ。 */
-    state.effects.push({lane:n.lane, dir:n.dir, at:performance.now(),
+    var hp=hitPos(n.dir);
+    state.effects.push({lane:n.lane, dir:n.dir, x:hp.x, y:hp.y, at:performance.now(),
                         color: r.grade==="MISS" ? "MISS" : "HIT",
                         grade: r.grade, kana:n.kana});
     pump[n.lane]=1;
     if(r.grade!=="MISS"){
       state.voices=state.voices||[];
-      state.voices.push({kana:n.kana, lane:n.lane, at:performance.now()});
+      /* 打ち返したかなは、リフレクト式では来た方向へ飛び去り、客席の
+         ペンライトが1本増える。レーン式では下段の歌詞バーへ落ちる。 */
+      if(isReflect()) launchFlyer(n.dir, n.kana, hp);
+      else state.voices.push({kana:n.kana, lane:n.lane, dir:n.dir, x:hp.x, y:hp.y, at:performance.now()});
     }
     showJudge(r.grade,r.delta,n.dir);
     return r.grade;                               // 呼び出し側のフィードバック表示に使う
@@ -1413,54 +2064,99 @@
     if(!state) return;
     state.combo=0; el.combo.textContent=0;
     el.screen.classList.remove("fever");
-    if(dir) state.effects.push({lane:LANE_OF[dir], dir:dir, at:performance.now(), color:"MISS"});
+    if(dir){
+      var mp=hitPos(dir);
+      state.effects.push({lane:LANE_OF[dir], dir:dir, x:mp.x, y:mp.y, at:performance.now(), color:"MISS"});
+    }
     showJudge("MISS",0,dir);
   }
 
   /** 入力(方向)を1つ受け取る。フリックは指を離した時点で呼ばれる */
   function sendDir(dir){
     if(!state||!state.running||state.outroAt) return;
-    seInput(dir);                                 // 離した瞬間の手応え(方向で音が変わる)
     mikuSway=1; mikuSwayDir=dir;                 // 入力方向へ髪がなびく
-    var n=target();
+    var t=now(), n=target();
     // 打つべきノーツが無いときの空打ちも、無反応にせず「からうち」と伝える
-    if(!n){ showFlickFeedback(dir,"free",null,null); return; }
+    if(!n){ seFree(); showFlickFeedback(dir,"free",null,null); return; }
+    /* 取りこぼしの確定を待つ間、列の先頭には「もう取れないノーツ」が残る。
+       そのままだと次のノーツを打った入力がそれに吸われて方向違いになる。
+       先頭が GOOD 窓を過ぎていて、直後に方向の合うノーツが来ているなら、
+       間に挟まったぶんをその場で取りこぼしとして流し、指を次へ通す。 */
+    if(t-n.time > WIN.good){
+      for(var k=state.idx; k<state.notes.length; k++){
+        var m=state.notes[k];
+        if(m.time-t > WIN.good) break;            // まだ先すぎるノーツ
+        if(m.dir===dir && Math.abs(m.time-t) <= WIN.late){
+          while(state.idx<k) dropNote();
+          break;
+        }
+      }
+      n=target();
+      if(!n){ seFree(); showFlickFeedback(dir,"free",null,null); return; }
+    }
     if(n.dir!==dir){                              // 方向違いはノーツを消費しない
       showFlickFeedback(dir,"ng",null,n.dir);
       markLyric(n,"warn");
       flashMiss(dir); return;
     }
-    var r=applyJudgement(state.idx, now());
+    var r=applyJudgement(state.idx, t);
     showFlickFeedback(dir, (r&&r==="JUST")?"just":"ok", n.kana, null);
     state.idx++;
   }
 
   /** 判定枠を過ぎたノーツを MISS で流す(曲は止まらない)
       ただし requestMediaSeek(0) の完了前は position が古いままなので、
-      巻き戻りを確認するまで刈り取らない(途中でリスタートすると全 MISS になる) */
+      巻き戻りを確認するまで刈り取らない(途中でリスタートすると全 MISS になる)
+
+      指を置いている間も刈り取らない。フリックは「離した瞬間」が文字の確定なので、
+      早めに指を置いて、タイミングで離す、という打ち方ができる必要がある。
+      置いている最中に勝手に MISS になると、その打ち方が成立しない。
+      ただし置きっぱなしで曲が進むと、離した瞬間に溜まった MISS が一度に出るので、
+      猶予は HOLD_GRACE までに留める(長すぎると失敗音がさらに遅れる)。 */
+  var HOLD_GRACE=350;
+  var heldCount=0;                                   // いま画面に触れている指(＋マウス)の数
   function reap(){
     var t=now();
     if(state.seekPending){
       if(t<1000 || performance.now()>state.seekDeadline) state.seekPending=false;
       else return;
     }
-    while(state.idx<state.notes.length && t-state.notes[state.idx].time>WIN.late){
-      var n=state.notes[state.idx];
-      n.result="MISS"; n.hitAt=performance.now();
-      markLyric(n,"missed");
-      state.counts.MISS++;
-      state.combo=0; el.combo.textContent=0;
-      el.screen.classList.remove("fever");
-      state.effects.push({lane:n.lane, dir:n.dir, at:performance.now(), color:"MISS"});
-      state.idx++;
-      showJudge("MISS",0);
-    }
+    var late=WIN.late + (heldCount>0 ? HOLD_GRACE : 0);
+    while(state.idx<state.notes.length && t-state.notes[state.idx].time>late) dropNote();
+  }
+  /** 先頭のノーツを取りこぼしとして流す */
+  function dropNote(){
+    var n=state.notes[state.idx];
+    n.result="MISS"; n.hitAt=performance.now();
+    markLyric(n,"missed");
+    state.counts.MISS++;
+    state.combo=0; el.combo.textContent=0;
+    el.screen.classList.remove("fever");
+    var dp=hitPos(n.dir);
+    state.effects.push({lane:n.lane, dir:n.dir, x:dp.x, y:dp.y, at:performance.now(), color:"MISS"});
+    if(isReflect()) loseLight();
+    state.idx++;
+    showJudge("MISS",0);
+  }
+
+  /* 曲の長さ。player.video.duration は「歌詞(ビデオ)の終わり」なので、
+     間奏やアウトロを残したまま終わってしまう。曲そのものの長さを優先して使う。 */
+  function songDuration(){
+    var cands=[];
+    try{ if(player.data && player.data.song && player.data.song.length)
+           cands.push(player.data.song.length*1000); }catch(e){}         // 秒 → ms
+    try{ var a=mediaAudio(); if(a && isFinite(a.duration)) cands.push(a.duration*1000); }catch(e){}
+    try{ if(player.video && player.video.duration) cands.push(player.video.duration); }catch(e){}
+    /* 単位を取り違えると曲が終わらなくなるので、常識的な範囲(20秒〜20分)に
+       収まるものだけを採る。そのうえで最長を選ぶ(曲は歌詞より短くならない)。 */
+    var ok=cands.filter(function(v){ return isFinite(v) && v>20000 && v<20*60*1000; });
+    return ok.length ? Math.round(Math.max.apply(null, ok)) : 0;
   }
 
   function loop(){
     if(!state||!state.running) return;
     var t=now();
-    var dur=(!state.isTutorial && player.video)?player.video.duration:0;
+    var dur=state.isTutorial?0:songDuration();
     if(dur){
       state.progress=Math.min(1,t/dur);
       el.progress.style.width=(state.progress*100)+"%";
@@ -1469,7 +2165,11 @@
     if(cw!==el.field.clientWidth || ch!==el.field.clientHeight) resizeCanvas();
     drawField();
     renderKaraoke();
-    // 口パク:ボーカル音量が取れればそれで、無ければ発声中かどうかで動かす
+    /* 口パクは楽曲の歌詞そのもの(TextAlive の文字ごとの発声区間)に合わせる。
+       ノーツは難易度で間引かれるうえ、小書き文字や記号はノーツにならないので、
+       ノーツだけで動かすと歌詞を歌い切っていないように見える。
+       打ったかどうかとは無関係(先に打っても、打ち逃しても歌は進む)。
+       口の開き方だけはボーカル音量があればそれで選ぶ。 */
     var amp=0;
     try{
       if(!state.isTutorial && player.getVocalAmplitude){
@@ -1477,11 +2177,10 @@
         amp=(player.getVocalAmplitude(t)||0)/(mx||1);
       }
     }catch(e){}
-    var P=state.phrases[state.pi], singing=false;
-    for(var i=0;i<P.chars.length;i++){
-      if(t>=P.chars[i].startTime && t<P.chars[i].endTime){ singing=true; break; }
-    }
-    var m = amp>0.5?2 : amp>0.18?1 : (singing ? ((Math.floor(t/110)%2)+1) : 0);
+    var singing=false, seg=state.mouthSegs;
+    while(state.mouthCur<seg.length && seg[state.mouthCur].e <= t) state.mouthCur++;
+    if(state.mouthCur<seg.length) singing = (t >= seg[state.mouthCur].s);
+    var m = !singing ? 0 : (amp>0.5 ? 2 : amp>0.18 ? 1 : (Math.floor(t/110)%2)+1);
     // アウトロ中は「話している」口に。歌が終わってもミクが動いている感じを残す
     if(state.outroAt) m=(Math.floor((performance.now()-state.outroAt)/150)%2)+1;
     var live=performance.now()<mikuExprUntil;
@@ -1498,7 +2197,10 @@
     }
     /* 曲が終わっても即結果画面にはしない。
        3秒ほどステージのまま置いて、ミクのひとことを見せてから暗転して切り替える。 */
-    var done=(dur>0 && t>=dur-200) || (state.idx>=state.notes.length && t>last.time+1500);
+    /* 歌詞が終わっても曲は続く(間奏・アウトロ)。曲の長さが分かるならそれを待つ。
+       長さが取れないときだけ、最後のノーツからの経過で打ち切る。 */
+    var done = dur>0 ? (t>=dur-200)
+                     : (state.idx>=state.notes.length && t>last.time+1500);
     if(done && !state.outroAt){
       state.outroAt=performance.now();
       state.outroMsg=mikuLine();
@@ -1514,15 +2216,18 @@
 
   /* 曲の終わりにミクが言うひとこと。結果(ランク)で言い回しを変える。
      スコアの読み上げではなく「一緒に歌った相手からの言葉」にする。 */
-  var OUTRO_HOLD=3000;
+  var OUTRO_HOLD=5000;
   var MIKU_LINES={
-    SS:"ぴったりだった! また歌お?",
-    S :"いいね、息が合ってた",
-    A :"たのしかった! ありがと",
-    B :"もう一回、いこ?",
-    C :"ここからだよ。付き合ってね"
+    SS:["ぴったりだった! また歌お?", "すごい、ずっと一緒に歌えてた", "今の、best だったよ!"],
+    S :["いいね、息が合ってた", "だいぶ掴んできたね", "その調子! もう一曲いける?"],
+    A :["たのしかった! ありがと", "後半よかったよ", "だんだん近づいてきてる"],
+    B :["もう一回、いこ?", "惜しい! 指、覚えてきてる", "焦らなくていいよ。次いこ"],
+    C :["ここからだよ。付き合ってね", "ゆっくりでいいよ、待ってる", "はじめはこんなもん。ね?"]
   };
-  function mikuLine(){ return MIKU_LINES[rank()] || MIKU_LINES.C; }
+  function mikuLine(){
+    var arr=MIKU_LINES[rank()] || MIKU_LINES.C;
+    return arr[Math.floor(Math.random()*arr.length)];
+  }
 
   function rank(){
     var c=state.counts;
@@ -1541,6 +2246,7 @@
     var avg = state.deltas.length ?
       Math.round(state.deltas.reduce(function(a,b){return a+b;},0)/state.deltas.length) : null;
     lastAvgDelta=avg; applyOffset();
+    el.quitBtn.hidden=true;
     el.ovTitle.textContent="RESULT";
     var speedNote = speedRate<1 ? "速度 "+speedRate.toFixed(2)+"× の練習プレイです(等速ではありません)。" : "";
     el.ovText.textContent = speedNote + (avg==null ? "" :
@@ -1599,10 +2305,32 @@
     el.ovResult.hidden=true;
     el.startBtn.textContent="再開";
     el.startBtn.disabled=false;
+    el.quitBtn.hidden=false;                       // 中断してメニューへ戻る道を用意する
     el.overlay.style.display="grid";
+  }
+  /* 曲を中断してメニュー(スタート前の状態)へ戻す。
+     プレイ中の状態は捨て、譜面を組み直して最初から選べる状態にする。 */
+  function quitToMenu(){
+    paused=false;
+    if(state) state.running=false;
+    tutorial=false;
+    try{ player.requestPause(); }catch(e){}
+    exitPlayLayout();
+    startAttract();
+    el.quitBtn.hidden=true;
+    el.share.hidden=true;
+    el.ovTitle.textContent=difficulty+" で挑戦";
+    el.ovText.textContent="スタートで曲の頭から始まります。";
+    el.ovResult.hidden=true;
+    el.startBtn.textContent="スタート";
+    el.startBtn.disabled=!videoPhrases;
+    el.overlay.style.display="grid";
+    if(videoPhrases){ state=buildState(); window.DAKEN_STATE=state; renderKaraoke(); drawField(); }
+    else state=null;
   }
   function resume(){
     stopAttract();
+    el.quitBtn.hidden=true;
     paused=false; state.running=true;
     enterPlayLayout();
     el.overlay.style.display="none";
@@ -1614,6 +2342,7 @@
     if(document.hidden) pauseGame("タブが非表示になったため一時停止しました。");
   });
   el.pauseBtn.addEventListener("click",function(){ pauseGame("一時停止中です。"); });
+  el.quitBtn.addEventListener("click",quitToMenu);
 
   function start(){
     if(!videoPhrases) return;
@@ -1624,14 +2353,16 @@
     window.DAKEN_STATE=state;                       // 検証用フック
     el.score.textContent="0"; el.combo.textContent="0";
     el.judge.textContent=""; el.delta.textContent="";
+    heldCount=0;                                    // 前回の指の残りで刈り取りが止まらないように
     el.screen.classList.remove("fever");
     el.overlay.style.display="none";
     if(el.veil) el.veil.classList.remove("on");     // 前回のアウトロの暗転を戻す
-    el.share.hidden=true;
+    el.share.hidden=true; el.quitBtn.hidden=true;
     stopAttract();
     state.running=true;
     state.seekPending=true; state.seekDeadline=performance.now()+4000;
     enterPlayLayout();
+    syncJudgePop();
     renderKaraoke(); drawField();
     player.requestMediaSeek(0);
     player.requestPlay();
@@ -1649,11 +2380,12 @@
                   phrase:0, charIdx:i, result:null, hitAt:0});
       chars.push({text:k, reading:"", startTime:st, endTime:st+700});
     });
-    return {notes:notes, phrases:[{chars:chars, text:"あいうえお", startTime:t, endTime:t+7500,
-              first:0, last:notes.length-1}],
+    var phrases=[{chars:chars, text:"あいうえお", startTime:t, endTime:t+7500,
+                  first:0, last:notes.length-1}];
+    return {notes:notes, phrases:phrases, mouthSegs:mouthSegments(phrases),
             idx:0, pi:0, score:0, combo:0, maxCombo:0, deltas:[],
             counts:{JUST:0,GREAT:0,GOOD:0,TYPED:0,LATE:0,MISS:0}, running:false, effects:[], voices:[],
-            progress:0, outroAt:0, outroMsg:"", fading:false,
+            progress:0, outroAt:0, outroMsg:"", fading:false, mouthCur:0,
             seekPending:false, seekDeadline:0, isTutorial:true};
   }
   function startTutorial(){
@@ -1666,11 +2398,13 @@
     window.DAKEN_STATE=state;
     el.score.textContent="0"; el.combo.textContent="0";
     el.judge.textContent=""; el.delta.textContent="";
+    heldCount=0;                                    // 前回の指の残りで刈り取りが止まらないように
     el.screen.classList.remove("fever");
     el.overlay.style.display="none";
     el.share.hidden=true;
     state.running=true;
     enterPlayLayout();
+    syncJudgePop();
     renderKaraoke(); drawField();
     requestAnimationFrame(loop);
   }
@@ -1680,6 +2414,7 @@
     exitPlayLayout();
     startAttract();
     var c=state.counts, hit=c.JUST+c.GREAT+c.GOOD+c.TYPED+c.LATE;
+    el.quitBtn.hidden=true;
     el.ovTitle.textContent="あそびかた";
     el.ovText.textContent="5方向を "+hit+"/5 でした。ノーツの横位置がそのまま入力方向です"+
       "(左から ← ↑ ● → ↓)。判定ラインに重なる瞬間に、指を離してください。";
@@ -1745,6 +2480,7 @@
       for(var i=0;i<e.changedTouches.length;i++){
         var t=e.changedTouches[i];
         pointers[t.identifier]={sx:t.clientX, sy:t.clientY};
+        heldCount=Object.keys(pointers).length + (mouseActive?1:0);
         renderCross(t.clientX-r.left, t.clientY-r.top);
         highlight("c");
       }
@@ -1768,6 +2504,7 @@
         var t=e.changedTouches[i], p=pointers[t.identifier];
         if(!p) continue;
         delete pointers[t.identifier];
+        heldCount=Object.keys(pointers).length + (mouseActive?1:0);
         // フィードバックは「指を置いた位置」に出す。離した位置だと
         // 大きく滑らせたとき画面外に寄ってしまい読めなくなる。
         lastTouch={x:p.sx-r.left, y:p.sy-r.top};
@@ -1778,6 +2515,7 @@
     surface.addEventListener("touchend",endTouch,{passive:false});
     surface.addEventListener("touchcancel",function(e){
       for(var i=0;i<e.changedTouches.length;i++) delete pointers[e.changedTouches[i].identifier];
+      heldCount=Object.keys(pointers).length + (mouseActive?1:0);
       if(!Object.keys(pointers).length) cross.classList.remove("show");
     },{passive:false});
 
@@ -1786,6 +2524,7 @@
       if(ignore(e)) return;
       var r=rectOf();
       msx=e.clientX; msy=e.clientY; mouseActive=true;
+      heldCount=Object.keys(pointers).length + 1;
       renderCross(e.clientX-r.left, e.clientY-r.top); highlight("c");
     });
     surface.addEventListener("mousemove",function(e){
@@ -1795,12 +2534,15 @@
     });
     surface.addEventListener("mouseup",function(e){
       if(!mouseActive) return;
-      mouseActive=false; cross.classList.remove("show");
+      mouseActive=false; heldCount=Object.keys(pointers).length;
+      cross.classList.remove("show");
       var r=rectOf();
       lastTouch={x:msx-r.left, y:msy-r.top};
       sendDir(resolveDir(e.clientX-msx, e.clientY-msy));
     });
-    surface.addEventListener("mouseleave",function(){ mouseActive=false; cross.classList.remove("show"); });
+    surface.addEventListener("mouseleave",function(){
+      mouseActive=false; heldCount=Object.keys(pointers).length; cross.classList.remove("show");
+    });
   })();
 
   var KEY_DIR={" ":"c","Spacebar":"c","Enter":"c",
@@ -1827,10 +2569,37 @@
   },true);
 
   /* ============ 難易度・選曲 ============ */
+  /* 持ち手の切り替え。打つ指で隠れる側を避けて、ミクとスコアを反対側へ寄せる。 */
+  function applyHand(){
+    Array.prototype.forEach.call(document.querySelectorAll("[data-hand]"),function(o){
+      o.setAttribute("aria-pressed", String(o.getAttribute("data-hand")===handed));
+    });
+    if(state) drawField();
+  }
+  Array.prototype.forEach.call(document.querySelectorAll("[data-hand]"),function(b){
+    b.addEventListener("click",function(){
+      handed=b.getAttribute("data-hand");
+      savePrefs(); applyHand();
+    });
+  });
+  function applyMode(){
+    Array.prototype.forEach.call(document.querySelectorAll("[data-mode]"),function(o){
+      o.setAttribute("aria-pressed", String(o.getAttribute("data-mode")===mode));
+    });
+    syncJudgePop();
+    if(state) drawField();
+  }
+  Array.prototype.forEach.call(document.querySelectorAll("[data-mode]"),function(b){
+    b.addEventListener("click",function(){
+      mode=b.getAttribute("data-mode");
+      savePrefs(); applyMode();
+    });
+  });
+
   Array.prototype.forEach.call(document.querySelectorAll("[data-diff]"),function(b){
     b.addEventListener("click",function(){
       difficulty=b.getAttribute("data-diff");
-      leadMs=LEAD_DEFAULT[difficulty]||2000; applyLead(); savePrefs();   // 難易度ごとの見やすさに合わせる
+      savePrefs();
       Array.prototype.forEach.call(document.querySelectorAll("[data-diff]"),function(o){
         o.setAttribute("aria-pressed", String(o===b));
       });
