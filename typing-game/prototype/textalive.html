@@ -213,7 +213,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 28</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 29</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -327,7 +327,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 28;
+  var BUILD = 29;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -821,7 +821,7 @@
     });
     return {notes:notes, phrases:phrases, idx:0, pi:0, score:0, combo:0, maxCombo:0, deltas:[],
             counts:{JUST:0,GREAT:0,GOOD:0,TYPED:0,LATE:0,MISS:0}, running:false, effects:[], voices:[],
-            progress:0, outroAt:0, outroMsg:"", fading:false};
+            progress:0, outroAt:0, outroMsg:"", fading:false, mouthCur:0};
   }
   /* 端末ごとの入力・音声遅延を吸収するオフセット。判定にも描画にも同じ時計を使う。
      チュートリアル中は楽曲を使わず、自前の時計で同じ判定パイプラインを回す。 */
@@ -1573,7 +1573,11 @@
     if(cw!==el.field.clientWidth || ch!==el.field.clientHeight) resizeCanvas();
     drawField();
     renderKaraoke();
-    // 口パク:ボーカル音量が取れればそれで、無ければ発声中かどうかで動かす
+    /* 口パクは「その字が判定ライン(タイミングバー)に来ている間」だけ。
+       フレーズの発声区間で動かすと、打つ場所と口が合わずに歌っている感じが出ない。
+       打ったかどうかとは無関係に、ノーツの時刻そのもので判断する
+       (先に打っても、打ち逃しても、ミクはその字を歌っている)。
+       口の開き方だけはボーカル音量があればそれで選ぶ。 */
     var amp=0;
     try{
       if(!state.isTutorial && player.getVocalAmplitude){
@@ -1581,11 +1585,10 @@
         amp=(player.getVocalAmplitude(t)||0)/(mx||1);
       }
     }catch(e){}
-    var P=state.phrases[state.pi], singing=false;
-    for(var i=0;i<P.chars.length;i++){
-      if(t>=P.chars[i].startTime && t<P.chars[i].endTime){ singing=true; break; }
-    }
-    var m = amp>0.5?2 : amp>0.18?1 : (singing ? ((Math.floor(t/110)%2)+1) : 0);
+    var atBar=false, notes=state.notes;
+    while(state.mouthCur<notes.length && notes[state.mouthCur].time < t-WIN.good) state.mouthCur++;
+    if(state.mouthCur<notes.length) atBar = Math.abs(notes[state.mouthCur].time-t) <= WIN.good;
+    var m = !atBar ? 0 : (amp>0.5 ? 2 : amp>0.18 ? 1 : (Math.floor(t/110)%2)+1);
     // アウトロ中は「話している」口に。歌が終わってもミクが動いている感じを残す
     if(state.outroAt) m=(Math.floor((performance.now()-state.outroAt)/150)%2)+1;
     var live=performance.now()<mikuExprUntil;
@@ -1761,7 +1764,7 @@
               first:0, last:notes.length-1}],
             idx:0, pi:0, score:0, combo:0, maxCombo:0, deltas:[],
             counts:{JUST:0,GREAT:0,GOOD:0,TYPED:0,LATE:0,MISS:0}, running:false, effects:[], voices:[],
-            progress:0, outroAt:0, outroMsg:"", fading:false,
+            progress:0, outroAt:0, outroMsg:"", fading:false, mouthCur:0,
             seekPending:false, seekDeadline:0, isTutorial:true};
   }
   function startTutorial(){
