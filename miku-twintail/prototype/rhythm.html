@@ -163,6 +163,18 @@ function shakin(at, pan) {
   env(og, at, 0.16, 0.38, 0.003);
   o.connect(og); og.connect(p); o.start(at); o.stop(at + 0.5);
 }
+/** ネギ確定。クイズの不正解のような、あからさまな「ブッブー」 */
+function buzzer(at) {
+  const out = ac.createGain(); out.gain.value = 1; out.connect(sfxGain);
+  for (const [t0, dur] of [[0, 0.13], [0.18, 0.32]])
+    for (const f of [196, 155, 98]) {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = "square"; o.frequency.value = f;
+      env(g, at + t0, 0.15, dur, 0.004);
+      const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 1500;
+      o.connect(lp); lp.connect(g); g.connect(out); o.start(at + t0); o.stop(at + t0 + dur + 0.06);
+    }
+}
 function flop(at) {
   const o = ac.createOscillator(), g = ac.createGain();
   o.type = "sawtooth"; o.frequency.setValueAtTime(320, at);
@@ -265,27 +277,41 @@ function unitPos(u, t) {
   const age = (t - first) / BEAT;
   const inP = Math.max(0, Math.min(1, age / 0.9));
   const slideIn = inP * inP * (3 - 2 * inP);
-  const appear = Math.max(0, Math.min(1, (age + 0.3) / 0.4));
+  // 掴む3拍前から右手に姿を見せ、待機位置へ寄ってから中央へ入る
+  const preP = Math.max(0, Math.min(1, (age + 3) / 2));
+  const pre = preP * preP * (3 - 2 * preP);
+  const appear = Math.max(0, Math.min(1, (age + 3) / 0.7));
   const ex = Math.max(0, Math.min(1, (t - doneAt - BEAT * 0.3) / (BEAT * 0.35)));
-  return { x: W / 2 + (1 - slideIn) * 250, y: settledY(u) - ex * 210,
-           scale: MAIN_SCALE * (1 - ex * 0.5), alpha: appear * (1 - ex), exit: ex };
+  return { x: W / 2 + (1 - slideIn) * (225 + (1 - pre) * 120), y: settledY(u) - ex * 210,
+           scale: MAIN_SCALE * (0.72 + 0.28 * slideIn) * (1 - ex * 0.5),
+           alpha: appear * (0.5 + 0.5 * slideIn) * (1 - ex), exit: ex };
 }
 function anchorOf(u, side, t) {
   const p = unitPos(u, t === undefined ? songTime() : t);
   return { x: p.x + ANCHOR[side].x * u.obj.w * MAIN_SCALE,
            y: settledY(u) + ANCHOR[side].y * u.obj.h * MAIN_SCALE };
 }
-/** 触った位置を体からの相対で覚える。背景へ縮小しても髪の付き位置が保たれる */
-function toLocal(u, x, y, t) {
+/** 触った位置を体からの相対で覚える。背景へ縮小しても髪の付き位置が保たれる。
+ *  位置は厳密でなくてよいが、房が宙に浮いたり左右が入れ替わったりしないよう
+ *  「その側の、体の上半分」に収める */
+function toLocal(u, x, y, side, t) {
   const p = unitPos(u, t === undefined ? songTime() : t);
-  return { rx: (x - p.x) / MAIN_SCALE, ry: (y - settledY(u)) / MAIN_SCALE };
+  const hw = u.obj.w / 2, hh = u.obj.h / 2;
+  let rx = (x - p.x) / p.scale, ry = (y - settledY(u)) / p.scale;
+  const lo = side === "L" ? -hw : hw * 0.15, hi = side === "L" ? -hw * 0.15 : hw;
+  return { rx: Math.max(lo, Math.min(hi, rx)),
+           ry: Math.max(-hh, Math.min(hh * 0.1, ry)) };
 }
 
 // ---- 判定 -------------------------------------------------------------------
 const GRADE = { PERFECT: { s: 100, label: "PERFECT", col: "#ffe66d" },
                 GOOD:    { s: 60,  label: "GOOD",    col: "#7fe8e0" },
+                OK:      { s: 25,  label: "OK",      col: "#9fb6bd" },
                 MISS:    { s: 0,   label: "MISS",    col: "#ff7a8a" } };
-const grade = d => { const a = Math.abs(d); return a <= 0.12 ? "PERFECT" : a <= 0.26 ? "GOOD" : "MISS"; };
+/* 1つの操作拍で「離す」と「掴む」の2回外しうるので、判定は甘めに取る。
+ * OK 帯まで髪は生える。ネギになるのは本当に打っていないときだけ */
+const grade = d => { const a = Math.abs(d);
+  return a <= 0.16 ? "PERFECT" : a <= 0.36 ? "GOOD" : a <= 0.72 ? "OK" : "MISS"; };
 function pop(text, col, x, y) { effects.push({ text, col, x, y, t: songTime() }); }
 
 const chain = new Map();                       // a -> "held" | "resolved"
@@ -299,10 +325,13 @@ function growNegi(a) {
   const r = tailRef(a); if (!r) return;
   chain.set(a, "resolved");
   r.u.done[r.side] = true;
-  const anc = r.u.negiAnchor || anchorOf(r.u, r.side);
-  r.u.tails[r.side] = { kind: "negi", ...toLocal(r.u, anc.x, anc.y), quality: 0 };
-  combo = 0; flop(ac.currentTime);
-  pop("ネギ", "#8fd45a", anc.x, anc.y - 20);
+  const na = r.u.negiAnchor;
+  const loc = na ? toLocal(r.u, na.x, na.y, r.side)
+                 : { rx: ANCHOR[r.side].x * r.u.obj.w, ry: ANCHOR[r.side].y * r.u.obj.h };
+  r.u.tails[r.side] = { kind: "negi", ...loc, quality: 0 };
+  combo = 0; buzzer(ac.currentTime);
+  const pp = unitPos(r.u, songTime());
+  pop("ネギ", "#8fd45a", pp.x + loc.rx * pp.scale, pp.y + loc.ry * pp.scale - 24);
 }
 
 function onDown(px, py) {
@@ -313,7 +342,7 @@ function onDown(px, py) {
   for (const a of [near - 1, near, near + 1]) {
     if (a < 0 || stateOf(a) !== "pending" || !tailRef(a)) continue;
     const d = (t - bt(actionBeat(a))) / BEAT;
-    if (Math.abs(d) < 0.55 && (!best || Math.abs(d) < Math.abs(best.d))) best = { a, d };
+    if (Math.abs(d) < 0.78 && (!best || Math.abs(d) < Math.abs(best.d))) best = { a, d };
   }
   if (!best) { flop(ac.currentTime); combo = 0; pop("そこじゃない", "#ff7a8a", px, py); return; }
   const g = grade(best.d);
@@ -323,7 +352,7 @@ function onDown(px, py) {
   osc(ac.currentTime, 520, "sine", 0.13, 0.1, sfxGain, pan);
   shimmerGain = shimmer(ac.currentTime, BEAT * 4, pan);
   // 髪の根元は「触った位置」。厳密な位置合わせは求めない
-  const loc = toLocal(r.u, px, py, t);
+  const loc = toLocal(r.u, px, py, r.side, t);
   slide = { a: best.a, u: r.u, side: r.side, tapGrade: g, ...loc, x0: px, y0: py, x: px, y: py };
   pop(GRADE[g].label, GRADE[g].col, px, py - 26);
 }
@@ -335,10 +364,11 @@ function onUp() {
   const d = (t - bt(actionBeat(s.a + 1))) / BEAT;
   let g = grade(d);
   const dx = s.x - s.x0, dy = s.y - s.y0, dist = Math.hypot(dx, dy);
-  if (dist < 30) { g = "MISS"; pop("伸びてない", "#ff7a8a", s.x, s.y); }
+  if (dist < 14) { g = "MISS"; pop("伸びてない", "#ff7a8a", s.x, s.y); }   // 少しでも伸ばしてあれば可
   else if (g === "MISS") pop(d < 0 ? "早い" : "遅い", "#ff7a8a", s.x, s.y);
   else pop(GRADE[g].label, GRADE[g].col, s.x, s.y);
   if (g === "MISS") { s.u.negiAnchor = { x: s.x0, y: s.y0 }; growNegi(s.a); return; }
+  // OK 帯でも髪は生える。コンボが切れるのはネギになったときだけ
   chain.set(s.a, "resolved");
   s.u.done[s.side] = true;
   shakin(ac.currentTime, s.side === "L" ? -0.6 : 0.6);
@@ -377,7 +407,7 @@ function tick() {
   for (const k of [c, c + 1]) if (k >= 0 && !unitOf(k)) units.push(makeUnit(k));
   const near = Math.floor((t / BEAT - 3) / 4);
   for (let a = Math.max(0, near - 1); a <= near; a++)          // 掴み損ね
-    if (stateOf(a) === "pending" && tailRef(a) && t > bt(actionBeat(a)) + BEAT * 0.55) growNegi(a);
+    if (stateOf(a) === "pending" && tailRef(a) && t > bt(actionBeat(a)) + BEAT * 0.78) growNegi(a);
   if (slide && t > bt(actionBeat(slide.a + 1)) + BEAT * 0.35) { // 離し損ね
     const s2 = slide; slide = null;
     if (shimmerGain) { shimmerGain.gain.setTargetAtTime(0.0001, ac.currentTime, 0.02); shimmerGain = null; }
@@ -386,7 +416,7 @@ function tick() {
     growNegi(s2.a);
   }
   for (const u of units)
-    if (!u.judged && t >= bt(actionBeat(u.c * 2 + 2)) + BEAT * 0.4) finish(u);
+    if (!u.judged && t >= bt(actionBeat(u.c * 2 + 2)) + BEAT * 0.85) finish(u);
   units = units.filter(u => !u.judged);
   if (autoPlay) autoTick(t);
 }
@@ -621,6 +651,15 @@ document.getElementById("auto").onclick = () => {
   autoPlay = !autoPlay;
 };
 document.getElementById("guide").onchange = e => { showGuide = e.target.checked; };
+window.RHYTHM_UNITS = () => units.map(u => { const p = unitPos(u, songTime());
+  return { obj: u.obj.name, x: Math.round(p.x), alpha: +p.alpha.toFixed(2), scale: +(p.scale/MAIN_SCALE).toFixed(2) }; });
+window.__songTime = () => songTime();
+window.__act = a => {            // 検証用: 房 a を離す/掴む（実際の判定経路を通す）
+  if (slide && slide.a === a - 1) { onUp(); }
+  const r = tailRef(a);
+  if (r && stateOf(a) === 'pending') { const an = anchorOf(r.u, r.side); onDown(an.x, an.y); }
+  if (slide) onMove(slide.x0 + (slide.side === 'L' ? -70 : 70), slide.y0 + 150);
+};
 window.GALLERY_KINDS = () => gallery.map(x => [x.obj.name, ['L','R'].map(k => x.tails[k] ? x.tails[k].kind : '-').join('/')]);
 window.RHYTHM_DEBUG = () => ({ score, combo, maxCombo, mikus: gallery.length,
   units: units.map(u => ({ c: u.c, obj: u.obj.name, order: u.order.join(""),
