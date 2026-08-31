@@ -471,9 +471,9 @@ function drawTie(g, x, y, rot, scale = 1) {
   g.fillStyle = "rgba(236,64,142,.95)"; rr(g, -4.5, -5.5, 9, 11, 2);
   g.restore();
 }
-/** 失敗の証。ネギが真っ直ぐ生えてしまう */
-function drawNegi(g, x, y, sc) {
-  g.save(); g.translate(x, y); g.scale(sc, sc);
+/** 失敗の証。ネギが斜め上へ真っ直ぐ生えてしまう（out: 左房 -1 / 右房 +1）*/
+function drawNegi(g, x, y, sc, out) {
+  g.save(); g.translate(x, y); g.rotate((out || 1) * 0.44); g.scale(sc, sc);
   g.fillStyle = "#6fbf4a"; rr(g, -9, -100, 7, 70, 4); rr(g, -1, -108, 7, 78, 4); rr(g, 7, -94, 6, 64, 4);
   g.fillStyle = "#eef6e2"; rr(g, -10, -36, 20, 42, 6);
   g.fillStyle = "#d9e7c4"; rr(g, -10, -40, 20, 7, 3);
@@ -486,7 +486,7 @@ function drawObject(g, o, x, y, scale, tails, t) {
     const rx = tl.rx !== undefined ? tl.rx : ANCHOR[side].x * o.w;
     const ry = tl.ry !== undefined ? tl.ry : ANCHOR[side].y * o.h;
     const ax = x + rx * scale, ay = y + ry * scale;
-    if (tl.kind === "negi") drawNegi(g, ax, ay, scale);
+    if (tl.kind === "negi") drawNegi(g, ax, ay, scale, side === "L" ? -1 : 1);
     else drawTail(g, ax, ay, tl, t, 1, scale);
   }
 }
