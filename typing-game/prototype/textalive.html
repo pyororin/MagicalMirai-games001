@@ -59,44 +59,17 @@
     background:repeating-linear-gradient(to bottom, oklch(100% 0 0 / .045) 0 1px, transparent 1px 3px)}
   .screen.fever{box-shadow:0 0 0 3px var(--night), 0 0 0 4px var(--hot)}
 
-  .hud{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 12px;flex:0 0 auto;
-    border-bottom:1px solid var(--line);background:color-mix(in oklab, var(--night) 75%, transparent);position:relative;z-index:3}
-  .hud .songtitle{flex:1 1 auto;min-width:0;font-family:var(--pixel);font-size:13px;letter-spacing:.06em;
-    color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  /* スコア類は上段から外して盤面の隅へ。上段はタイトルだけにする */
-  .fieldstat{position:absolute;top:6px;right:8px;z-index:2;display:flex;gap:10px;pointer-events:none;
-    text-shadow:0 2px 0 var(--night), 0 0 6px var(--night)}
-  .fieldstat .stat{font-family:var(--pixel);font-size:11px;letter-spacing:.06em;color:var(--dim)}
-  .fieldstat .stat b{display:inline-block;color:var(--key);font-variant-numeric:tabular-nums;font-size:15px}
-  .fieldstat .stat.combo b{color:var(--warn)}
-  .hud .pause{display:none;background:transparent;border:1px solid var(--line);color:var(--ink);
-    font-family:var(--pixel);font-size:12px;padding:5px 10px;border-radius:3px}
-  .screen.playing .hud .pause{display:inline-block}
-  .bar{height:5px;background:color-mix(in oklab, var(--panel) 70%, var(--night));border-radius:3px;overflow:hidden;flex:1 1 120px;min-width:100px}
-  .bar i{display:block;height:100%;width:0;background:var(--key);transition:width .1s linear}
-
-  /* ---- 上段:カラオケ歌詞(背面に MV レイヤーの枠) ---- */
-  /* 下段:カラオケ歌詞。ミクの立ち位置のすぐ下に置く(次の歌詞は上に重ねる) */
-  .karaoke{position:relative;flex:0 0 auto;padding:6px 14px 10px;overflow:hidden;
-    border-top:2px solid var(--edge);
-    background:color-mix(in oklab, var(--night) 82%, var(--panel))}
-  /* MV を敷く枠。今はドットのテクスチャだけ置いておく */
-  .mvslot{position:absolute;inset:0;z-index:0;opacity:.5;
-    background-image:radial-gradient(var(--edge) 1px, transparent 1px);
-    background-size:6px 6px}
-  .mvslot span{display:none}
-  .karaoke .line{position:relative;z-index:1;font-family:var(--pixel);letter-spacing:.06em;word-break:break-all;text-align:center}
-  .karaoke .now{font-size:clamp(17px,4.2cqw + 10px,28px);line-height:1.45;min-height:1.45em;margin:0}
-  @container (min-width:560px){ .karaoke .now{font-size:26px} }
-  .karaoke .now .ch{color:color-mix(in oklab, var(--dim) 55%, var(--night));transition:color .12s;
-    ruby-align:center;ruby-position:over}
-  .karaoke .now rt{font-size:.42em;letter-spacing:.02em;
-    color:color-mix(in oklab, var(--dim) 60%, var(--night))}
-  .karaoke .now .ch.on rt{color:var(--key)}
-  .karaoke .now .ch.sung rt{color:color-mix(in oklab, var(--ink) 60%, var(--night))}
-  .karaoke .now .ch.sung{color:var(--ink)}
-  .karaoke .now .ch.on{color:var(--night);background:var(--key);box-shadow:0 0 0 2px var(--key)}
-  .karaoke .next{font-size:clamp(11px,2.6vw,15px);color:color-mix(in oklab, var(--dim) 45%, var(--night));min-height:1.4em}
+  /* 一時停止だけは DOM のボタンとして盤面の右上に浮かせる */
+  .pause{position:absolute;top:6px;right:8px;z-index:3;display:none;
+    background:color-mix(in oklab, var(--night) 70%, transparent);border:1px solid var(--line);
+    color:var(--ink);font-family:var(--pixel);font-size:11px;padding:4px 8px;border-radius:3px}
+  .screen.playing .pause{display:inline-block}
+  .bar{height:5px;background:color-mix(in oklab, var(--panel) 70%, var(--night));border-radius:3px;overflow:hidden}
+  .bar i{display:block;height:100%;width:0;background:var(--key)}
+  /* 曲の終わりでゆっくり暗転してから結果へ移る */
+  .veil{position:absolute;inset:0;z-index:40;background:var(--night);opacity:0;pointer-events:none;
+    transition:opacity .7s ease-in-out}
+  .veil.on{opacity:1}
 
   /* ---- 中段:5レーン落下フィールド(横位置=入力方向 / 縦位置=時間) ---- */
   .field{position:relative;flex:1 1 auto;min-height:200px}
@@ -233,7 +206,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 21</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 22</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -274,30 +247,23 @@
   </div>
 
   <div class="screen" id="screen" tabindex="-1">
-    <div class="hud">
-      <span class="songtitle" id="hudTitle">打鍵ミライ</span>
-      <div class="bar"><i id="progress"></i></div>
-      <button class="pause" id="pauseBtn">一時停止</button>
-    </div>
-
+    <!-- 盤面がプレイ画面のすべて。歌詞も曲名もスコアもキャンバスに描く
+         (歌詞は落下領域の中、付加情報はミクの左の空きスペース) -->
     <div class="field" id="field">
       <canvas id="notes"></canvas>
-      <div class="fieldstat">
-        <span class="stat">SCORE <b id="score">0</b></span>
-        <span class="stat combo">COMBO <b id="combo">0</b></span>
-      </div>
+      <button class="pause" id="pauseBtn">一時停止</button>
       <div class="judgepop">
         <span class="judge" id="judge"></span>
         <span class="delta" id="delta"></span>
       </div>
       <canvas id="miku" width="24" height="24" aria-label="はちゅねミク"></canvas>
-    </div>
-
-    <!-- 歌詞は画面下段。ミクの足元に置くことで「ミクが歌っている」ように見せる -->
-    <div class="karaoke">
-      <div class="mvslot"><span>MV LAYER (今後実装)</span></div>
-      <div class="line now" id="kNow"></div>
-      <div class="line next" id="kNext"></div>
+      <!-- 値の保持用(表示はキャンバス側)。既存の更新コードをそのまま活かす -->
+      <div hidden>
+        <span id="hudTitle">打鍵ミライ</span><span id="score">0</span><span id="combo">0</span>
+        <div class="bar"><i id="progress"></i></div>
+      </div>
+      <!-- 曲の終わりを唐突にしないための暗転幕 -->
+      <div class="veil" id="veil"></div>
     </div>
 
     <div class="cross" id="cross"></div>
@@ -350,7 +316,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 21;
+  var BUILD = 22;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -699,7 +665,7 @@
 
   /* ============ 要素 ============ */
   var el={};
-  ["screen","kNow","kNext","field","notes","judge","delta","score","combo","progress","pauseBtn",
+  ["screen","field","notes","judge","delta","score","combo","progress","pauseBtn","veil",
    "overlay","ovTitle","ovText","ovErr","ovResult","startBtn","songmeta","songUrl","loadSong","songPick","hudTitle",
    "cross","flickfb","lead","leadVal","speed","speedVal","vol","volVal","speedNote","offset","offsetVal","autoCal","share","tutorial"]
     .forEach(function(id){ el[id]=document.getElementById(id); });
@@ -778,18 +744,21 @@
   function buildState(){
     var notes=[], phrases=[];
     videoPhrases.forEach(function(vp){
+      // 文字の打ち損じ跡は前回のプレイの残りなので、組み直すたびに消す
+      vp.chars.forEach(function(d){ d.missed=false; d.warnAt=0; });
       var picked=selectIdx(vp.notes,difficulty);
       var pi=phrases.length, first=notes.length;
       picked.forEach(function(i){
         var n=vp.notes[i];
         notes.push({kana:n.kana, dir:n.dir, lane:n.lane, base:n.base, time:n.time,
-                    phrase:pi, result:null, hitAt:0});
+                    phrase:pi, charIdx:n.charIdx, result:null, hitAt:0});
       });
       phrases.push({chars:vp.chars, text:vp.text, startTime:vp.startTime, endTime:vp.endTime,
                     first:first, last:notes.length-1});
     });
     return {notes:notes, phrases:phrases, idx:0, pi:0, score:0, combo:0, maxCombo:0, deltas:[],
-            counts:{JUST:0,GREAT:0,GOOD:0,TYPED:0,LATE:0,MISS:0}, running:false, effects:[], voices:[]};
+            counts:{JUST:0,GREAT:0,GOOD:0,TYPED:0,LATE:0,MISS:0}, running:false, effects:[], voices:[],
+            progress:0, outroAt:0, outroMsg:"", fading:false};
   }
   /* 端末ごとの入力・音声遅延を吸収するオフセット。判定にも描画にも同じ時計を使う。
      チュートリアル中は楽曲を使わず、自前の時計で同じ判定パイプラインを回す。 */
@@ -807,6 +776,7 @@
      ビート(player.findBeat)とサビ(player.findChorus)で背景が呼吸する。
      ============================================================ */
   var PIXEL_FONT = '"DotGothic16","Courier New",monospace';
+  var songTitle="";                                   // ミクの左に出す曲名
   var cv=el.notes, ctx=cv.getContext("2d"), cw=0, ch=0, dpr=1, G=3;   // G=ドット1個の大きさ
   var PAL={
     night:  "oklch(15% 0.035 268)",
@@ -1030,8 +1000,8 @@
     var below=ch-jy-speakerBandH();
     var inMargin=marginW > 32*3+G*4;
     var scale = inMargin ? Math.max(3, Math.min(6, Math.floor(Math.min(marginW/34, ch*0.45/40))))
-                         : Math.min(4, Math.floor(below/40));
-    if(!inMargin && scale<2) return;                  // 置く余地が無ければ描かない(下段を優先)
+                         : Math.min(6, Math.floor(below/40));   // 歌詞が抜けた分ミクを大きく置ける
+    if(!inMargin && scale<2) return null;             // 置く余地が無ければ描かない(下段を優先)
     var w=32*scale, h=40*scale;
     var idle=calmMotion ? 0.5 : (Math.sin(performance.now()/620)+1)/2;
     var bounce=Math.round((beatPulse*2+idle*0.6)*G);
@@ -1051,6 +1021,142 @@
       mikuSway=Math.max(0,mikuSway-0.06);
     }
     ctx.drawImage(mikuCv, x, y, w, h);
+    ctx.restore();
+    return {x:x, y:y, w:w, h:h, scale:scale};
+  }
+
+  /* ---- 歌詞:落下フィールドの中に敷く ----
+     歌詞は「ミクが何を歌っているか」なので盤面の中にあるほうが視線が動かない。
+     ただし読み取るべきはノーツなので、歌詞はノーツより先に描いて必ず下に潜らせ、
+     透明度も落とす。歌っている文字だけ明るくし、打ち損じた文字は赤く残す。 */
+  function drawLyrics(t, jy){
+    var P=state.phrases[state.pi];
+    if(!P || !P.chars.length) return;
+    var fw=fieldW(), x0=fieldX0(), pad=G*3;
+    var size=Math.max(13, Math.min(Math.round(fw/13), 26));
+    var lh=Math.round(size*1.7), maxW=fw-pad*2;
+    ctx.save();
+    ctx.textAlign="left"; ctx.textBaseline="alphabetic";
+    ctx.font=size+"px "+PIXEL_FONT;
+    var lines=[[]], used=0, i;
+    for(i=0;i<P.chars.length;i++){
+      var wch=ctx.measureText(P.chars[i].text).width;
+      if(used+wch>maxW && lines[lines.length-1].length){ lines.push([]); used=0; }
+      lines[lines.length-1].push({d:P.chars[i], w:wch});
+      used+=wch;
+    }
+    var top=Math.round(Math.max(size*2.2, jy*0.26));
+    var np=performance.now();
+    lines.forEach(function(ln, li){
+      var total=ln.reduce(function(a,c){ return a+c.w; },0);
+      var x=Math.round(x0+(fw-total)/2), y=top+li*lh;
+      ln.forEach(function(c){
+        var d=c.d, a=0.30, col=PAL.ink;
+        if(t>=d.startTime && t<d.endTime){ a=0.95; col=DIR_COL.c.lit; }   // いま歌っている
+        else if(t>=d.endTime){ a=0.55; }                                   // 歌い終わった
+        if(d.warnAt && np-d.warnAt<450){ a=0.9; col=DIR_COL.r.lit; }       // 方向違い(一時的)
+        if(d.missed){ a=0.85; col=PAL.miss; }                              // 打ち逃した(残る)
+        if(d.reading){                                                     // 漢字の読み
+          ctx.globalAlpha=a*0.65; ctx.fillStyle=col;
+          ctx.font=Math.round(size*0.42)+"px "+PIXEL_FONT;
+          var rw=ctx.measureText(d.reading).width;
+          ctx.fillText(d.reading, x+(c.w-rw)/2, y-size*0.98);
+          ctx.font=size+"px "+PIXEL_FONT;
+        }
+        ctx.globalAlpha=a*0.5; ctx.fillStyle=PAL.shade;                    // 下に影を敷いて読ませる
+        ctx.fillText(d.text, x+G, y+G);
+        ctx.globalAlpha=a; ctx.fillStyle=col;
+        ctx.fillText(d.text, x, y);
+        x+=c.w;
+      });
+    });
+    var nx=state.phrases[state.pi+1];                                      // 次のフレーズ(小さく薄く)
+    if(nx){
+      ctx.globalAlpha=0.22; ctx.fillStyle=PAL.ink;
+      ctx.font=Math.round(size*0.6)+"px "+PIXEL_FONT;
+      var s2=nx.text, w2=ctx.measureText(s2).width;
+      while(w2>maxW && s2.length>2){ s2=s2.slice(0,-2)+"…"; w2=ctx.measureText(s2).width; }
+      ctx.fillText(s2, Math.round(x0+(fw-w2)/2), top+lines.length*lh+Math.round(size*0.3));
+    }
+    ctx.restore();
+  }
+
+  /* ---- 曲名・スコア・進捗:ミクの左の空きスペースへ ----
+     上段に帯を作ると落下距離が減るうえ、視線が歌詞とノーツから外れる。
+     ミクの隣なら「見なくてもいい情報」として端に置いておける。 */
+  function drawInfoPanel(jy, mk){
+    var top=jy+speakerBandH()+G*2;
+    if(top>ch-G*6) return;
+    var x=fieldX0()+G;
+    var right=(mk ? mk.x-G*2 : cw-G);
+    var maxW=right-x;
+    if(maxW<60) return;
+    var u=Math.max(2, Math.round(G*0.9));                 // 文字サイズの基準
+    ctx.save();
+    ctx.textAlign="left"; ctx.textBaseline="top";
+    var y=top;
+    if(songTitle){
+      ctx.font=Math.round(u*4.5)+"px "+PIXEL_FONT;
+      var title=songTitle, tw=ctx.measureText(title).width;
+      while(tw>maxW && title.length>4){ title=title.slice(0,-2)+"…"; tw=ctx.measureText(title).width; }
+      ctx.fillStyle="oklch(72% 0.06 268)";
+      ctx.fillText(title, x, y);
+      y+=Math.round(u*6.5);
+    }
+    ctx.font=Math.round(u*3.4)+"px "+PIXEL_FONT;
+    ctx.fillStyle="oklch(62% 0.03 268)";
+    ctx.fillText("SCORE", x, y);
+    ctx.font=Math.round(u*7)+"px "+PIXEL_FONT;
+    ctx.fillStyle=DIR_COL.u.lit;
+    ctx.fillText(String(state.score), x, y+Math.round(u*3.8));
+    y+=Math.round(u*12);
+    if(state.combo>=5){                                   // コンボは伸びたときだけ主張させる
+      var fever=state.combo>=12;
+      ctx.font=Math.round(u*3.4)+"px "+PIXEL_FONT;
+      ctx.fillStyle=fever ? DIR_COL.r.lit : "oklch(62% 0.03 268)";
+      ctx.fillText(fever?"FEVER":"COMBO", x, y);
+      ctx.font=Math.round(u*(fever?9:7))+"px "+PIXEL_FONT;
+      ctx.fillStyle=fever ? DIR_COL.c.lit : PAL.ink;
+      ctx.fillText(String(state.combo), x, y+Math.round(u*3.8));
+    }
+    // 進捗バー(曲のどのあたりか)
+    var bw=Math.min(maxW, 140), by=Math.min(ch-G*2, top+Math.round(u*22));
+    if(by+G<ch){
+      dot(x, by, bw, G, PAL.grid);
+      dot(x, by, Math.max(G, bw*Math.max(0,Math.min(1,state.progress||0))), G, DIR_COL.u.lit);
+    }
+    ctx.restore();
+  }
+
+  /* ---- ミクのひとこと(曲終わりの吹き出し) ---- */
+  function drawSpeech(text, mk, alpha){
+    if(!mk || !text) return;
+    var u=Math.max(2, Math.round(G*0.9)), size=Math.round(u*4.2), lh=Math.round(size*1.5);
+    ctx.save();
+    ctx.font=size+"px "+PIXEL_FONT;
+    ctx.textAlign="left"; ctx.textBaseline="top";
+    var maxW=Math.min(mk.x-fieldX0()-G*4, cw*0.62);
+    if(maxW<size*4) maxW=cw*0.62;
+    var lines=[""], chars=[].concat(Array.prototype.slice.call(text));
+    chars.forEach(function(c){
+      var cand=lines[lines.length-1]+c;
+      if(ctx.measureText(cand).width>maxW && lines[lines.length-1]) lines.push(c);
+      else lines[lines.length-1]=cand;
+    });
+    var tw=0;
+    lines.forEach(function(l){ tw=Math.max(tw, ctx.measureText(l).width); });
+    var bw=Math.round((tw+G*6)/G)*G, bh=Math.round((lines.length*lh+G*5)/G)*G;
+    var bx=Math.max(G*2, Math.min(mk.x-bw+G*4, cw-bw-G*2));
+    var by=Math.max(G*2, mk.y-bh-G*3);
+    ctx.globalAlpha=alpha;
+    dot(bx+G, by+G, bw, bh, PAL.shade);                   // 影
+    dot(bx, by, bw, bh, PAL.night2);                      // 本体
+    dot(bx, by, bw, G, PAL.ink); dot(bx, by+bh-G, bw, G, PAL.ink);
+    dot(bx, by, G, bh, PAL.ink); dot(bx+bw-G, by, G, bh, PAL.ink);
+    dot(bx+bw-G*5, by+bh, G*2, G, PAL.ink);               // しっぽ(ミクの方へ)
+    dot(bx+bw-G*4, by+bh+G, G*2, G, PAL.ink);
+    ctx.fillStyle=PAL.ink;
+    lines.forEach(function(l,i){ ctx.fillText(l, bx+G*3, by+G*2+i*lh); });
     ctx.restore();
   }
 
@@ -1130,6 +1236,7 @@
       if(y>-20 && y<jy-G*2) for(var x3=x0;x3<x0+fw;x3+=G*3) dot(x3,y,G,G,PAL.rail);
     });
 
+    drawLyrics(t, jy);                 // ノーツより先に描く = 必ずノーツの下になる
     drawSpeakers(jy);
 
     // 最初のノーツが来るまでのカウントイン
@@ -1205,48 +1312,20 @@
       ctx.restore();
     });
 
-    // コンボは判定ラインの下(ミクの反対側)に置く。ノーツと重ならない場所を選ぶ
-    if(state.combo>=5){
-      var fever=state.combo>=12;
-      ctx.save();
-      ctx.textAlign="left"; ctx.textBaseline="bottom";
-      var bx=fieldX0()+G, by=ch-G*3;
-      ctx.fillStyle=PAL.shade;
-      ctx.font=Math.round((fever?34:26)*(G/3))+'px '+PIXEL_FONT;
-      ctx.fillText(String(state.combo), bx+G, by+G);
-      ctx.fillStyle=fever ? DIR_COL.c.lit : PAL.ink;
-      ctx.fillText(String(state.combo), bx, by);
-      ctx.font=Math.round(11*(G/3))+'px '+PIXEL_FONT;
-      ctx.fillStyle=fever ? DIR_COL.r.lit : "oklch(70% .03 268)";
-      ctx.fillText(fever?"FEVER":"COMBO", bx, by-Math.round((fever?34:26)*(G/3))-G);
-      ctx.restore();
+    var mk=drawMikuOnStage(jy);
+    drawInfoPanel(jy, mk);             // 曲名・スコア・コンボ・進捗はミクの左へ
+    if(state.outroAt){                 // 曲の終わり:ミクがひとこと話す
+      var oa=Math.min(1,(performance.now()-state.outroAt)/260);
+      drawSpeech(state.outroMsg, mk, oa);
     }
-    drawMikuOnStage(jy);
   }
 
-  /* ============ カラオケ(上段) ============ */
+  /* ============ カラオケ(いまどのフレーズか) ============
+     表示はキャンバス側(drawLyrics)。ここでは進行中のフレーズだけ決める。 */
   function renderKaraoke(){
     var t=now(), pi=state.pi;
     while(pi<state.phrases.length-1 && t>state.phrases[pi].endTime) pi++;
     state.pi=pi;
-    var P=state.phrases[pi];
-    if(el.kNow.dataset.pi!==String(pi)){
-      el.kNow.dataset.pi=String(pi);
-      el.kNow.innerHTML=P.chars.map(function(d){
-        return d.reading
-          ? '<ruby class="ch">'+d.text+'<rt>'+d.reading+'</rt></ruby>'
-          : '<span class="ch">'+d.text+'</span>';
-      }).join("");
-      var next=state.phrases[pi+1];
-      el.kNext.textContent=next?next.text:"";
-    }
-    var nodes=el.kNow.children;
-    for(var i=0;i<P.chars.length;i++){
-      var d=P.chars[i], cls="ch";
-      if(t>=d.startTime && t<d.endTime) cls="ch on";
-      else if(t>=d.endTime) cls="ch sung";
-      if(nodes[i] && nodes[i].className!==cls) nodes[i].className=cls;
-    }
   }
 
   /* ============ 指のそばに出す入力フィードバック ============
@@ -1294,13 +1373,24 @@
       (delta>=0?"+":"")+Math.round(delta)+" ms";
     seJudge(g,dir); mikuReact(g);
   }
+  /* 打ち損じた場所を歌詞側にも返す。どの字で転んだのかが後から分かる。
+     方向違いはノーツを消費しないので一時的な警告色、
+     取りこぼし(MISS)はその行が流れるまで赤く残す。 */
+  function markLyric(n, kind){
+    if(!n || !state) return;
+    var P=state.phrases[n.phrase]; if(!P) return;
+    var d=P.chars[n.charIdx]; if(!d) return;
+    if(kind==="missed") d.missed=true;
+    else d.warnAt=performance.now();
+  }
+
   function applyJudgement(i,commitTime){
     var n=state.notes[i];
     var r=grade(commitTime,n,clampWindow(state.notes,i));
     n.result=r.grade; n.hitAt=performance.now();
     state.counts[r.grade]++;
     if(r.grade!=="TYPED"&&r.grade!=="MISS") state.deltas.push(r.delta);
-    if(r.grade==="MISS"){ state.combo=0; }
+    if(r.grade==="MISS"){ state.combo=0; markLyric(n,"missed"); }
     else { state.combo++; state.maxCombo=Math.max(state.maxCombo,state.combo); }
     state.score+=Math.round(100*MULT[r.grade]*comboMult(state.combo));
     el.score.textContent=state.score;
@@ -1329,7 +1419,7 @@
 
   /** 入力(方向)を1つ受け取る。フリックは指を離した時点で呼ばれる */
   function sendDir(dir){
-    if(!state||!state.running) return;
+    if(!state||!state.running||state.outroAt) return;
     seInput(dir);                                 // 離した瞬間の手応え(方向で音が変わる)
     mikuSway=1; mikuSwayDir=dir;                 // 入力方向へ髪がなびく
     var n=target();
@@ -1337,6 +1427,7 @@
     if(!n){ showFlickFeedback(dir,"free",null,null); return; }
     if(n.dir!==dir){                              // 方向違いはノーツを消費しない
       showFlickFeedback(dir,"ng",null,n.dir);
+      markLyric(n,"warn");
       flashMiss(dir); return;
     }
     var r=applyJudgement(state.idx, now());
@@ -1356,6 +1447,7 @@
     while(state.idx<state.notes.length && t-state.notes[state.idx].time>WIN.late){
       var n=state.notes[state.idx];
       n.result="MISS"; n.hitAt=performance.now();
+      markLyric(n,"missed");
       state.counts.MISS++;
       state.combo=0; el.combo.textContent=0;
       el.screen.classList.remove("fever");
@@ -1369,8 +1461,11 @@
     if(!state||!state.running) return;
     var t=now();
     var dur=(!state.isTutorial && player.video)?player.video.duration:0;
-    if(dur) el.progress.style.width=Math.min(100,(t/dur)*100)+"%";
-    reap();
+    if(dur){
+      state.progress=Math.min(1,t/dur);
+      el.progress.style.width=(state.progress*100)+"%";
+    }
+    if(!state.outroAt) reap();          // アウトロ中は残りを MISS で刈らない
     if(cw!==el.field.clientWidth || ch!==el.field.clientHeight) resizeCanvas();
     drawField();
     renderKaraoke();
@@ -1387,6 +1482,8 @@
       if(t>=P.chars[i].startTime && t<P.chars[i].endTime){ singing=true; break; }
     }
     var m = amp>0.5?2 : amp>0.18?1 : (singing ? ((Math.floor(t/110)%2)+1) : 0);
+    // アウトロ中は「話している」口に。歌が終わってもミクが動いている感じを残す
+    if(state.outroAt) m=(Math.floor((performance.now()-state.outroAt)/150)%2)+1;
     var live=performance.now()<mikuExprUntil;
     var expr = live ? mikuExpr : "normal";
     var pose = live ? mikuPose : "idle";
@@ -1399,9 +1496,33 @@
       if(state.idx>=state.notes.length && t>last.time+1200){ finishTutorial(); return; }
       requestAnimationFrame(loop); return;
     }
-    if((dur>0 && t>=dur-200) || (state.idx>=state.notes.length && t>last.time+1500)){ finish(); return; }
+    /* 曲が終わっても即結果画面にはしない。
+       3秒ほどステージのまま置いて、ミクのひとことを見せてから暗転して切り替える。 */
+    var done=(dur>0 && t>=dur-200) || (state.idx>=state.notes.length && t>last.time+1500);
+    if(done && !state.outroAt){
+      state.outroAt=performance.now();
+      state.outroMsg=mikuLine();
+      mikuExpr="ok"; mikuPose="up"; mikuExprUntil=performance.now()+OUTRO_HOLD; drawMiku();
+    }
+    if(state.outroAt){
+      var age=performance.now()-state.outroAt;
+      if(age>OUTRO_HOLD && !state.fading){ state.fading=true; el.veil.classList.add("on"); }
+      if(age>OUTRO_HOLD+700){ finish(); return; }
+    }
     requestAnimationFrame(loop);
   }
+
+  /* 曲の終わりにミクが言うひとこと。結果(ランク)で言い回しを変える。
+     スコアの読み上げではなく「一緒に歌った相手からの言葉」にする。 */
+  var OUTRO_HOLD=3000;
+  var MIKU_LINES={
+    SS:"ぴったりだった! また歌お?",
+    S :"いいね、息が合ってた",
+    A :"たのしかった! ありがと",
+    B :"もう一回、いこ?",
+    C :"ここからだよ。付き合ってね"
+  };
+  function mikuLine(){ return MIKU_LINES[rank()] || MIKU_LINES.C; }
 
   function rank(){
     var c=state.counts;
@@ -1450,6 +1571,8 @@
                   "&url="+encodeURIComponent(url)+"&hashtags=打鍵ミライ,マジカルミライ";
     el.share.hidden=false;
     el.overlay.style.display="grid";
+    // 暗転したまま結果を出すと真っ暗なので、結果を組んでから明るく戻す
+    setTimeout(function(){ if(el.veil) el.veil.classList.remove("on"); }, 80);
   }
 
   function enterPlayLayout(){
@@ -1503,8 +1626,8 @@
     el.judge.textContent=""; el.delta.textContent="";
     el.screen.classList.remove("fever");
     el.overlay.style.display="none";
+    if(el.veil) el.veil.classList.remove("on");     // 前回のアウトロの暗転を戻す
     el.share.hidden=true;
-    el.kNow.dataset.pi="";
     stopAttract();
     state.running=true;
     state.seekPending=true; state.seekDeadline=performance.now()+4000;
@@ -1523,13 +1646,14 @@
     kana.forEach(function(k,i){
       var st=t+i*1500;
       notes.push({kana:k, dir:dirOf(k), lane:LANE_OF[dirOf(k)], base:null, time:st,
-                  phrase:0, result:null, hitAt:0});
+                  phrase:0, charIdx:i, result:null, hitAt:0});
       chars.push({text:k, reading:"", startTime:st, endTime:st+700});
     });
     return {notes:notes, phrases:[{chars:chars, text:"あいうえお", startTime:t, endTime:t+7500,
               first:0, last:notes.length-1}],
             idx:0, pi:0, score:0, combo:0, maxCombo:0, deltas:[],
             counts:{JUST:0,GREAT:0,GOOD:0,TYPED:0,LATE:0,MISS:0}, running:false, effects:[], voices:[],
+            progress:0, outroAt:0, outroMsg:"", fading:false,
             seekPending:false, seekDeadline:0, isTutorial:true};
   }
   function startTutorial(){
@@ -1545,7 +1669,6 @@
     el.screen.classList.remove("fever");
     el.overlay.style.display="none";
     el.share.hidden=true;
-    el.kNow.dataset.pi="";
     state.running=true;
     enterPlayLayout();
     renderKaraoke(); drawField();
@@ -1844,7 +1967,8 @@
       var mark = data ? "(読みデータあり)"
                       : readingDiag ? "(読みデータ取得失敗:かな表記のみ)"
                                     : "(読みデータ無し:かな表記のみ)";
-      if(el.hudTitle) el.hudTitle.textContent="♪ "+player.data.song.name+" / "+player.data.song.artist.name;
+      songTitle="♪ "+player.data.song.name+" / "+player.data.song.artist.name;
+      if(el.hudTitle) el.hudTitle.textContent=songTitle;
       el.songmeta.textContent="♪ "+player.data.song.name+" / "+player.data.song.artist.name+
         "  —  "+videoPhrases.length+"フレーズ / "+total+"かな"+mark;
       el.songmeta.title=readingDiag||"";
