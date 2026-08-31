@@ -24,8 +24,8 @@
 <body>
 <h1>ミクの本体はツインテールである — リズム版 検証モック</h1>
 <div id="hint">
-  髪留めが近づいてきます。到達する<b>4拍目（音が変わる所）でタップ</b>。
-  そこから<b>次の4拍がスライド受付</b>で、髪が伸びます。<b>離さなくても次の拍で完了</b>します。
+  四拍子の<b>2拍目で髪留めをタップ</b>。そこから<b>4拍目までスライド</b>して髪を伸ばし、
+  <b>4拍目で髪が生えます</b>（離さなくても確定）。
   タップを外すと<b>ネギが斜め上に生えます</b>。左右は<b>音の定位</b>で分かります（ヘッドホン推奨）。
 </div>
 <canvas id="stage" width="960" height="600"></canvas>
@@ -34,25 +34,26 @@
   <button id="auto" class="sub">観賞モード</button>
   <label><input type="checkbox" id="guide"> 目印を出す（練習用）</label>
 </div>
-<div id="build">build 5 ・ 擬似曲 130BPM（本番は TextAlive の課題曲に置き換え）</div>
+<div id="build">build 6 ・ 擬似曲 130BPM（本番は TextAlive の課題曲に置き換え）</div>
 <script>
 "use strict";
 /* =========================================================================
  * ミクの本体はツインテールである — リズムアクション版 検証モック build 3
- *   4拍目でタップ、続く4拍がスライド受付。離さなくても次の拍で自動確定
- *   判定するのはタップの1点だけ。外すとネギが斜め上へ生える
+ *   1房=1小節。2拍目で髪留めをタップ、4拍目までスライド、4拍目で髪が生える
+ *   判定するのは2拍目のタップ1点だけ。外すとネギが斜め上へ生える
  * ========================================================================= */
 
 const BPM = 130, BEAT = 60 / BPM;
 const CYCLE = 8;                        // 1体 = 8拍(2小節)
 const LYRIC = [..."ミクノホンタイハツインテールデアルコエガカタチヲツクル"];
 
-/* 操作は「各小節の4拍目」だけに起きる。
- * そこで前の房を離し(髪の毛が生える)、同時に次の房を掴む(髪留め)。
- * つまり掴んでから離すまでの猶予は 4 拍 = 1 小節まるごと。
- *   房 a: 掴む = actionBeat(a) / 離す = actionBeat(a+1)
- *   体 c: 房 2c(1本目) と 2c+1(2本目) を持ち、2c+1 を離した拍で完成する */
-const actionBeat = a => a * 4 + 3;
+/* 1 房 = 1 小節。四拍子の中で完結する。
+ *   2 拍目 … 髪留めを置く（タップ。ここだけが判定対象）
+ *   2→4 拍目 … 髪留めをスライドさせて伸ばす
+ *   4 拍目 … 髪が生える（離さなくてもここで確定）
+ *   体 c: 房 2c(1本目) と 2c+1(2本目)。2本目が生えた拍で完成する */
+const tapBeat = a => a * 4 + 1;      // 2拍目
+const doneBeat = a => a * 4 + 3;     // 4拍目
 const tailUnit = a => Math.floor(a / 2);
 const tailSlot = a => a % 2;
 
@@ -204,17 +205,14 @@ const sideOf = (c, i) => (rnd01(c) < 0.5 ? ["L", "R"] : ["R", "L"])[i];
 function scheduleBeat(b) {
   const at = startAt + bt(b);
   songBeat(b, at);
-  if (b % 4 === 3) {
-    // 操作拍。離す房(前)と掴む房(次)が同時に来るので、両方の音を僅かにずらして重ねる
-    const a = (b - 3) / 4;
-    if (a > 0) {
-      const prev = sideOf(tailUnit(a - 1), tailSlot(a - 1));
-      hairBeat(at, prev === "L" ? -0.55 : 0.55);          // 髪の毛が生える
-    }
-    const next = sideOf(tailUnit(a), tailSlot(a));
-    tieBeat(at + 0.03, next === "L" ? -0.8 : 0.8);        // 髪留めを掴む
+  const inBar = b % 4, a = Math.floor(b / 4);
+  const side = sideOf(tailUnit(a), tailSlot(a));
+  if (inBar === 1) {                                  // 2拍目: 髪留め（ここでタップ）
+    tieBeat(at, side === "L" ? -0.8 : 0.8);
+  } else if (inBar === 3) {                           // 4拍目: 髪が生える
+    hairBeat(at, side === "L" ? -0.55 : 0.55);
   } else {
-    click(at, b % 4 === 0);
+    click(at, inBar === 0);
   }
 }
 function scheduler() { while (bt(nextBeat) < songTime() + 0.25) { scheduleBeat(nextBeat); nextBeat++; } }
@@ -262,6 +260,7 @@ const MAIN_SCALE = 1.75, GROUND_Y = 452;
 const ANCHOR = { L: { x: -0.44, y: -0.44 }, R: { x: 0.44, y: -0.44 } };
 let running = false, autoPlay = false, showGuide = false;
 let units = [], slide = null, shimmerGain = null;
+const finishedUnits = new Set();
 let gallery = [], score = 0, combo = 0, maxCombo = 0, flash = null, effects = [];
 
 function makeUnit(c) {
@@ -273,7 +272,7 @@ const unitOf = c => units.find(u => u.c === c);
  *  次の体は右に現れてから中央へ滑り込み、前の体は上へ抜ける（横にずらして重なりを避ける）*/
 const settledY = u => GROUND_Y - u.obj.h * MAIN_SCALE / 2;
 function unitPos(u, t) {
-  const first = bt(actionBeat(u.c * 2)), doneAt = bt(actionBeat(u.c * 2 + 2));
+  const first = bt(tapBeat(u.c * 2)), doneAt = bt(doneBeat(u.c * 2 + 1));
   const age = (t - first) / BEAT;
   const inP = Math.max(0, Math.min(1, age / 0.9));
   const slideIn = inP * inP * (3 - 2 * inP);
@@ -337,12 +336,12 @@ function growNegi(a) {
 function onDown(px, py) {
   const t = songTime();
   // 直近の操作拍を探す。タップ位置は問わない（触った所から髪が生える）
-  const near = Math.round((t / BEAT - 3) / 4);
+  const near = Math.round((t / BEAT - 1) / 4);
   let best = null;
   for (const a of [near - 1, near, near + 1]) {
     if (a < 0 || stateOf(a) !== "pending" || !tailRef(a)) continue;
-    const d = (t - bt(actionBeat(a))) / BEAT;
-    if (Math.abs(d) < 0.78 && (!best || Math.abs(d) < Math.abs(best.d))) best = { a, d };
+    const d = (t - bt(tapBeat(a))) / BEAT;
+    if (Math.abs(d) < 0.80 && (!best || Math.abs(d) < Math.abs(best.d))) best = { a, d };
   }
   if (!best) { flop(ac.currentTime); combo = 0; pop("そこじゃない", "#ff7a8a", px, py); return; }
   const g = grade(best.d);
@@ -350,7 +349,7 @@ function onDown(px, py) {
   const r = tailRef(best.a), pan = r.side === "L" ? -0.7 : 0.7;
   chain.set(best.a, "held");
   osc(ac.currentTime, 520, "sine", 0.13, 0.1, sfxGain, pan);
-  shimmerGain = shimmer(ac.currentTime, BEAT * 4, pan);
+  shimmerGain = shimmer(ac.currentTime, BEAT * 2, pan);
   // 髪の根元は「触った位置」。厳密な位置合わせは求めない
   const loc = toLocal(r.u, px, py, r.side, t);
   slide = { a: best.a, u: r.u, side: r.side, tapGrade: g, ...loc, x0: px, y0: py, x: px, y: py };
@@ -381,7 +380,7 @@ function onUp() { if (!slide) return; const s = slide; slide = null; finalize(s)
 
 // ---- ユニットの完成 ---------------------------------------------------------
 function finish(u) {
-  u.judged = true;
+  u.judged = true; finishedUnits.add(u.c);
   const hairs = ["L", "R"].filter(k => u.tails[k] && u.tails[k].kind === "hair");
   const q = hairs.reduce((a, k) => a + u.tails[k].quality, 0);
   let text, label;
@@ -403,27 +402,27 @@ function tick() {
   const t = songTime();
   scheduler();
   const c = Math.floor(t / BEAT / CYCLE);
-  for (const k of [c, c + 1]) if (k >= 0 && !unitOf(k)) units.push(makeUnit(k));
-  const near = Math.floor((t / BEAT - 3) / 4);
-  for (let a = Math.max(0, near - 1); a <= near; a++)          // 掴み損ね
-    if (stateOf(a) === "pending" && tailRef(a) && t > bt(actionBeat(a)) + BEAT * 0.78) growNegi(a);
-  // スライド受付は次の操作拍まで。離さなくてもそこで完了する
-  if (slide && t >= bt(actionBeat(slide.a + 1))) { const s2 = slide; slide = null; finalize(s2); }
+  for (const k of [c, c + 1])
+    if (k >= 0 && !unitOf(k) && !finishedUnits.has(k)) units.push(makeUnit(k));
+  const near = Math.floor((t / BEAT - 1) / 4);
+  for (let a = Math.max(0, near - 1); a <= near; a++)          // 置き損ね
+    if (stateOf(a) === "pending" && tailRef(a) && t > bt(tapBeat(a)) + BEAT * 0.80) growNegi(a);
+  // スライド受付は 4 拍目まで。離さなくてもそこで髪が生える
+  if (slide && t >= bt(doneBeat(slide.a))) { const s2 = slide; slide = null; finalize(s2); }
   for (const u of units)
-    if (!u.judged && t >= bt(actionBeat(u.c * 2 + 2)) + BEAT * 0.85) finish(u);
+    if (!u.judged && t >= bt(doneBeat(u.c * 2 + 1)) + BEAT * 0.3) finish(u);
   units = units.filter(u => !u.judged);
   if (autoPlay) autoTick(t);
 }
 
 // ---- 観賞モード -------------------------------------------------------------
 function autoTick(t) {
-  if (slide && t >= bt(actionBeat(slide.a + 1))) onUp();      // 操作拍で離し、
-  if (!slide) {                                              // 続けて次を掴む
-    const near = Math.round((t / BEAT - 3) / 4);
+  if (!slide) {
+    const near = Math.round((t / BEAT - 1) / 4);
     for (const a of [near - 1, near, near + 1]) {
       if (a < 0 || stateOf(a) !== "pending") continue;
       const r = tailRef(a); if (!r) continue;
-      const tb = bt(actionBeat(a));
+      const tb = bt(tapBeat(a));
       if (t >= tb && t < tb + BEAT * 0.4) {
         const anc = anchorOf(r.u, r.side, t);
         onDown(anc.x + (r.side === "L" ? -14 : 14), anc.y + 6);
@@ -431,8 +430,8 @@ function autoTick(t) {
       }
     }
   }
-  if (slide) {
-    const p = Math.min(1, (t - bt(actionBeat(slide.a))) / (BEAT * 4));
+  if (slide) {                                   // 2拍かけて外下へ伸ばす
+    const p = Math.min(1, (t - bt(tapBeat(slide.a))) / (BEAT * 2));
     onMove(slide.x0 + (slide.side === "L" ? -1 : 1) * 74 * p, slide.y0 + 158 * p);
   }
 }
@@ -519,7 +518,7 @@ function drawObject(g, o, x, y, scale, tails, t) {
 function drawApproach(g, a, t) {
   if (stateOf(a) !== "pending") return;
   const r = tailRef(a); if (!r) return;
-  const tb = bt(actionBeat(a)), left = (tb - t) / BEAT;
+  const tb = bt(tapBeat(a)), left = (tb - t) / BEAT;
   if (left > 3.1 || left < -0.55) return;
   const p = Math.max(0, Math.min(1, 1 - left / 3));
   const e = p * p * (3 - 2 * p);                       // 連続補間（点滅させない）
@@ -549,7 +548,7 @@ function render() {
     g.fillStyle = "#7fe8e0"; g.font = "bold 20px sans-serif"; g.textAlign = "center";
     g.fillText("▶ スタート を押す", W / 2, H / 2 - 10);
     g.fillStyle = "#8fa6ae"; g.font = "13px sans-serif";
-    g.fillText("4拍目でタップ → 次の4拍でスライド → 自動で完了（タップを外すとネギ）", W / 2, H / 2 + 20);
+    g.fillText("2拍目で髪留めをタップ → 4拍目まで伸ばす → 髪が生える（外すとネギ）", W / 2, H / 2 + 20);
     requestAnimationFrame(render); return;
   }
   // 背景: これまでのミクたち（ランダム配置。ボーカルに合わせて揺れる）
@@ -561,15 +560,17 @@ function render() {
   g.restore();
 
   // 拍インジケータ。各小節の4拍目が操作拍（離して掴む）
-  // 8ビート表示。4拍目と8拍目がタップ、その後ろ4拍がスライド受付
-  const in8 = Math.floor(t / BEAT) % 8, ph = (t / BEAT) % 1;
-  for (let i = 0; i < 8; i++) {
-    const on = i === in8, tap = i === 3 || i === 7;
-    g.fillStyle = on ? (tap ? "#ffe66d" : "#39c5bb") : (tap ? "#4a4326" : "#243039");
-    g.beginPath(); g.arc(30 + i * 22, 30, on ? 9.5 - ph * 2 : 5, 0, 7); g.fill();
+  // 四拍子。2拍目=髪留め(タップ)、4拍目=髪が生える
+  const inBar4 = Math.floor(t / BEAT) % 4, ph = (t / BEAT) % 1;
+  for (let i = 0; i < 4; i++) {
+    const on = i === inBar4;
+    const col = i === 1 ? "#ffe66d" : i === 3 ? "#ff8fc0" : "#39c5bb";
+    const dim = i === 1 ? "#4a4326" : i === 3 ? "#4a2a3a" : "#243039";
+    g.fillStyle = on ? col : dim;
+    g.beginPath(); g.arc(36 + i * 26, 30, on ? 10 - ph * 2 : 6, 0, 7); g.fill();
   }
   g.fillStyle = "#8fa6ae"; g.font = "11px sans-serif"; g.textAlign = "left";
-  g.fillText("4・8拍目でタップ → 次の4拍でスライド", 210, 34);
+  g.fillText("2拍目=髪留めをタップ → 4拍目=髪が生える", 150, 34);
   g.textAlign = "right"; g.fillStyle = "#9fb6bd"; g.font = "12px sans-serif";
   g.fillText(`SCORE ${score}`, W - 20, 26);
   g.fillText(`COMBO ${combo}${maxCombo ? "  (MAX " + maxCombo + ")" : ""}`, W - 20, 44);
@@ -639,6 +640,7 @@ document.getElementById("start").onclick = () => {
   initAudio(); ac.resume();
   startAt = ac.currentTime + 0.15; nextBeat = 0;
   running = true; units = [makeUnit(0)]; gallery = []; score = 0; combo = 0; maxCombo = 0;
+  finishedUnits.clear(); chain.clear();
   clearInterval(schedTimer); schedTimer = setInterval(tick, 16);
 };
 document.getElementById("auto").onclick = () => {
@@ -649,8 +651,7 @@ document.getElementById("guide").onchange = e => { showGuide = e.target.checked;
 window.RHYTHM_UNITS = () => units.map(u => { const p = unitPos(u, songTime());
   return { obj: u.obj.name, x: Math.round(p.x), alpha: +p.alpha.toFixed(2), scale: +(p.scale/MAIN_SCALE).toFixed(2) }; });
 window.__songTime = () => songTime();
-window.__act = a => {            // 検証用: 房 a を離す/掴む（実際の判定経路を通す）
-  if (slide && slide.a === a - 1) { onUp(); }
+window.__act = a => {            // 検証用: 房 a を掴む（実際の判定経路を通す）
   const r = tailRef(a);
   if (r && stateOf(a) === 'pending') { const an = anchorOf(r.u, r.side); onDown(an.x, an.y); }
   if (slide) onMove(slide.x0 + (slide.side === 'L' ? -70 : 70), slide.y0 + 150);
