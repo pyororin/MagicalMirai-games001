@@ -24,9 +24,9 @@
 <body>
 <h1>ミクの本体はツインテールである — リズム版 検証モック</h1>
 <div id="hint">
-  髪留めが近づいてきます。到達する<b>4拍目（音が変わる所）でタップ</b>して星を伸ばし、
-  <b>次の小節の4拍目で離す</b>と髪が生えます。＝毎回4拍目で「離して、掴む」。
-  外すと<b>ネギが斜め上に生えます</b>。左右は<b>音の定位</b>で分かります（ヘッドホン推奨）。
+  髪留めが近づいてきます。到達する<b>4拍目（音が変わる所）でタップ</b>。
+  そこから<b>次の4拍がスライド受付</b>で、髪が伸びます。<b>離さなくても次の拍で完了</b>します。
+  タップを外すと<b>ネギが斜め上に生えます</b>。左右は<b>音の定位</b>で分かります（ヘッドホン推奨）。
 </div>
 <canvas id="stage" width="960" height="600"></canvas>
 <div id="ui">
@@ -34,13 +34,13 @@
   <button id="auto" class="sub">観賞モード</button>
   <label><input type="checkbox" id="guide"> 目印を出す（練習用）</label>
 </div>
-<div id="build">build 4 ・ 擬似曲 130BPM（本番は TextAlive の課題曲に置き換え）</div>
+<div id="build">build 5 ・ 擬似曲 130BPM（本番は TextAlive の課題曲に置き換え）</div>
 <script>
 "use strict";
 /* =========================================================================
  * ミクの本体はツインテールである — リズムアクション版 検証モック build 3
- *   操作は各小節の4拍目だけ。そこで前の房を離し、同時に次の房を掴む
- *   伸ばす猶予は1小節。失敗するとネギが斜め上へ生える
+ *   4拍目でタップ、続く4拍がスライド受付。離さなくても次の拍で自動確定
+ *   判定するのはタップの1点だけ。外すとネギが斜め上へ生える
  * ========================================================================= */
 
 const BPM = 130, BEAT = 60 / BPM;
@@ -357,28 +357,27 @@ function onDown(px, py) {
   pop(GRADE[g].label, GRADE[g].col, px, py - 26);
 }
 const onMove = (px, py) => { if (slide) { slide.x = px; slide.y = py; } };
-function onUp() {
-  if (!slide) return;
-  const t = songTime(), s = slide; slide = null;
+
+/** 房を確定する。離しても、離さずに 8 拍目を迎えても、同じくここで完了する。
+ *  リリースの時刻は見ない（判定するのは 4 拍目のタップだけ）*/
+function finalize(s) {
   if (shimmerGain) { shimmerGain.gain.setTargetAtTime(0.0001, ac.currentTime, 0.02); shimmerGain = null; }
-  const d = (t - bt(actionBeat(s.a + 1))) / BEAT;
-  let g = grade(d);
   const dx = s.x - s.x0, dy = s.y - s.y0, dist = Math.hypot(dx, dy);
-  if (dist < 14) { g = "MISS"; pop("伸びてない", "#ff7a8a", s.x, s.y); }   // 少しでも伸ばしてあれば可
-  else if (g === "MISS") pop(d < 0 ? "早い" : "遅い", "#ff7a8a", s.x, s.y);
-  else pop(GRADE[g].label, GRADE[g].col, s.x, s.y);
-  if (g === "MISS") { s.u.negiAnchor = { x: s.x0, y: s.y0 }; growNegi(s.a); return; }
-  // OK 帯でも髪は生える。コンボが切れるのはネギになったときだけ
+  if (dist < 14) {                       // 掴んだが伸ばさなかった＝操作していないのと同じ
+    pop("伸びてない", "#ff7a8a", s.x, s.y);
+    s.u.negiAnchor = { x: s.x0, y: s.y0 }; growNegi(s.a); return;
+  }
   chain.set(s.a, "resolved");
   s.u.done[s.side] = true;
   shakin(ac.currentTime, s.side === "L" ? -0.6 : 0.6);
   combo++; maxCombo = Math.max(maxCombo, combo);
-  score += Math.round((GRADE[s.tapGrade].s + GRADE[g].s) * (1 + Math.min(combo, 20) / 20));
+  score += Math.round(GRADE[s.tapGrade].s * 2 * (1 + Math.min(combo, 20) / 20));
   s.u.tails[s.side] = { kind: "hair", rx: s.rx, ry: s.ry,
                         angle: Math.atan2(dy, dx), len: Math.min(dist, 260),
-                        quality: (GRADE[s.tapGrade].s + GRADE[g].s) / 200,
+                        quality: GRADE[s.tapGrade].s / 100,
                         chars: LYRIC.slice(Math.floor(rnd01(s.a) * 20)).slice(0, 7) };
 }
+function onUp() { if (!slide) return; const s = slide; slide = null; finalize(s); }
 
 // ---- ユニットの完成 ---------------------------------------------------------
 function finish(u) {
@@ -408,13 +407,8 @@ function tick() {
   const near = Math.floor((t / BEAT - 3) / 4);
   for (let a = Math.max(0, near - 1); a <= near; a++)          // 掴み損ね
     if (stateOf(a) === "pending" && tailRef(a) && t > bt(actionBeat(a)) + BEAT * 0.78) growNegi(a);
-  if (slide && t > bt(actionBeat(slide.a + 1)) + BEAT * 0.35) { // 離し損ね
-    const s2 = slide; slide = null;
-    if (shimmerGain) { shimmerGain.gain.setTargetAtTime(0.0001, ac.currentTime, 0.02); shimmerGain = null; }
-    s2.u.negiAnchor = { x: s2.x0, y: s2.y0 };
-    pop("離し忘れ", "#ff7a8a", s2.x, s2.y);
-    growNegi(s2.a);
-  }
+  // スライド受付は次の操作拍まで。離さなくてもそこで完了する
+  if (slide && t >= bt(actionBeat(slide.a + 1))) { const s2 = slide; slide = null; finalize(s2); }
   for (const u of units)
     if (!u.judged && t >= bt(actionBeat(u.c * 2 + 2)) + BEAT * 0.85) finish(u);
   units = units.filter(u => !u.judged);
@@ -555,7 +549,7 @@ function render() {
     g.fillStyle = "#7fe8e0"; g.font = "bold 20px sans-serif"; g.textAlign = "center";
     g.fillText("▶ スタート を押す", W / 2, H / 2 - 10);
     g.fillStyle = "#8fa6ae"; g.font = "13px sans-serif";
-    g.fillText("4拍目で掴む → 1小節かけて伸ばす → 次の4拍目で離す（外すとネギが生える）", W / 2, H / 2 + 20);
+    g.fillText("4拍目でタップ → 次の4拍でスライド → 自動で完了（タップを外すとネギ）", W / 2, H / 2 + 20);
     requestAnimationFrame(render); return;
   }
   // 背景: これまでのミクたち（ランダム配置。ボーカルに合わせて揺れる）
@@ -567,14 +561,15 @@ function render() {
   g.restore();
 
   // 拍インジケータ。各小節の4拍目が操作拍（離して掴む）
-  const inBar = Math.floor(t / BEAT) % 4, ph = (t / BEAT) % 1;
-  for (let i = 0; i < 4; i++) {
-    const on = i === inBar, act = i === 3;
-    g.fillStyle = on ? (act ? "#ffe66d" : "#39c5bb") : "#243039";
-    g.beginPath(); g.arc(34 + i * 24, 30, on ? 10 - ph * 2 : 5.5, 0, 7); g.fill();
+  // 8ビート表示。4拍目と8拍目がタップ、その後ろ4拍がスライド受付
+  const in8 = Math.floor(t / BEAT) % 8, ph = (t / BEAT) % 1;
+  for (let i = 0; i < 8; i++) {
+    const on = i === in8, tap = i === 3 || i === 7;
+    g.fillStyle = on ? (tap ? "#ffe66d" : "#39c5bb") : (tap ? "#4a4326" : "#243039");
+    g.beginPath(); g.arc(30 + i * 22, 30, on ? 9.5 - ph * 2 : 5, 0, 7); g.fill();
   }
   g.fillStyle = "#8fa6ae"; g.font = "11px sans-serif"; g.textAlign = "left";
-  g.fillText("4拍目 = 離して掴む", 146, 34);
+  g.fillText("4・8拍目でタップ → 次の4拍でスライド", 210, 34);
   g.textAlign = "right"; g.fillStyle = "#9fb6bd"; g.font = "12px sans-serif";
   g.fillText(`SCORE ${score}`, W - 20, 26);
   g.fillText(`COMBO ${combo}${maxCombo ? "  (MAX " + maxCombo + ")" : ""}`, W - 20, 44);
@@ -663,7 +658,7 @@ window.__act = a => {            // 検証用: 房 a を離す/掴む（実際�
 window.GALLERY_KINDS = () => gallery.map(x => [x.obj.name, ['L','R'].map(k => x.tails[k] ? x.tails[k].kind : '-').join('/')]);
 window.RHYTHM_DEBUG = () => ({ score, combo, maxCombo, mikus: gallery.length,
   units: units.map(u => ({ c: u.c, obj: u.obj.name, order: u.order.join(""),
-                           tails: Object.keys(u.tails).filter(k => u.tails[k]).join("") })) });
+                           tails: ['L','R'].map(k => u.tails[k] ? (u.tails[k].kind === 'hair' ? k : 'n') : '-').join('') })) });
 render();
 </script>
 </body>
