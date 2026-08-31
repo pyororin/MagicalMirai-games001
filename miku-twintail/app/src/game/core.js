@@ -70,7 +70,9 @@ export function createGame(canvas, song, opts = {}) {
   function unitPos(u, t) {
     const b = barOf(u.c * 2);
     const dur = b ? b.dur : 0.46;
-    const appear = b ? clamp01((t - (b.tap - dur * 4)) / (dur * 2)) : 0;
+    // 前の体は「自分の最後の拍 = この体のタップの 2 拍前」に判定されて飛び立つ。
+    // それより早く現れると中央で 2 体が重なるので、出現はその直後から。
+    const appear = b ? clamp01((t - (b.tap - dur * 1.8)) / (dur * 1.2)) : 0;
     const e = smooth(appear);
     return { x: W / 2, y: settledY(u), scale: MAIN_SCALE * (0.9 + 0.1 * e), alpha: e };
   }
@@ -309,9 +311,11 @@ export function createGame(canvas, song, opts = {}) {
     // 背景: これまでのミクたち（完成した位置から飛んでいく）
     // 課題曲 1 曲で 50〜80 体たまるので、増えるほど全体を縮めて画面に収める
     const shrink = Math.min(1, Math.sqrt(26 / (gallery.length + 14)));
-    const bestMiku = gallery.reduce((a, b) => Math.max(a, b.miku), 0);
+    // 称号は「今の最高記録の 1 体」にだけ出す（全部に出すと文字だらけになる）
+    let bestIdx = -1, bestMiku = -1;
+    gallery.forEach((it, i) => { if (it.miku >= bestMiku) { bestMiku = it.miku; bestIdx = i; } });
     g.save(); g.globalAlpha = .85;
-    for (const it of gallery) {
+    gallery.forEach((it, gi) => {
       const fly = smooth((t - it.flyT) / 0.55);
       const bob = Math.sin(t * 1.9 + it.seed) * 2.6;
       const x = it.fromX + (it.x - it.fromX) * fly;
@@ -328,12 +332,12 @@ export function createGame(canvas, song, opts = {}) {
         g.fillStyle = grd; g.beginPath(); g.arc(x, y, rad, 0, 7); g.fill();
       }
       drawObject(g, it.obj, x, y, s, it.tails, t);
-      if (it.miku >= bestMiku && it.rank.glow > 0 && s > 0.2) {   // 最高記録だけ称号を出す
-        g.fillStyle = `rgba(255,230,109,${0.35 + 0.3 * it.rank.glow})`;
-        g.font = "bold 10px sans-serif"; g.textAlign = "center";
-        g.fillText(`${it.rank.label}・ミク度${it.miku}`, x, y + it.obj.h * s / 2 + 14);
+      if (gi === bestIdx && it.rank.glow > 0 && s > 0.16) {
+        g.fillStyle = "rgba(255,230,109,.9)";
+        g.font = "bold 11px sans-serif"; g.textAlign = "center";
+        g.fillText(`★ ${it.rank.label}・ミク度${it.miku}`, x, y + it.obj.h * s / 2 + 15);
       }
-    }
+    });
     g.restore();
 
     if (results) { drawResults(t); requestAnimationFrame(render); return; }
