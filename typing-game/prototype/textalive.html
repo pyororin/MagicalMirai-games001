@@ -74,14 +74,21 @@
   /* ---- 中段:5レーン落下フィールド(横位置=入力方向 / 縦位置=時間) ---- */
   .field{position:relative;flex:1 1 auto;min-height:200px}
   #notes{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .judgepop{position:absolute;left:0;right:0;bottom:40%;text-align:center;pointer-events:none;z-index:2}
-  .judge{font-family:var(--pixel);font-size:clamp(20px,5vw,30px);letter-spacing:.16em;opacity:0;
-    -webkit-text-stroke:3px var(--night);paint-order:stroke fill}
-  .judge.show{animation:pop .42s ease-out}
-  @keyframes pop{0%{opacity:0;transform:translateY(6px) scale(.9)}18%{opacity:1;transform:translateY(0) scale(1.1)}100%{opacity:0;transform:translateY(-6px) scale(1)}}
+  /* 判定は「見逃しようがない」大きさで判定ラインのすぐ上に出す。
+     小さく薄いと、指を動かしている最中の視野には入らない。 */
+  /* 指のそばに出るフィードバックと重ならないよう、落下領域の真ん中に置く */
+  .judgepop{position:absolute;left:0;right:0;bottom:52%;text-align:center;pointer-events:none;z-index:2}
+  .judge{font-family:var(--pixel);font-size:clamp(38px,13vw,72px);letter-spacing:.14em;opacity:0;
+    -webkit-text-stroke:6px var(--night);paint-order:stroke fill;font-weight:700}
+  .judge.show{animation:pop .52s ease-out}
+  @keyframes pop{0%{opacity:0;transform:translateY(10px) scale(.8)}
+    14%{opacity:1;transform:translateY(0) scale(1.22)}
+    30%{opacity:1;transform:scale(1)}
+    100%{opacity:0;transform:translateY(-10px) scale(1)}}
   .judge.JUST{color:var(--hot)} .judge.GREAT{color:var(--key)} .judge.GOOD{color:var(--good)}
   .judge.TYPED{color:var(--dim)} .judge.LATE{color:var(--warn)} .judge.MISS{color:var(--bad)}
-  .delta{display:block;font-family:var(--pixel);font-size:12px;color:var(--dim);font-variant-numeric:tabular-nums;min-height:1.2em}
+  .delta{display:block;font-family:var(--pixel);font-size:15px;color:var(--ink);
+    -webkit-text-stroke:4px var(--night);paint-order:stroke fill;font-variant-numeric:tabular-nums;min-height:1.2em}
   /* はちゅねはフィールドの canvas に直接描くので、この要素はスプライト置き場 */
   #miku{position:absolute;width:0;height:0;opacity:0;pointer-events:none}
 
@@ -206,7 +213,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 22</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 23</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -316,7 +323,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 22;
+  var BUILD = 23;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -964,12 +971,39 @@
     ctx.font=Math.round(s*0.46)+'px '+PIXEL_FONT;
     ctx.textAlign="center"; ctx.textBaseline="middle";
     ctx.fillText(n.kana, X+half, Y+half-s*0.13);
-    // 方向記号(ドット絵)。かなの下に中心を合わせて置く
-    var as=Math.max(2,Math.round(s*0.055));
-    spriteCentered(ARROW[n.dir], X+half, Y+s-as*3.2, as, col.lit);
+    /* 方向記号。色違いの矢印を同系色の上に置くと明度差が出ず読めないので、
+       暗い台座を敷いて白抜きで描く(どの方向色でもコントラストが同じ)。 */
+    var as=Math.max(3,Math.round(s*0.085));
+    var ax=X+half, ay=Y+s-as*3.0;
+    dot(ax-as*2.5-G, ay-as*2.5-G, as*5+G*2, as*5+G*2, PAL.night);
+    spriteCentered(ARROW[n.dir], ax, ay, as, PAL.ink);
     // 歌詞=声、を示す吹き出しの尻尾
     dot(X+half-G, Y+s, G*2, G, col.dark);
     dot(X+half, Y+s+G, G, G, col.dark);
+  }
+
+  /* ---- 打った/取りこぼしたときの画面の手応え ----
+     判定文字だけでは、指を動かしている最中の視野に入らない。
+     盤面ごと揺らして色をかぶせると、見ていなくても失敗が分かる。 */
+  var shake=0, flash=0, flashCol=PAL.miss;
+  function kick(g){
+    if(g==="MISS"){ shake=1; flash=1; flashCol=PAL.miss; }
+    else if(g==="JUST"){ flash=0.45; flashCol=DIR_COL.c.lit; }
+    else if(g==="GREAT"){ flash=0.3; flashCol=DIR_COL.u.lit; }
+    if(calmMotion) shake=0;                      // モーション低減設定では揺らさない
+  }
+  function drawFlash(){
+    if(flash<=0) return;
+    var a=flash;
+    ctx.save();
+    ctx.globalAlpha=a*0.16; ctx.fillStyle=flashCol; ctx.fillRect(0,0,cw,ch);
+    ctx.globalAlpha=a*0.85;                       // 画面のふちを太く光らせる
+    var b=G*3;
+    ctx.fillStyle=flashCol;
+    ctx.fillRect(0,0,cw,b); ctx.fillRect(0,ch-b,cw,b);
+    ctx.fillRect(0,0,b,ch); ctx.fillRect(cw-b,0,b,ch);
+    ctx.restore();
+    flash=Math.max(0, flash-0.055);
   }
 
   /* ---- 判定ライン:5つのスピーカー ---- */
@@ -983,8 +1017,9 @@
       var w=Math.round(laneW*0.62/G)*G;
       dot(cx-w/2, jy+G*2-p*G, w, h, col.dark);
       dot(cx-w/2+G, jy+G*3-p*G, w-G*2, h-G*2, p>0.2?col.lit:col.base);
-      var as=Math.max(2,Math.round(G*0.9));
-      sprite(ARROW[d], cx-as*2.5, jy+G*4-p*G, as, PAL.shade);
+      var as=Math.max(3,Math.round(G*1.2));
+      sprite(ARROW[d], cx-as*2.5+G, jy+G*4-p*G+G, as, PAL.shade);   // 縁取り
+      sprite(ARROW[d], cx-as*2.5, jy+G*4-p*G, as, PAL.ink);
       pump[i]=Math.max(0,p-0.08);
     }
   }
@@ -1033,7 +1068,7 @@
     var P=state.phrases[state.pi];
     if(!P || !P.chars.length) return;
     var fw=fieldW(), x0=fieldX0(), pad=G*3;
-    var size=Math.max(13, Math.min(Math.round(fw/13), 26));
+    var size=Math.max(20, Math.min(Math.round(fw/9), 40));
     var lh=Math.round(size*1.7), maxW=fw-pad*2;
     ctx.save();
     ctx.textAlign="left"; ctx.textBaseline="alphabetic";
@@ -1219,6 +1254,12 @@
     var t=now(), jy=judgeY(), fw=fieldW(), x0=fieldX0(), laneW=fw/5, i;
     updateMusic(t); tickHue();
     ctx.clearRect(0,0,cw,ch);
+    ctx.save();
+    if(shake>0){                                   // ミスで盤面ごと揺らす
+      ctx.translate(Math.round((Math.random()-0.5)*G*5*shake),
+                    Math.round((Math.random()-0.5)*G*5*shake));
+      shake=Math.max(0, shake-0.11);
+    }
     drawStage(t);
 
     // レーン(床の帯)。中央の●レーンだけ少し明るくして基準にする
@@ -1238,24 +1279,6 @@
 
     drawLyrics(t, jy);                 // ノーツより先に描く = 必ずノーツの下になる
     drawSpeakers(jy);
-
-    // 最初のノーツが来るまでのカウントイン
-    var first=state.notes[state.idx];
-    if(first){
-      var until=first.time-t;
-      if(until>0 && until<4000 && state.idx===0){
-        var beats=Math.ceil(until/((beatNow&&beatNow.duration)||500));
-        ctx.save();
-        ctx.textAlign="center"; ctx.textBaseline="middle";
-        ctx.fillStyle=PAL.ink;
-        ctx.font=Math.round(Math.min(cw*0.16,72))+'px '+PIXEL_FONT;
-        ctx.globalAlpha=Math.min(0.8,until/600);
-        ctx.fillText(String(Math.min(9,beats)), fieldX0()+fieldW()/2, ch*0.42);
-        ctx.font=Math.round(Math.min(cw*0.05,20))+'px '+PIXEL_FONT;
-        ctx.fillText("READY", fieldX0()+fieldW()/2, ch*0.42+Math.min(cw*0.13,58));
-        ctx.restore();
-      }
-    }
 
     // ノーツ
     var size=Math.min(laneW*0.72, ch*0.15, 60);
@@ -1318,6 +1341,8 @@
       var oa=Math.min(1,(performance.now()-state.outroAt)/260);
       drawSpeech(state.outroMsg, mk, oa);
     }
+    ctx.restore();                     // 揺れの分の平行移動を戻す
+    drawFlash();                       // 色かぶせは揺れの影響を受けない位置で
   }
 
   /* ============ カラオケ(いまどのフレーズか) ============
@@ -1371,7 +1396,7 @@
     el.judge.classList.add("show");
     el.delta.textContent = (g==="MISS") ? "" : (g==="TYPED") ? "先行入力" :
       (delta>=0?"+":"")+Math.round(delta)+" ms";
-    seJudge(g,dir); mikuReact(g);
+    seJudge(g,dir); mikuReact(g); kick(g);
   }
   /* 打ち損じた場所を歌詞側にも返す。どの字で転んだのかが後から分かる。
      方向違いはノーツを消費しないので一時的な警告色、
