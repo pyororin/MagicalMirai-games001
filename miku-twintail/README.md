@@ -24,7 +24,8 @@
 | [docs/MARKET_RESEARCH.md](docs/MARKET_RESEARCH.md) | 市場調査（コンテスト動向・類似作・文化的文脈） |
 | [docs/DESIGN.md](docs/DESIGN.md) | 企画・設計書（ゲームフロー、ミク度採点、TextAlive API 活用、枯れた技術の水平思考） |
 | [docs/TEXTALIVE_DEV.md](docs/TEXTALIVE_DEV.md) | TextAlive App API 開発ガイド（トークン取得、組み込みコード、Debugger での動作確認、モック移行対応表） |
-| [prototype/index.html](prototype/index.html) | 採点ロジックと髪物理の検証用モック（単体 HTML、依存なし） |
+| [prototype/rhythm.html](prototype/rhythm.html) | **v2 リズム版の検証モック**（4拍目タップ→スライド→小節アタマでリリース。拍が鳴り、4拍目だけ音色が変わる） |
+| [prototype/index.html](prototype/index.html) | v1（自由描画版）の検証モック。参考用 | 採点ロジックと髪物理の検証用モック（単体 HTML、依存なし） |
 | [app/](app/) | P1: TextAlive App API 接続版（Vite。課題曲の実ビート・実歌詞・実ボーカル音量で動作、サビで自動判定） |
 
 ## 遊ぶ（公開デモ）
