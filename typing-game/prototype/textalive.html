@@ -213,7 +213,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 25</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 26</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -323,7 +323,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 25;
+  var BUILD = 26;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -507,7 +507,7 @@
      いずれも「最初のタッチで確実に起こす」ことで潰せるので、
      画面のどのタッチ/クリック/キーでも unlockAudio() を通す。
      さらに状態を画面(build 表示の隣)に出して、鳴らないときに切り分けられるようにする。 */
-  var actx=null, seBus=null;
+  var actx=null, seBus=null, unlocked=false;
   function audio(){
     if(!actx){
       var C=window.AudioContext||window.webkitAudioContext;
@@ -527,11 +527,13 @@
     // iOS 16.4+ : マナースイッチで Web Audio が消えるのを防ぐ
     try{ if(navigator.audioSession) navigator.audioSession.type="playback"; }catch(e){}
     var a=audio(); if(!a) return;
+    if(unlocked) return;                   // 一度開けたら、以降のタッチでは何もしない
     try{                                   // 無音1サンプルを鳴らして出力経路をこじ開ける
       var b=a.createBuffer(1,1,22050), src=a.createBufferSource();
       src.buffer=b; src.connect(seBus||a.destination); src.start(0);
     }catch(e){}
     try{ prewarmTones(a); }catch(e){}      // 初回だけ波形生成で詰まるのを避ける
+    if(a.state==="running") unlocked=true;
     soundBadge();
   }
   function soundBadge(){
@@ -597,19 +599,12 @@
     blip(f*2, 0.05, "square", 0.09, SE_SWEEP[dir]||1);   // 倍音を薄く足して抜けを良くする
   }
   function prewarmTones(a){
-    toneBuffer(a,1320,0.022,"square",0.10,undefined);
     Object.keys(SE_PITCH).forEach(function(d){
       var f=SE_PITCH[d]*0.75;
       if(d==="c") toneBuffer(a,f,0.05,"square",0.24,undefined);
       else{ toneBuffer(a,f,0.09,"triangle",0.26,SE_SWEEP[d]); toneBuffer(a,f*2,0.05,"square",0.09,SE_SWEEP[d]); }
     });
   }
-  /* 触れた瞬間の「ティック」。フリック音は指を離したときなので、
-     押した時点では無音になり「鳴っていない」と感じる。
-     フリックキーボードと同じく、接触=短いティック、離す=方向音、の2段にする。
-     方向音と混ざらないよう、高くごく短い音にしておく。 */
-  function seTouch(){ blip(1320, 0.022, "square", 0.10); }
-
   function seJudge(g,dir){
     var f=SE_PITCH[dir]||659.25;
     if(g==="JUST"){ blip(f,0.10,"triangle",0.20); blip(f*2,0.13,"triangle",0.10,1.02); }
@@ -1512,14 +1507,23 @@
 
   /** 判定枠を過ぎたノーツを MISS で流す(曲は止まらない)
       ただし requestMediaSeek(0) の完了前は position が古いままなので、
-      巻き戻りを確認するまで刈り取らない(途中でリスタートすると全 MISS になる) */
+      巻き戻りを確認するまで刈り取らない(途中でリスタートすると全 MISS になる)
+
+      指を置いている間も刈り取らない。フリックは「離した瞬間」が文字の確定なので、
+      早めに指を置いて、タイミングで離す、という打ち方ができる必要がある。
+      置いている最中に勝手に MISS になると、その打ち方が成立しない。
+      ただし置きっぱなしで曲が進むと、離した瞬間に溜まった MISS が一度に出るので、
+      猶予は HOLD_GRACE までに留める。 */
+  var HOLD_GRACE=1200;
+  var heldCount=0;                                   // いま画面に触れている指(＋マウス)の数
   function reap(){
     var t=now();
     if(state.seekPending){
       if(t<1000 || performance.now()>state.seekDeadline) state.seekPending=false;
       else return;
     }
-    while(state.idx<state.notes.length && t-state.notes[state.idx].time>WIN.late){
+    var late=WIN.late + (heldCount>0 ? HOLD_GRACE : 0);
+    while(state.idx<state.notes.length && t-state.notes[state.idx].time>late){
       var n=state.notes[state.idx];
       n.result="MISS"; n.hitAt=performance.now();
       markLyric(n,"missed");
@@ -1702,6 +1706,7 @@
     window.DAKEN_STATE=state;                       // 検証用フック
     el.score.textContent="0"; el.combo.textContent="0";
     el.judge.textContent=""; el.delta.textContent="";
+    heldCount=0;                                    // 前回の指の残りで刈り取りが止まらないように
     el.screen.classList.remove("fever");
     el.overlay.style.display="none";
     if(el.veil) el.veil.classList.remove("on");     // 前回のアウトロの暗転を戻す
@@ -1744,6 +1749,7 @@
     window.DAKEN_STATE=state;
     el.score.textContent="0"; el.combo.textContent="0";
     el.judge.textContent=""; el.delta.textContent="";
+    heldCount=0;                                    // 前回の指の残りで刈り取りが止まらないように
     el.screen.classList.remove("fever");
     el.overlay.style.display="none";
     el.share.hidden=true;
@@ -1819,11 +1825,11 @@
     surface.addEventListener("touchstart",function(e){
       if(ignore(e)) return;
       e.preventDefault();
-      seTouch();                       // 触れた瞬間の手応え(描画より先に鳴らす)
       var r=rectOf();
       for(var i=0;i<e.changedTouches.length;i++){
         var t=e.changedTouches[i];
         pointers[t.identifier]={sx:t.clientX, sy:t.clientY};
+        heldCount=Object.keys(pointers).length + (mouseActive?1:0);
         renderCross(t.clientX-r.left, t.clientY-r.top);
         highlight("c");
       }
@@ -1847,6 +1853,7 @@
         var t=e.changedTouches[i], p=pointers[t.identifier];
         if(!p) continue;
         delete pointers[t.identifier];
+        heldCount=Object.keys(pointers).length + (mouseActive?1:0);
         // フィードバックは「指を置いた位置」に出す。離した位置だと
         // 大きく滑らせたとき画面外に寄ってしまい読めなくなる。
         lastTouch={x:p.sx-r.left, y:p.sy-r.top};
@@ -1857,15 +1864,16 @@
     surface.addEventListener("touchend",endTouch,{passive:false});
     surface.addEventListener("touchcancel",function(e){
       for(var i=0;i<e.changedTouches.length;i++) delete pointers[e.changedTouches[i].identifier];
+      heldCount=Object.keys(pointers).length + (mouseActive?1:0);
       if(!Object.keys(pointers).length) cross.classList.remove("show");
     },{passive:false});
 
     // マウス(PC の確認用)は従来どおり1本だけ
     surface.addEventListener("mousedown",function(e){
       if(ignore(e)) return;
-      seTouch();
       var r=rectOf();
       msx=e.clientX; msy=e.clientY; mouseActive=true;
+      heldCount=Object.keys(pointers).length + 1;
       renderCross(e.clientX-r.left, e.clientY-r.top); highlight("c");
     });
     surface.addEventListener("mousemove",function(e){
@@ -1875,12 +1883,15 @@
     });
     surface.addEventListener("mouseup",function(e){
       if(!mouseActive) return;
-      mouseActive=false; cross.classList.remove("show");
+      mouseActive=false; heldCount=Object.keys(pointers).length;
+      cross.classList.remove("show");
       var r=rectOf();
       lastTouch={x:msx-r.left, y:msy-r.top};
       sendDir(resolveDir(e.clientX-msx, e.clientY-msy));
     });
-    surface.addEventListener("mouseleave",function(){ mouseActive=false; cross.classList.remove("show"); });
+    surface.addEventListener("mouseleave",function(){
+      mouseActive=false; heldCount=Object.keys(pointers).length; cross.classList.remove("show");
+    });
   })();
 
   var KEY_DIR={" ":"c","Spacebar":"c","Enter":"c",
