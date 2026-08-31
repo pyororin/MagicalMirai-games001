@@ -192,3 +192,21 @@ pitfalls:
       ユーザーからの「鳴らない」報告を、コード経路の問題か出力の問題かで切り分けられる。
     verified: 2026-08-31 (typing-game build 21)
     refs: [typing-game/prototype/textalive.html]
+
+  - id: pages-unreachable-from-sandbox
+    symptom: >
+      デプロイ後の反映確認のために sandbox から公開 URL(*.github.io)を curl すると
+      `CONNECT tunnel failed, response 403` になり、いつまでも成功しない。
+      「まだ反映されていない」と誤解して延々ポーリングしてしまう。
+    cause: >
+      エージェントの外向きプロキシが github.io への CONNECT を許可していない。
+      Pages の配信状況とは無関係で、待っても解消しない。
+    solution: >
+      反映確認は GitHub Actions のワークフロー実行(list_workflow_runs)の
+      conclusion=success で行う。ページの中身の確認はローカルファイルを
+      ヘッドレスブラウザで開いて行い、公開 URL は利用者に提示するだけにする。
+    detection: >
+      curl の終了コード 56 と "CONNECT tunnel failed, response 403"。
+      $HTTPS_PROXY/__agentproxy/status でも許可状況を確認できる。
+    verified: 2026-08-31 (typing-game build 24)
+    refs: [.github/workflows/pages-typing-game.yml]

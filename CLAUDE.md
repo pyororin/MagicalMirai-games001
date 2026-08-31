@@ -24,5 +24,10 @@
 - TextAlive のアプリトークンはクライアント埋め込み前提の公開トークン。アプリ URL の登録を公開先と揃える。
 - ページにビルド番号を表示しておくこと。キャッシュされた旧版を新版と誤認する事故を防ぐ
   (詳細: `ontology/infra.yaml` の stale-cache-misdiagnosis)。
+- **main へマージしたら、毎回デプロイ先の URL を提示する**(利用者は実機で確認するため)。
+  実楽曲版: https://pyororin.github.io/MagicalMirai-games001/typing-game/prototype/textalive.html
+- sandbox から `pyororin.github.io` へは到達できない(プロキシが 403)。反映確認は
+  curl のポーリングではなく Actions のワークフロー実行結果で行う
+  (詳細: `ontology/infra.yaml` の pages-unreachable-from-sandbox)。
 - 外部 API を叩くページには「失敗した通信の URL とステータス」を出す診断を最初から入れる
   (詳細: `ontology/textalive.yaml` の silent-load-failure / card-data-resolver-unavailable)。
