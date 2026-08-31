@@ -219,7 +219,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 36</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 37</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -249,7 +249,7 @@
 
   <div class="controls">
     <label class="label" for="speed">速度倍率</label>
-    <input type="range" id="speed" min="50" max="200" step="10" value="100" aria-label="速度倍率">
+    <input type="range" id="speed" min="50" max="400" step="25" value="100" aria-label="速度倍率">
     <span class="label val" id="speedVal">1.0×</span>
     <input type="range" id="lead" hidden aria-hidden="true"><span id="leadVal" hidden></span>
     <span style="width:10px"></span>
@@ -337,7 +337,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 36;
+  var BUILD = 37;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -745,9 +745,9 @@
   var speedMult=1, speedRate=1, volume=80, leadMs=BASE_LEAD, offsetMs=0, lastAvgDelta=null;
   function applyMult(){
     speedRate=Math.min(1, speedMult);                      // 1.0× 未満なら曲もゆっくり
-    leadMs=Math.round(Math.max(900, Math.min(4000, BASE_LEAD/speedMult)));
+    leadMs=Math.round(Math.max(400, Math.min(6000, BASE_LEAD/speedMult)));
     el.speed.value=String(Math.round(speedMult*100));
-    el.speedVal.textContent=speedMult.toFixed(1)+"×";
+    el.speedVal.textContent=speedMult.toFixed(2).replace(/0$/,"")+"×";
   }
   /* 持ち手。打つ指で画面の片側が隠れるので、ミクとスコアを反対側へ寄せる。
      right = 右手で打つ → 右下が指で隠れるので、ミクとスコアは左へ。 */
@@ -766,7 +766,7 @@
       if(h==="left"||h==="right") handed=h;
       if(md==="lane"||md==="reflect") mode=md;
       if(o) offsetMs=Math.min(150,Math.max(-150,parseInt(o,10)));
-      if(s) speedMult=Math.min(2,Math.max(.5,parseFloat(s)));
+      if(s) speedMult=Math.min(4,Math.max(.5,parseFloat(s)));
       if(v!==null) volume=Math.min(100,Math.max(0,parseInt(v,10)));
 
     }catch(e){}
@@ -1414,6 +1414,59 @@
   /* 待機中もステージを動かし続ける(アトラクトモード)。
      デモのノーツが5方向を順に落ちてくるので、押す前に遊び方が伝わる。 */
   var attractOn=false, attractT0=0;
+  /* 待機中のデモ。選んでいる方式のまま見せる(遊ぶ前に画面の作りが伝わる) */
+  function drawAttractLane(t){
+    drawStage(t);
+    var jy=judgeY(), fw=fieldW(), x0=fieldX0(), laneW=fw/5;
+    for(var i=0;i<5;i++){
+      ctx.fillStyle = (i===2) ? "oklch(26% 0.05 300 / .55)" : "oklch(24% 0.04 275 / .45)";
+      ctx.fillRect(Math.round(x0+i*laneW), 0, Math.round(laneW), jy);
+      dot(x0+i*laneW, 0, G, jy, PAL.grid);
+    }
+    dot(x0+fw, 0, G, jy, PAL.grid);
+    drawSpeakers(jy);
+    var size=Math.min(laneW*0.72, ch*0.15, 60), cyc=1400;
+    for(var k=0;k<3;k++){
+      var age=(t - k*cyc/1.2) % (cyc*5);
+      if(age<0) continue;
+      var idx=Math.floor(((t/cyc)|0)+k)%5, dir=LANE_ORDER[idx];
+      var prog=(age%cyc)/cyc;
+      if(prog<0.9) drawNote({kana:"ミク"[k%2]||"ミ", dir:dir, lane:idx},
+                            laneX(idx), prog/0.9*jy, size, false);
+    }
+    drawMikuOnStage(jy);
+  }
+
+  function drawAttractReflect(t){
+    var g=ring(), size=noteSize(), i;
+    drawReflectStage(g);
+    drawMikuCenter();
+    var pulse=Math.round(beatPulse*G*1.5);
+    var rseg=Math.max(48, Math.round(2*Math.PI*g.R/(G*1.6)));
+    for(i=0;i<rseg;i++){                            // 判定リング
+      var a=i/rseg*Math.PI*2;
+      dot(g.cx+Math.cos(a)*(g.R+pulse), g.cy+Math.sin(a)*(g.R+pulse), G, G,
+          (i%6<4) ? PAL.ink : PAL.rail);
+    }
+    // デモノーツ:5種類を順に、外から中心へ寄せる
+    var cyc=1400, kana="ミクとうたう";
+    for(var k=0;k<3;k++){
+      var age=(t - k*cyc/1.4) % (cyc*5);
+      if(age<0) continue;
+      var idx=Math.floor(((t/cyc)|0)+k)%5, dir=LANE_ORDER[idx];
+      var prog=(age%cyc)/cyc;
+      if(prog>=0.92) continue;
+      var p=1-prog/0.92;                            // 1=遠い 0=リング上
+      var n={kana:kana[(idx+k)%kana.length], dir:dir, lane:LANE_OF[dir]};
+      var r=g.R+g.travel*p;
+      if(dir==="c") drawTapRingAt(n, r, g, size, false);
+      else {
+        var v=AXIS[dir];
+        drawNote(n, g.cx+v[0]*r, g.cy+v[1]*r, size*(0.62+0.38*(1-p)), false);
+      }
+    }
+  }
+
   function drawAttract(){
     if(!attractOn) return;
     if(!cw||!ch){                       // レイアウト確定前でもループを止めない
@@ -1425,34 +1478,17 @@
     beatPulse=Math.max(0,1-((t%600)/600)*1.6);
     beatNow={startTime:0,duration:600,position:1+Math.floor(t/600)%4,length:4};
     ctx.clearRect(0,0,cw,ch);
-    drawStage(t);
-    var jy=judgeY(), fw=fieldW(), x0=fieldX0(), laneW=fw/5;
-    for(var i=0;i<5;i++){
-      ctx.fillStyle = (i===2) ? "oklch(26% 0.05 300 / .55)" : "oklch(24% 0.04 275 / .45)";
-      ctx.fillRect(Math.round(x0+i*laneW), 0, Math.round(laneW), jy);
-      dot(x0+i*laneW, 0, G, jy, PAL.grid);
-    }
-    dot(x0+fw, 0, G, jy, PAL.grid);
-    drawSpeakers(jy);
-    // デモノーツ:5方向を順番に落とす
-    var size=Math.min(laneW*0.72, ch*0.15, 60), cyc=1400;
-    for(var k=0;k<3;k++){
-      var age=(t - k*cyc/1.2) % (cyc*5);
-      if(age<0) continue;
-      var idx=Math.floor(((t/cyc)|0)+k)%5, dir=LANE_ORDER[idx];
-      var prog=(age%cyc)/cyc;
-      if(prog<0.9) drawNote({kana:"ミク"[k%2]||"ミ", dir:dir, lane:idx},
-                            laneX(idx), prog/0.9*jy, size, false);
-    }
-    drawMikuOnStage(jy);
+    var logoY;
+    if(isReflect()){ drawAttractReflect(t); logoY=ring().front+G*10; }
+    else { drawAttractLane(t); logoY=ch*0.30; }
     // ロゴ
     ctx.save();
     ctx.textAlign="center"; ctx.textBaseline="middle";
     ctx.fillStyle=PAL.shade;
     ctx.font='bold '+Math.round(Math.min(cw*0.14,64))+'px '+PIXEL_FONT;
-    ctx.fillText("打鍵ミライ", cw/2+G, ch*0.30+G);
+    ctx.fillText("打鍵ミライ", cw/2+G, logoY+G);
     ctx.fillStyle=PAL.ink;
-    ctx.fillText("打鍵ミライ", cw/2, ch*0.30);
+    ctx.fillText("打鍵ミライ", cw/2, logoY);
     ctx.restore();
     if(attractOn) requestAnimationFrame(drawAttract);
   }
@@ -1690,7 +1726,10 @@
      他の4方向と同じタイミングでリングに着くので、タップの瞬間が同じ基準で読める。
      内側から広がる方式は、いつ来るのかが他と別基準になって分かりづらかった。 */
   function drawTapRing(n, dt, g, size, isNext){
-    var r=noteRadius("c", dt, g), col=DIR_COL.c;
+    drawTapRingAt(n, noteRadius("c", dt, g), g, size, isNext);
+  }
+  function drawTapRingAt(n, r, g, size, isNext){
+    var col=DIR_COL.c;
     if(r<=G) return;
     var seg=Math.max(28, Math.round(2*Math.PI*r/(G*2.4)));
     ctx.save();
@@ -1974,10 +2013,24 @@
     showJudge("MISS",0);
   }
 
+  /* 曲の長さ。player.video.duration は「歌詞(ビデオ)の終わり」なので、
+     間奏やアウトロを残したまま終わってしまう。曲そのものの長さを優先して使う。 */
+  function songDuration(){
+    var cands=[];
+    try{ if(player.data && player.data.song && player.data.song.length)
+           cands.push(player.data.song.length*1000); }catch(e){}         // 秒 → ms
+    try{ var a=mediaAudio(); if(a && isFinite(a.duration)) cands.push(a.duration*1000); }catch(e){}
+    try{ if(player.video && player.video.duration) cands.push(player.video.duration); }catch(e){}
+    /* 単位を取り違えると曲が終わらなくなるので、常識的な範囲(20秒〜20分)に
+       収まるものだけを採る。そのうえで最長を選ぶ(曲は歌詞より短くならない)。 */
+    var ok=cands.filter(function(v){ return isFinite(v) && v>20000 && v<20*60*1000; });
+    return ok.length ? Math.round(Math.max.apply(null, ok)) : 0;
+  }
+
   function loop(){
     if(!state||!state.running) return;
     var t=now();
-    var dur=(!state.isTutorial && player.video)?player.video.duration:0;
+    var dur=state.isTutorial?0:songDuration();
     if(dur){
       state.progress=Math.min(1,t/dur);
       el.progress.style.width=(state.progress*100)+"%";
