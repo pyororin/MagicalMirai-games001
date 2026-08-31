@@ -213,7 +213,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 33</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 34</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -333,7 +333,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 33;
+  var BUILD = 34;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -1087,25 +1087,41 @@
      「残り時間の比率」で距離を決める(全軸が同時にリングへ着く)。
      ============================================================ */
   var AXIS={l:[-1,0], r:[1,0], u:[0,-1], d:[0,1], c:[0,0]};
+  /* ステージの手前(フッター)。曲名・スコア・進捗をここに納める */
+  function footerH(){ return Math.round(Math.min(ch*0.14, G*30)/G)*G; }
   function ring(){
     var cx=Math.round((fieldX0()+fieldW()/2)/G)*G;
-    var cy=Math.round(Math.min(ch*0.42, ch-G*44)/G)*G;   // 指が届く下側を空けて上寄りに
-    var R =Math.round(Math.min(fieldW()*0.22, ch*0.13)/G)*G;
+    /* 上下の距離を等しくするため、フッターを除いた盤面の中央に置く。
+       ここがずれると、上から来るノーツと下から来るノーツで速度が変わってしまう。 */
+    var cy=Math.round(((ch-footerH())/2)/G)*G;
+    var R =Math.round(Math.min(fieldW()*0.22, ch*0.12)/G)*G;
     return {cx:cx, cy:cy, R:R};
   }
-  /* 4方向とも同じ速度(px/ms)で寄ってくる。軸ごとに距離が違うからと速度を変えると、
-     どの軸を見ているかで体内時計を切り替えることになり、読めなくなる。
-     いちばん遠い軸を基準に速度を決め、近い軸のノーツは画面の外から入ってくる
-     (画面外にいる間は、その辺に近づいてくる印だけを出す)。 */
-  function spawnMax(g){
-    return Math.max(g.cy, ch-g.cy, g.cx-fieldX0(), (fieldX0()+fieldW())-g.cx)+G*16;
+  /* どの方向のノーツも、湧いてから中心に着くまでの時間は同じ(先読み時間ぴったり)。
+     上下はリングを盤面の中央に置いたので距離も等しい。
+     左右は縦長画面のぶん距離が短いので、そのままだと「遅い」ように見える。
+     ステージの奥から出てくるものとして扱い、遠いうちはゆっくり・手前で加速し、
+     大きさも小さい→大きいと変える(奥行きで速度差を吸収する)。 */
+  function axisR(dir, g){
+    if(dir==="l") return g.cx-fieldX0()-G*4;
+    if(dir==="r") return (fieldX0()+fieldW())-g.cx-G*4;
+    if(dir==="u") return g.cy-G*4;
+    if(dir==="d") return (ch-footerH())-g.cy-G*4;
+    return Math.min(g.cx-fieldX0(), (fieldX0()+fieldW())-g.cx,
+                    g.cy, (ch-footerH())-g.cy)-G*4;            // あ段の輪は全軸に触れる
   }
-  function noteSpeed(g){ return (spawnMax(g)-g.R)/leadMs; }   // 全軸共通の速度
+  function progressOf(dt){ return Math.max(-0.35, Math.min(1, dt/leadMs)); }
+  function depthCurve(p){ return p*p*0.62 + p*0.38; }          // 遠いほどゆっくり見える
   /** 残り時間 dt のノーツが、いま中心からどれだけ離れているか */
   function noteRadius(dir, dt, g){
-    var d=Math.max(-0.35*leadMs, Math.min(leadMs, dt));       // 判定を過ぎたら内側へ抜ける
-    if(dir==="c") return Math.max(0, g.R - noteSpeed(g)*d);   // あ段は中心から広がる
-    return g.R + noteSpeed(g)*d;
+    var p=progressOf(dt), far=axisR(dir,g);
+    var f=(dir==="l"||dir==="r") ? depthCurve(p) : p;
+    return g.R + (far-g.R)*f;
+  }
+  /** 左右のノーツは奥から来るので、遠いほど小さく見せる */
+  function noteScale(dir, dt){
+    if(dir!=="l" && dir!=="r") return 1;
+    return 0.55 + 0.45*(1-Math.max(0,Math.min(1,progressOf(dt))));
   }
   /** ノーツ(または判定成立点)の画面座標。効果の位置もここで決める */
   function notePos(dir, dt, g){
@@ -1125,14 +1141,14 @@
   /* 打ち返したかなは客席へ飛んでいき、ペンライトが1本増える。
      スコアの数字ではなく「景色が光で埋まる」ことで積み上がりを返す。 */
   var lights=[];
+  /* 打ち返したかなが届いた先=客席。ステージの手前(フッターのすぐ上)に並べる。
+     打ち返した方向で左右に散らして、どちらへ返したかが景色にも残るようにする。 */
   function addLight(dir, col, delay){
-    var g=ring();
-    var x, y;
-    if(dir==="l"){ x=fieldX0()+G*2+Math.random()*G*6; y=g.cy+(Math.random()-0.5)*ch*0.5; }
-    else if(dir==="r"){ x=fieldX0()+fieldW()-G*3-Math.random()*G*6; y=g.cy+(Math.random()-0.5)*ch*0.5; }
-    else if(dir==="u"){ x=fieldX0()+Math.random()*fieldW(); y=G*2+Math.random()*G*6; }
-    else { x=fieldX0()+Math.random()*fieldW(); y=ch-G*4-Math.random()*G*6; }
-    lights.push({x:x, y:y, col:col, ph:Math.random()*Math.PI*2, at:performance.now()+(delay||0)});
+    var x0=fieldX0(), fw=fieldW(), fy=ch-footerH();
+    var band = dir==="l" ? [0, 0.38] : dir==="r" ? [0.62, 1] : [0.25, 0.75];
+    var x = x0 + fw*(band[0] + Math.random()*(band[1]-band[0]));
+    var y = fy - G*3 - Math.random()*G*10;
+    lights.push({x:x, y:y, col:col, at:performance.now()+(delay||0)});
     if(lights.length>70) lights.shift();
   }
   function loseLight(){ if(lights.length) lights.splice(Math.floor(Math.random()*lights.length),1); }
@@ -1145,7 +1161,7 @@
     var beatDur=(beatNow&&beatNow.duration)?beatNow.duration:500;
     var dtm=wiperLast ? Math.min(120, np2-wiperLast) : 0;
     wiperLast=np2;
-    wiperPh += dtm/(beatDur*2)*Math.PI*2;          // 2拍で1往復
+    wiperPh += dtm/(beatDur*4)*Math.PI*2;          // 4拍で1往復(ゆったり振る)
     if(!lights.length) return;
     var swing=(calmMotion?0.25:1)*0.55*Math.sin(wiperPh);   // 振れ角(ラジアン)
     var len=G*5;
@@ -1305,10 +1321,10 @@
        どちらも指で隠れる側を避けた配置になる。
        リフレクト式はミクが中央なので、持ち手と反対の下隅へ置く。 */
     var x, maxW;
-    if(mk && mk.center){
-      maxW=Math.round(fieldW()*0.42);
-      x = mikuOnLeft() ? (fieldX0()+G) : (fieldX0()+fieldW()-G-maxW);
-      top = Math.max(top, ch-G*26);
+    if(mk && mk.center){                     // リフレクト式:ステージ手前のフッターに納める
+      maxW=Math.round(fieldW()*0.46);
+      x = mikuOnLeft() ? (fieldX0()+G*2) : (fieldX0()+fieldW()-G*2-maxW);
+      top = ch-footerH()+G*4;
     }
     else if(mk && mikuOnLeft()){ x=mk.x+mk.w+G*2; maxW=cw-G-x; }
     else if(mk){ x=fieldX0()+G; maxW=(mk.x-G*2)-x; }
@@ -1458,10 +1474,8 @@
     drawStage(t);
 
     var mk=null;
-    if(isReflect()){
-      mk=drawMikuCenter();               // ミクはリングの内側(背面)。矢印を隠さない
-      drawReflectField(t);
-    } else drawLaneField(t, jy, fw, x0, laneW);
+    if(isReflect()) mk=drawReflectField(t);   // ステージ→ミク→リング→ノーツ の順に描く
+    else drawLaneField(t, jy, fw, x0, laneW);
 
     var size=noteSize();
     var np=performance.now();                 // ↓の演出はどちらも実時間で減衰させる
@@ -1514,16 +1528,70 @@
   }
 
   /* ---- リフレクト式(四方から中心へ集まるのを打ち返す) ---- */
+  /* ステージとして組み立てる: 奥(地平線と背面のトラス)、左右(袖のスピーカー)、
+     手前(フッター= 曲名とスコア)。ミクはその中央に立っている。 */
+  function drawReflectStage(g){
+    var hz=Math.round((g.cy-g.R*1.9)/G)*G;                 // 地平線(奥)
+    var fy=ch-footerH();                                   // 手前(フッター)の上端
+    dot(0,0,cw,hz,PAL.night);                              // 奥の壁
+    dot(0,hz,cw,fy-hz,PAL.night2);                         // 床
+    dot(0,hz,cw,G,PAL.rail);                               // 奥の縁
+
+    // 床の遠近グリッド。消失点はリングの中心 = ミクの立ち位置
+    ctx.save(); ctx.globalAlpha=0.85;
+    for(var i=-7;i<=7;i++){
+      var ex=g.cx+i*(fieldW()/6), ey=fy;
+      for(var u=0.06;u<1;u+=0.06){
+        var x=g.cx+(ex-g.cx)*u*u, y=hz+(ey-hz)*u*u;
+        if(y>fy) break;
+        dot(x,y,G,G,PAL.grid);
+      }
+    }
+    for(var q=1;q<=6;q++){                                  // 横線(手前ほど間隔が広い)
+      var yy=hz+(fy-hz)*Math.pow(q/6,1.9);
+      for(var xx=0;xx<cw;xx+=G*4) dot(xx,yy,G*2,G,PAL.grid);
+    }
+    ctx.restore();
+
+    // 左右の袖(スピーカースタック)。奥行きの手掛かりになる
+    [0,1].forEach(function(sideI){
+      var right=!!sideI, bw=G*10, bx=right?cw-bw:0;
+      var by=hz+G*3, bh=fy-by-G*2;
+      dot(bx,by,bw,bh,"oklch(22% 0.035 272)");
+      dot(bx,by,bw,G,PAL.rail);
+      dot(right?bx:bx+bw-G, by, G, bh, PAL.rail);
+      for(var k2=0;k2<4;k2++){
+        var cyk=by+G*4+k2*Math.round(bh/4.3), rr=G*3;
+        dot(bx+bw/2-rr, cyk, rr*2, rr*2, "oklch(30% 0.03 270)");
+        dot(bx+bw/2-rr+G, cyk+G, rr*2-G*2, rr*2-G*2, "oklch(17% 0.03 270)");
+        dot(bx+bw/2-G, cyk+rr-G, G*2, G*2, beatPulse>0.4?DIR_COL.c.dark:PAL.grid);
+      }
+    });
+
+    // 奥のトラスと照明
+    for(var lx=G*4; lx<cw; lx+=G*12){
+      dot(lx, G*2, G*3, G*2, PAL.grid);
+      var lit=beatPulse>0.4;
+      dot(lx+G, G*4, G, G*2, lit?DIR_COL[LANE_ORDER[(lx/G|0)%5]].lit:PAL.rail);
+    }
+    dot(0,G,cw,G,PAL.rail);
+
+    // 手前(フッター)の台
+    dot(0,fy,cw,ch-fy,"oklch(13% 0.03 268)");
+    dot(0,fy,cw,G,PAL.rail);
+    for(var fx2=G*3; fx2<cw; fx2+=G*8) dot(fx2, fy+G*2, G*2, G, DIR_COL.c.dark);  // フットライト
+  }
+
   function drawReflectField(t){
     var g=ring(), size=noteSize(), k, i;
+    drawReflectStage(g);
+    var mk=drawMikuCenter();                       // ミクはリングの内側(背面)
     drawLights();                                  // 客席の灯り(打ち返した記録)
 
     // 4本の軸。ノーツが通る道を薄く見せて、見る場所を4箇所に固定する
     ["l","u","r","d"].forEach(function(d){
-      var v=AXIS[d], col=DIR_COL[d];
-      var R=(d==="l") ? g.cx-fieldX0() : (d==="r") ? (fieldX0()+fieldW())-g.cx
-          : (d==="u") ? g.cy : ch-g.cy;
-      ctx.save(); ctx.globalAlpha=0.28;
+      var v=AXIS[d], col=DIR_COL[d], R=axisR(d,g);
+      ctx.save(); ctx.globalAlpha=0.3;
       for(var q=g.R+G*3; q<R; q+=G*3){
         dot(g.cx+v[0]*q, g.cy+v[1]*q, G, G, col.dark);
         dot(g.cx+v[0]*q+(v[1]?G*2:0), g.cy+v[1]*q+(v[0]?G*2:0), G, G, PAL.grid);
@@ -1532,8 +1600,8 @@
       ctx.restore();
     });
 
-    // 歌詞はリングの下(指の届かない位置)。ノーツより先に描いて必ず下に潜らせる
-    drawLyrics(t, Math.round(g.cy+g.R+size*1.2));
+    // 歌詞はリングとフッターの間
+    drawLyrics(t, Math.round(g.cy+g.R+size*1.1));
 
     // 判定リング
     var pulse=Math.round(beatPulse*G*1.5);
@@ -1544,8 +1612,7 @@
           (i%6<4) ? PAL.ink : PAL.rail);
     }
     /* 次に打つ方向は、リングの「その辺」を光らせて示す。
-       中心はミクが立つので、そこに置くと読めない。
-       リングの縁だけ見ていれば、次がどこから来るかが分かる。 */
+       中心はミクが立つので、そこに置くと読めない。 */
     var nx=state.notes[state.idx];
     if(nx){
       var col=DIR_COL[nx.dir];
@@ -1557,78 +1624,61 @@
         }
       } else {
         var base={l:Math.PI, r:0, u:-Math.PI/2, d:Math.PI/2}[nx.dir];
-        for(i=-10;i<=10;i++){                      // その辺の弧を太く光らせる
+        for(i=-10;i<=10;i++){
           var aa=base+i/10*0.6;
           dot(g.cx+Math.cos(aa)*(g.R+pulse), g.cy+Math.sin(aa)*(g.R+pulse), G*2, G*2, col.lit);
         }
-        var v2=AXIS[nx.dir];                       // 弧の内側に方向記号(暗い台座つき)
+        var v2=AXIS[nx.dir];
         var ix=g.cx+v2[0]*(g.R-as*2.8), iy=g.cy+v2[1]*(g.R-as*2.8);
         dot(ix-as*2.5-G, iy-as*2.5-G, as*5+G*2, as*5+G*2, PAL.night);
         spriteCentered(ARROW[nx.dir], ix, iy, as, PAL.ink);
       }
     }
 
-    // ノーツ。方向の軸の外側から中心へ寄ってくる
+    // ノーツ
     for(k=state.idx; k<state.notes.length; k++){
       var n=state.notes[k], dt=n.time-t;
       if(dt>leadMs) break;
       if(dt < -WIN.late) continue;
-      if(n.dir==="c"){
-        /* あ段は「ミクの声がリングへ広がっていく波」。中心から外へ育つので、
-           四方から来るノーツの道(リングの外側)と交わらず、追い越しも起きない。
-           細い線だと読めないので、3ドット厚の帯にして色も濃く出す。 */
-        var r=noteRadius("c", dt, g), col2=DIR_COL.c;
-        if(r>G){
-          var seg=Math.max(28, Math.round(2*Math.PI*r/(G*1.4)));
-          var near=Math.max(0, 1-Math.abs(g.R-r)/(g.R||1));   // リングに近いほど濃く
-          ctx.save();
-          ctx.globalAlpha=0.55+0.45*near;
-          for(i=0;i<seg;i++){
-            var a2=i/seg*Math.PI*2, cs=Math.cos(a2), sn=Math.sin(a2);
-            var cc=(k===state.idx)?col2.lit:col2.base;
-            dot(g.cx+cs*r,       g.cy+sn*r,       G, G, cc);
-            dot(g.cx+cs*(r-G*1.4), g.cy+sn*(r-G*1.4), G, G, col2.dark);
-            dot(g.cx+cs*(r+G*1.4), g.cy+sn*(r+G*1.4), G, G, col2.dark);
-          }
-          ctx.restore();
-          /* かなは輪の斜め上(45°)に置く。上下左右は4方向のノーツが通る道なので、
-             そこに置くと重なって読めなくなる。 */
-          var kx=g.cx-r*0.707, ky=g.cy-r*0.707;
-          ctx.save();
-          ctx.font=Math.round(size*0.5)+'px '+PIXEL_FONT;
-          ctx.textAlign="center"; ctx.textBaseline="middle";
-          var kw=ctx.measureText(n.kana).width;
-          dot(kx-kw/2-G, ky-size*0.32, kw+G*2, size*0.64, PAL.night);
-          ctx.fillStyle=(k===state.idx)?PAL.ink:col2.lit;
-          ctx.fillText(n.kana, kx, ky);
-          ctx.restore();
-        }
-      } else {
+      if(n.dir==="c") drawTapRing(n, dt, g, size, k===state.idx);
+      else {
         var p=notePos(n.dir, dt, g);
-        var inside = p.x>fieldX0()-size && p.x<fieldX0()+fieldW()+size && p.y>-size && p.y<ch+size;
-        if(inside) drawNote(n, p.x, p.y, size, k===state.idx);
-        else drawIncoming(n, g, p);          // 画面外にいる間は辺に印を出す
+        drawNote(n, p.x, p.y, size*noteScale(n.dir, dt), k===state.idx);
       }
     }
+    return mk;
   }
 
-  /* 近い軸のノーツは画面の外から入ってくる。何も出さないと唐突に現れるので、
-     その辺に「もうすぐ来る」印を出しておく(近いほど濃く・大きく)。 */
-  function drawIncoming(n, g, p){
-    var v=AXIS[n.dir], col=DIR_COL[n.dir];
-    var x0=fieldX0(), x1=fieldX0()+fieldW();
-    var over = Math.abs(v[0]) ? (v[0]<0 ? x0-p.x : p.x-x1)
-                              : (v[1]<0 ? -p.y : p.y-ch);
-    var near = Math.max(0, 1 - over/(Math.max(cw,ch)*0.45));   // 1 に近いほどもうすぐ入る
-    var len  = G*3 + G*9*near;                                  // 近いほど長く伸びる
-    ctx.save(); ctx.globalAlpha=0.25+0.75*near;
-    if(v[0]){                                                   // 左右の辺:縦のバー
-      var bx = v[0]<0 ? x0 : x1-G*2;
-      dot(bx, g.cy-len/2, G*2, len, col.lit);
-    } else {                                                    // 上下の辺:横のバー
-      var by = v[1]<0 ? 0 : ch-G*2;
-      dot(g.cx-len/2, by, len, G*2, col.lit);
+  /* あ段は「4方向のノーツが円で繋がって一緒に降りてくる」形。
+     他の4方向と同じタイミングでリングに着くので、タップの瞬間が同じ基準で読める。
+     内側から広がる方式は、いつ来るのかが他と別基準になって分かりづらかった。 */
+  function drawTapRing(n, dt, g, size, isNext){
+    var r=noteRadius("c", dt, g), col=DIR_COL.c;
+    if(r<=G) return;
+    var seg=Math.max(28, Math.round(2*Math.PI*r/(G*2.4)));
+    ctx.save();
+    ctx.globalAlpha=isNext?0.95:0.6;
+    for(var i=0;i<seg;i++){                        // 4点を繋ぐ円
+      var a=i/seg*Math.PI*2, cs=Math.cos(a), sn=Math.sin(a);
+      dot(g.cx+cs*r, g.cy+sn*r, G, G, isNext?col.lit:col.base);
+      dot(g.cx+cs*(r-G), g.cy+sn*(r-G), G, G, col.dark);
     }
+    ctx.restore();
+    var hs=Math.round(size*0.42);                  // 4方向の頭
+    ["l","u","r","d"].forEach(function(d){
+      var v=AXIS[d], hx=g.cx+v[0]*r, hy=g.cy+v[1]*r;
+      dot(hx-hs/2, hy-hs/2, hs, hs, col.dark);
+      dot(hx-hs/2+G, hy-hs/2+G, hs-G*2, hs-G*2, isNext?col.lit:col.base);
+    });
+    // かなは斜め上(45°)。上下左右は4方向の通り道なので置かない
+    var kx=g.cx-r*0.707, ky=g.cy-r*0.707;
+    ctx.save();
+    ctx.font=Math.round(size*0.5)+'px '+PIXEL_FONT;
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    var kw=ctx.measureText(n.kana).width;
+    dot(kx-kw/2-G, ky-size*0.32, kw+G*2, size*0.64, PAL.night);
+    ctx.fillStyle=isNext?PAL.ink:col.lit;
+    ctx.fillText(n.kana, kx, ky);
     ctx.restore();
   }
 
