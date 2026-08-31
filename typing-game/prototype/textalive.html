@@ -47,7 +47,11 @@
     display:flex;flex-direction:column;height:min(74vh,560px);
     box-shadow:0 0 0 3px var(--night), 0 0 0 4px var(--edge)}
   .screen:focus{outline:none}
-  .screen.playing{position:fixed;inset:0;z-index:60;margin:0;border:0;border-radius:0;height:100dvh;
+  /* 高さは JS が実測した --app-h を使う。Android Chrome では URL バーの表示状態で
+     実際の表示領域が 100dvh と食い違い、判定ラインより下(レーンキー・ミク)が
+     画面外に押し出されることがあるため(dvh 未対応環境向けに 100dvh を残す)。 */
+  .screen.playing{position:fixed;top:0;left:0;right:0;z-index:60;margin:0;border:0;border-radius:0;
+    height:100dvh;height:var(--app-h,100dvh);
     padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);
     touch-action:none;user-select:none;-webkit-user-select:none}
   /* CRT の走査線。ドット絵と喧嘩しない強さに落とす */
@@ -224,7 +228,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 19</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 20</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -338,7 +342,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 19;
+  var BUILD = 20;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -802,9 +806,35 @@
     ctx.imageSmoothingEnabled=false;
     G = cw<420 ? 3 : 4;
   }
-  window.addEventListener("resize",function(){ resizeCanvas(); if(state) drawField(); });
+  /* 表示領域の高さを実測して CSS 変数に流す。
+     Android Chrome は URL バーの出し入れで表示高さが変わるうえ、
+     position:fixed が参照するレイアウトビューポートは「URL バーを隠した高さ」の
+     ままなので、100dvh だけに頼ると下端(レーンキー)が画面外へはみ出す。
+     visualViewport があればそれを、無ければ innerHeight を使う。 */
+  function syncViewportHeight(){
+    var vv=window.visualViewport;
+    var h=Math.round(vv ? vv.height : window.innerHeight);
+    if(h>0) document.documentElement.style.setProperty("--app-h", h+"px");
+  }
+  function relayout(){ syncViewportHeight(); resizeCanvas(); if(state) drawField(); }
+  syncViewportHeight();
+  window.addEventListener("resize", relayout);
+  window.addEventListener("orientationchange", relayout);
+  if(window.visualViewport){
+    window.visualViewport.addEventListener("resize", relayout);
+    window.visualViewport.addEventListener("scroll", relayout);
+  }
 
-  function judgeY(){ return Math.round(ch*0.78/G)*G; }
+  /* 判定ラインより下に必要な高さ:
+     スピーカー(レーンキー)本体 = G*10、その下にミクの立ち位置。
+     画面が低いときは 0.78 のままだと下段がはみ出すので、
+     「下に必ず確保する帯」を引いた位置まで判定ラインを繰り上げる。 */
+  function speakerBandH(){ return G*10; }
+  function mikuBandH(){ return 40*2 + G*2; }          // 最小スケール(2倍)のミクぶん
+  function judgeY(){
+    var reserve=speakerBandH()+mikuBandH();
+    return Math.round(Math.min(ch*0.78, Math.max(ch*0.45, ch-reserve))/G)*G;
+  }
   var FIELD_MAX=520;
   function fieldW(){ return Math.min(cw, FIELD_MAX); }
   function fieldX0(){ return Math.round((cw-fieldW())/2/G)*G; }
@@ -950,17 +980,23 @@
   var mikuSway=0, mikuSwayDir="c";
   function drawMikuOnStage(jy){
     /* 置き場所: レーン帯の外側に余白があればそこ(大きめ)、
-       無ければ判定ラインより下の帯に収まる大きさで右下へ。ノーツを隠さないことを優先。 */
-    var marginW=cw-(fieldX0()+fieldW()), below=ch-jy-G*2;
+       無ければ判定ラインより下の帯に収まる大きさで右下へ。ノーツを隠さないことを優先。
+       縦に余裕が無いときは、スピーカー(レーンキー)より下だけを使う。
+       レーンキーに重なると、どの方向を打つのかが読めなくなるため。 */
+    var marginW=cw-(fieldX0()+fieldW());
+    var below=ch-jy-speakerBandH();
     var inMargin=marginW > 32*3+G*4;
     var scale = inMargin ? Math.max(3, Math.min(6, Math.floor(Math.min(marginW/34, ch*0.45/40))))
-                         : Math.max(2, Math.min(4, Math.floor(below/40)));
+                         : Math.min(4, Math.floor(below/40));
+    if(!inMargin && scale<2) return;                  // 置く余地が無ければ描かない(下段を優先)
     var w=32*scale, h=40*scale;
     var idle=calmMotion ? 0.5 : (Math.sin(performance.now()/620)+1)/2;
     var bounce=Math.round((beatPulse*2+idle*0.6)*G);
     var x = inMargin ? Math.round((fieldX0()+fieldW()+(marginW-w)/2)/G)*G
                      : Math.round((cw-w-G*2)/G)*G;
-    var y = Math.round((inMargin ? ch-h-G*3 : Math.max(jy+G, ch-h-G*2))/G)*G - bounce;
+    // 下端で切れないよう、必ずスピーカー帯より下・キャンバス内に収める
+    var y = Math.round((inMargin ? ch-h-G*3
+                                 : Math.min(ch-h-G, jy+speakerBandH()))/G)*G - bounce;
     ctx.save();
     ctx.imageSmoothingEnabled=false;
     if(mikuSway>0){                                          // フリック方向へ残像
