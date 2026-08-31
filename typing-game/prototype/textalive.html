@@ -213,7 +213,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 23</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 24</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -323,7 +323,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 23;
+  var BUILD = 24;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -528,11 +528,17 @@
       var b=a.createBuffer(1,1,22050), src=a.createBufferSource();
       src.buffer=b; src.connect(seBus||a.destination); src.start(0);
     }catch(e){}
+    try{ prewarmTones(a); }catch(e){}      // 初回だけ波形生成で詰まるのを避ける
     soundBadge();
   }
   function soundBadge(){
     var b=document.getElementById("build"); if(!b) return;
-    b.textContent="build "+BUILD+" / snd:"+(actx?actx.state:"none");
+    var lat="";
+    if(actx){                              // 出力遅延の実測(端末差の切り分け用)
+      var ms=Math.round(((actx.outputLatency||actx.baseLatency||0))*1000);
+      if(ms) lat=" "+ms+"ms";
+    }
+    b.textContent="build "+BUILD+" / snd:"+(actx?actx.state:"none")+lat;
   }
   ["touchstart","pointerdown","mousedown","keydown"].forEach(function(ev){
     document.addEventListener(ev, unlockAudio, {capture:true, passive:true});
@@ -540,18 +546,38 @@
   document.addEventListener("visibilitychange", function(){
     if(!document.hidden && actx && actx.state!=="running") audio();
   });
+  /* 音は毎回オシレータを組むのではなく、波形を焼いた AudioBuffer を使い回す。
+     打鍵のたびにノードグラフを作ると、端末によっては組み立てとパラメータ予約の
+     ぶんだけ遅れて聞こえる。バッファなら start() 一発で、予約時刻も置かない。
+     (出力そのものの遅延は端末側の問題なので、ビルド表示に実測値を出しておく) */
+  var toneCache={};
+  function toneBuffer(a, freq, dur, type, gain, sweep){
+    var key=freq+"|"+dur+"|"+type+"|"+gain+"|"+(sweep||1);
+    if(toneCache[key]) return toneCache[key];
+    var sr=a.sampleRate, n=Math.max(1, Math.round(sr*dur)), buf=a.createBuffer(1,n,sr);
+    var d=buf.getChannelData(0), ph=0, i;
+    for(i=0;i<n;i++){
+      var tt=i/sr, k=tt/dur;
+      var f=freq*(sweep ? Math.pow(sweep,k) : 1);
+      ph+=2*Math.PI*f/sr;
+      var v;
+      if(type==="square") v=(Math.sin(ph)>=0?1:-1)*0.7;
+      else if(type==="triangle") v=2/Math.PI*Math.asin(Math.sin(ph));
+      else if(type==="sawtooth") v=2*(((ph/(2*Math.PI))%1)-0.5);
+      else v=Math.sin(ph);
+      // 立ち上がり 1.5ms の鋭いアタック(遅れて聞こえないように)+ 二次で減衰
+      var env=(tt<0.0015) ? tt/0.0015 : Math.pow(1-Math.min(1,k), 2);
+      d[i]=v*env*gain;
+    }
+    toneCache[key]=buf;
+    return buf;
+  }
   function blip(freq, dur, type, gain, sweep){
     var a=audio(); if(!a) return;
-    /* suspended のまま予約すると currentTime が固まっているので、
-       再開後に「過去の予約」となって無音になる。わずかに先に置いて回避する。 */
-    var o=a.createOscillator(), g=a.createGain(), t=a.currentTime+0.005;
-    o.type=type||"square";
-    o.frequency.setValueAtTime(freq,t);
-    if(sweep) o.frequency.exponentialRampToValueAtTime(Math.max(60,freq*sweep), t+dur);
-    g.gain.setValueAtTime(0.0001,t);
-    g.gain.exponentialRampToValueAtTime(gain||0.18, t+0.006);
-    g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
-    o.connect(g); g.connect(seBus||a.destination); o.start(t); o.stop(t+dur+0.02);
+    var src=a.createBufferSource();
+    src.buffer=toneBuffer(a, freq, dur||0.08, type||"square", gain||0.18, sweep);
+    src.connect(seBus||a.destination);
+    src.start();                       // 予約せず即時に鳴らす
   }
   /* レーンごとに音階を割り当てる(ヨナ抜き五音音階)。打鍵そのものが旋律になり、
      方向が音でも区別できる。上フリックほど高い音にして直感と合わせる。 */
@@ -566,6 +592,13 @@
     if(dir==="c"){ blip(f, 0.05, "square", 0.24); return; }
     blip(f, 0.09, "triangle", 0.26, SE_SWEEP[dir]||1);
     blip(f*2, 0.05, "square", 0.09, SE_SWEEP[dir]||1);   // 倍音を薄く足して抜けを良くする
+  }
+  function prewarmTones(a){
+    Object.keys(SE_PITCH).forEach(function(d){
+      var f=SE_PITCH[d]*0.75;
+      if(d==="c") toneBuffer(a,f,0.05,"square",0.24,undefined);
+      else{ toneBuffer(a,f,0.09,"triangle",0.26,SE_SWEEP[d]); toneBuffer(a,f*2,0.05,"square",0.09,SE_SWEEP[d]); }
+    });
   }
   function seJudge(g,dir){
     var f=SE_PITCH[dir]||659.25;
@@ -966,17 +999,21 @@
       dot(X-G, Y-G, s+G*2, G, PAL.ink); dot(X-G, Y+s, s+G*2, G, PAL.ink);
       dot(X-G, Y, G, s, PAL.ink); dot(X+s, Y, G, s, PAL.ink);
     }
-    // かな
-    ctx.fillStyle=PAL.ink;
-    ctx.font=Math.round(s*0.46)+'px '+PIXEL_FONT;
-    ctx.textAlign="center"; ctx.textBaseline="middle";
-    ctx.fillText(n.kana, X+half, Y+half-s*0.13);
+    /* 上 6 割がかな、下 4 割が方向記号。台座がかなに掛かると読めなくなるので、
+       それぞれの領域を分けて置く。 */
+    var as=Math.max(3,Math.round(s*0.075));
+    var ax=X+half, ay=Y+s-as*2.8;
     /* 方向記号。色違いの矢印を同系色の上に置くと明度差が出ず読めないので、
        暗い台座を敷いて白抜きで描く(どの方向色でもコントラストが同じ)。 */
-    var as=Math.max(3,Math.round(s*0.085));
-    var ax=X+half, ay=Y+s-as*3.0;
-    dot(ax-as*2.5-G, ay-as*2.5-G, as*5+G*2, as*5+G*2, PAL.night);
+    dot(ax-as*2.5-G, ay-as*2.5-G/2, as*5+G*2, as*5+G, PAL.night);
     spriteCentered(ARROW[n.dir], ax, ay, as, PAL.ink);
+    // かな(矢印より上に、影を敷いて確実に読ませる)
+    ctx.font=Math.round(s*0.44)+'px '+PIXEL_FONT;
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillStyle=PAL.shade;
+    ctx.fillText(n.kana, X+half+G, Y+half-s*0.17+G);
+    ctx.fillStyle=PAL.ink;
+    ctx.fillText(n.kana, X+half, Y+half-s*0.17);
     // 歌詞=声、を示す吹き出しの尻尾
     dot(X+half-G, Y+s, G*2, G, col.dark);
     dot(X+half, Y+s+G, G, G, col.dark);
@@ -1166,12 +1203,12 @@
   /* ---- ミクのひとこと(曲終わりの吹き出し) ---- */
   function drawSpeech(text, mk, alpha){
     if(!mk || !text) return;
-    var u=Math.max(2, Math.round(G*0.9)), size=Math.round(u*4.2), lh=Math.round(size*1.5);
+    var u=Math.max(2, Math.round(G*0.9)), size=Math.round(u*7), lh=Math.round(size*1.45);
     ctx.save();
     ctx.font=size+"px "+PIXEL_FONT;
     ctx.textAlign="left"; ctx.textBaseline="top";
-    var maxW=Math.min(mk.x-fieldX0()-G*4, cw*0.62);
-    if(maxW<size*4) maxW=cw*0.62;
+    var maxW=Math.min(mk.x-fieldX0()-G*4, cw*0.8);
+    if(maxW<size*5) maxW=cw*0.8;                    // ミクの左が狭ければ上に大きく出す
     var lines=[""], chars=[].concat(Array.prototype.slice.call(text));
     chars.forEach(function(c){
       var cand=lines[lines.length-1]+c;
@@ -1181,7 +1218,8 @@
     var tw=0;
     lines.forEach(function(l){ tw=Math.max(tw, ctx.measureText(l).width); });
     var bw=Math.round((tw+G*6)/G)*G, bh=Math.round((lines.length*lh+G*5)/G)*G;
-    var bx=Math.max(G*2, Math.min(mk.x-bw+G*4, cw-bw-G*2));
+    // しっぽがミクの頭の上に来る位置へ寄せる(誰が話しているかを迷わせない)
+    var bx=Math.max(G*2, Math.min(Math.round(mk.x+mk.w*0.45-bw), cw-bw-G*2));
     var by=Math.max(G*2, mk.y-bh-G*3);
     ctx.globalAlpha=alpha;
     dot(bx+G, by+G, bw, bh, PAL.shade);                   // 影
@@ -1256,9 +1294,9 @@
     ctx.clearRect(0,0,cw,ch);
     ctx.save();
     if(shake>0){                                   // ミスで盤面ごと揺らす
-      ctx.translate(Math.round((Math.random()-0.5)*G*5*shake),
-                    Math.round((Math.random()-0.5)*G*5*shake));
-      shake=Math.max(0, shake-0.11);
+      ctx.translate(Math.round((Math.random()-0.5)*G*2.4*shake),
+                    Math.round((Math.random()-0.5)*G*2.4*shake));
+      shake=Math.max(0, shake-0.16);
     }
     drawStage(t);
 
@@ -1394,8 +1432,10 @@
     el.judge.textContent=g;
     void el.judge.offsetWidth;
     el.judge.classList.add("show");
+    /* ms の数値は演奏中に読めないし、読めても次の一手に活かせない。
+       「はやい/おそい」だけ返せば、次のノーツで直せる。 */
     el.delta.textContent = (g==="MISS") ? "" : (g==="TYPED") ? "先行入力" :
-      (delta>=0?"+":"")+Math.round(delta)+" ms";
+      (Math.abs(delta)<30 ? "ジャスト" : delta>0 ? "おそい" : "はやい");
     seJudge(g,dir); mikuReact(g); kick(g);
   }
   /* 打ち損じた場所を歌詞側にも返す。どの字で転んだのかが後から分かる。
@@ -1539,15 +1579,18 @@
 
   /* 曲の終わりにミクが言うひとこと。結果(ランク)で言い回しを変える。
      スコアの読み上げではなく「一緒に歌った相手からの言葉」にする。 */
-  var OUTRO_HOLD=3000;
+  var OUTRO_HOLD=5000;
   var MIKU_LINES={
-    SS:"ぴったりだった! また歌お?",
-    S :"いいね、息が合ってた",
-    A :"たのしかった! ありがと",
-    B :"もう一回、いこ?",
-    C :"ここからだよ。付き合ってね"
+    SS:["ぴったりだった! また歌お?", "すごい、ずっと一緒に歌えてた", "今の、best だったよ!"],
+    S :["いいね、息が合ってた", "だいぶ掴んできたね", "その調子! もう一曲いける?"],
+    A :["たのしかった! ありがと", "後半よかったよ", "だんだん近づいてきてる"],
+    B :["もう一回、いこ?", "惜しい! 指、覚えてきてる", "焦らなくていいよ。次いこ"],
+    C :["ここからだよ。付き合ってね", "ゆっくりでいいよ、待ってる", "はじめはこんなもん。ね?"]
   };
-  function mikuLine(){ return MIKU_LINES[rank()] || MIKU_LINES.C; }
+  function mikuLine(){
+    var arr=MIKU_LINES[rank()] || MIKU_LINES.C;
+    return arr[Math.floor(Math.random()*arr.length)];
+  }
 
   function rank(){
     var c=state.counts;
