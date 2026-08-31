@@ -213,7 +213,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 32</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 33</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -333,7 +333,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 32;
+  var BUILD = 33;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -1090,28 +1090,29 @@
   function ring(){
     var cx=Math.round((fieldX0()+fieldW()/2)/G)*G;
     var cy=Math.round(Math.min(ch*0.42, ch-G*44)/G)*G;   // 指が届く下側を空けて上寄りに
-    var R =Math.round(Math.min(fieldW()*0.28, ch*0.16)/G)*G;
+    var R =Math.round(Math.min(fieldW()*0.22, ch*0.13)/G)*G;
     return {cx:cx, cy:cy, R:R};
   }
-  function spawnR(dir,g){
-    var pad=G*16;
-    if(dir==="l") return g.cx-fieldX0()+pad;
-    if(dir==="r") return (fieldX0()+fieldW())-g.cx+pad;
-    if(dir==="u") return g.cy+pad;
-    if(dir==="d") return (ch-g.cy)+pad;
-    return Math.max(g.cy, ch-g.cy)+pad;                  // タップの輪は一番外から
+  /* 4方向とも同じ速度(px/ms)で寄ってくる。軸ごとに距離が違うからと速度を変えると、
+     どの軸を見ているかで体内時計を切り替えることになり、読めなくなる。
+     いちばん遠い軸を基準に速度を決め、近い軸のノーツは画面の外から入ってくる
+     (画面外にいる間は、その辺に近づいてくる印だけを出す)。 */
+  function spawnMax(g){
+    return Math.max(g.cy, ch-g.cy, g.cx-fieldX0(), (fieldX0()+fieldW())-g.cx)+G*16;
   }
+  function noteSpeed(g){ return (spawnMax(g)-g.R)/leadMs; }   // 全軸共通の速度
   /** 残り時間 dt のノーツが、いま中心からどれだけ離れているか */
   function noteRadius(dir, dt, g){
-    var p=Math.max(-0.35, Math.min(1, dt/leadMs));       // 判定を過ぎたら内側へ抜ける
-    return g.R + (spawnR(dir,g)-g.R)*p;
+    var d=Math.max(-0.35*leadMs, Math.min(leadMs, dt));       // 判定を過ぎたら内側へ抜ける
+    if(dir==="c") return Math.max(0, g.R - noteSpeed(g)*d);   // あ段は中心から広がる
+    return g.R + noteSpeed(g)*d;
   }
   /** ノーツ(または判定成立点)の画面座標。効果の位置もここで決める */
   function notePos(dir, dt, g){
     g=g||ring();
     var v=AXIS[dir]||AXIS.c, r=noteRadius(dir, dt||0, g);
-    if(dir==="c") return {x:g.cx, y:g.cy};
-    return {x:g.cx+v[0]*r, y:g.cy+v[1]*r};
+    if(dir==="c") return {x:g.cx, y:g.cy, r:r};
+    return {x:g.cx+v[0]*r, y:g.cy+v[1]*r, r:r};
   }
   /** 判定が成立した瞬間の位置(リング上)。打ち返しの起点になる */
   function hitPos(dir){
@@ -1135,15 +1136,27 @@
     if(lights.length>70) lights.shift();
   }
   function loseLight(){ if(lights.length) lights.splice(Math.floor(Math.random()*lights.length),1); }
+  /* 客席のペンライトは、拍に合わせて全員でワイパーのように左右へ振る。
+     一本ずつバラバラに揺れると「客席」に見えないので、位相は全体で揃える
+     (2拍で左→右→左の1往復)。 */
+  var wiperPh=0, wiperLast=0;
   function drawLights(){
-    if(!lights.length) return;
-    var sw=(calmMotion?0:1)*Math.sin(performance.now()/260);
     var np2=performance.now();
+    var beatDur=(beatNow&&beatNow.duration)?beatNow.duration:500;
+    var dtm=wiperLast ? Math.min(120, np2-wiperLast) : 0;
+    wiperLast=np2;
+    wiperPh += dtm/(beatDur*2)*Math.PI*2;          // 2拍で1往復
+    if(!lights.length) return;
+    var swing=(calmMotion?0.25:1)*0.55*Math.sin(wiperPh);   // 振れ角(ラジアン)
+    var len=G*5;
     lights.forEach(function(L){
-      if(np2<L.at) return;                     // 打ち返したかなが届くまでは灯らない
-      var dx=Math.sin(performance.now()/300+L.ph)*G*(1+beatPulse*1.5)*(calmMotion?0.3:1);
-      dot(L.x+dx, L.y, G, G*3, L.col);
-      dot(L.x+dx, L.y-G, G, G, PAL.ink);
+      if(np2<L.at) return;                      // 打ち返したかなが届くまでは灯らない
+      var ang=-Math.PI/2 + swing;               // 真上を基準に左右へ倒す
+      var ex=Math.cos(ang)*len, ey=Math.sin(ang)*len;
+      for(var q=0;q<=4;q++){                    // 根本から先端までドットを並べる
+        var f=q/4;
+        dot(L.x+ex*f, L.y+ey*f, G, G, q>=3 ? PAL.ink : L.col);
+      }
     });
   }
 
@@ -1427,6 +1440,7 @@
     requestAnimationFrame(drawAttract);
   }
   function stopAttract(){ attractOn=false; }
+  window.DAKEN_ADDLIGHT=function(d){ addLight(d, DIR_COL[d].lit, 0); };   // 検証用
   window.DAKEN_ATTRACT={start:startAttract, stop:stopAttract,
     peek:function(){ return {attractOn:attractOn, cw:cw, ch:ch, t:attractT0}; }};
 
@@ -1506,7 +1520,9 @@
 
     // 4本の軸。ノーツが通る道を薄く見せて、見る場所を4箇所に固定する
     ["l","u","r","d"].forEach(function(d){
-      var v=AXIS[d], R=spawnR(d,g), col=DIR_COL[d];
+      var v=AXIS[d], col=DIR_COL[d];
+      var R=(d==="l") ? g.cx-fieldX0() : (d==="r") ? (fieldX0()+fieldW())-g.cx
+          : (d==="u") ? g.cy : ch-g.cy;
       ctx.save(); ctx.globalAlpha=0.28;
       for(var q=g.R+G*3; q<R; q+=G*3){
         dot(g.cx+v[0]*q, g.cy+v[1]*q, G, G, col.dark);
@@ -1557,24 +1573,63 @@
       var n=state.notes[k], dt=n.time-t;
       if(dt>leadMs) break;
       if(dt < -WIN.late) continue;
-      if(n.dir==="c"){                             // あ段は「縮んでくる輪」= 受け止める
+      if(n.dir==="c"){
+        /* あ段は「ミクの声がリングへ広がっていく波」。中心から外へ育つので、
+           四方から来るノーツの道(リングの外側)と交わらず、追い越しも起きない。
+           細い線だと読めないので、3ドット厚の帯にして色も濃く出す。 */
         var r=noteRadius("c", dt, g), col2=DIR_COL.c;
-        var seg=Math.max(24, Math.round(2*Math.PI*r/(G*2.2)));
-        for(i=0;i<seg;i++){
-          var a2=i/seg*Math.PI*2;
-          dot(g.cx+Math.cos(a2)*r, g.cy+Math.sin(a2)*r, G, G, (k===state.idx)?PAL.ink:col2.base);
+        if(r>G){
+          var seg=Math.max(28, Math.round(2*Math.PI*r/(G*1.4)));
+          var near=Math.max(0, 1-Math.abs(g.R-r)/(g.R||1));   // リングに近いほど濃く
+          ctx.save();
+          ctx.globalAlpha=0.55+0.45*near;
+          for(i=0;i<seg;i++){
+            var a2=i/seg*Math.PI*2, cs=Math.cos(a2), sn=Math.sin(a2);
+            var cc=(k===state.idx)?col2.lit:col2.base;
+            dot(g.cx+cs*r,       g.cy+sn*r,       G, G, cc);
+            dot(g.cx+cs*(r-G*1.4), g.cy+sn*(r-G*1.4), G, G, col2.dark);
+            dot(g.cx+cs*(r+G*1.4), g.cy+sn*(r+G*1.4), G, G, col2.dark);
+          }
+          ctx.restore();
+          /* かなは輪の斜め上(45°)に置く。上下左右は4方向のノーツが通る道なので、
+             そこに置くと重なって読めなくなる。 */
+          var kx=g.cx-r*0.707, ky=g.cy-r*0.707;
+          ctx.save();
+          ctx.font=Math.round(size*0.5)+'px '+PIXEL_FONT;
+          ctx.textAlign="center"; ctx.textBaseline="middle";
+          var kw=ctx.measureText(n.kana).width;
+          dot(kx-kw/2-G, ky-size*0.32, kw+G*2, size*0.64, PAL.night);
+          ctx.fillStyle=(k===state.idx)?PAL.ink:col2.lit;
+          ctx.fillText(n.kana, kx, ky);
+          ctx.restore();
         }
-        ctx.save();
-        ctx.fillStyle=PAL.ink;
-        ctx.font=Math.round(size*0.46)+'px '+PIXEL_FONT;
-        ctx.textAlign="center"; ctx.textBaseline="middle";
-        ctx.fillText(n.kana, g.cx, g.cy-r);        // かなは輪の真上に乗せる
-        ctx.restore();
       } else {
         var p=notePos(n.dir, dt, g);
-        drawNote(n, p.x, p.y, size, k===state.idx);
+        var inside = p.x>fieldX0()-size && p.x<fieldX0()+fieldW()+size && p.y>-size && p.y<ch+size;
+        if(inside) drawNote(n, p.x, p.y, size, k===state.idx);
+        else drawIncoming(n, g, p);          // 画面外にいる間は辺に印を出す
       }
     }
+  }
+
+  /* 近い軸のノーツは画面の外から入ってくる。何も出さないと唐突に現れるので、
+     その辺に「もうすぐ来る」印を出しておく(近いほど濃く・大きく)。 */
+  function drawIncoming(n, g, p){
+    var v=AXIS[n.dir], col=DIR_COL[n.dir];
+    var x0=fieldX0(), x1=fieldX0()+fieldW();
+    var over = Math.abs(v[0]) ? (v[0]<0 ? x0-p.x : p.x-x1)
+                              : (v[1]<0 ? -p.y : p.y-ch);
+    var near = Math.max(0, 1 - over/(Math.max(cw,ch)*0.45));   // 1 に近いほどもうすぐ入る
+    var len  = G*3 + G*9*near;                                  // 近いほど長く伸びる
+    ctx.save(); ctx.globalAlpha=0.25+0.75*near;
+    if(v[0]){                                                   // 左右の辺:縦のバー
+      var bx = v[0]<0 ? x0 : x1-G*2;
+      dot(bx, g.cy-len/2, G*2, len, col.lit);
+    } else {                                                    // 上下の辺:横のバー
+      var by = v[1]<0 ? 0 : ch-G*2;
+      dot(g.cx-len/2, by, len, G*2, col.lit);
+    }
+    ctx.restore();
   }
 
   /* リフレクト式のミクはリングの内側。歌の発生源に歌詞が集まる形にする */
