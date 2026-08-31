@@ -34,7 +34,7 @@
   <button id="auto" class="sub">観賞モード</button>
   <label><input type="checkbox" id="guide"> 目印を出す（練習用）</label>
 </div>
-<div id="build">build 6 ・ 擬似曲 130BPM（本番は TextAlive の課題曲に置き換え）</div>
+<div id="build">build 7 ・ 擬似曲 130BPM（本番は TextAlive の課題曲に置き換え）</div>
 <script>
 "use strict";
 /* =========================================================================
@@ -198,6 +198,10 @@ function say(text) {
 let startAt = 0, nextBeat = 0, schedTimer = null;
 const songTime = () => (ac ? ac.currentTime - startAt : 0);
 const bt = b => b * BEAT;
+/** 拍 b の音声クロック上の時刻。過去なら直近未来へ寄せる（予約が落ちないように）*/
+const atBeat = b => Math.max(ac.currentTime + 0.005, startAt + bt(b));
+/** 次の拍アタマ。判定の音はここに置いて曲から外れないようにする */
+const atNextBeat = () => atBeat(Math.ceil(songTime() / BEAT + 0.03));
 const rnd01 = n => { let h = Math.sin(n * 12.9898) * 43758.5453; return h - Math.floor(h); };
 /** サイクル c の i 番目に打つ房。順序は毎回入れ替わる＝耳で聞く必要がある */
 const sideOf = (c, i) => (rnd01(c) < 0.5 ? ["L", "R"] : ["R", "L"])[i];
@@ -309,8 +313,10 @@ const GRADE = { PERFECT: { s: 100, label: "PERFECT", col: "#ffe66d" },
                 MISS:    { s: 0,   label: "MISS",    col: "#ff7a8a" } };
 /* 1つの操作拍で「離す」と「掴む」の2回外しうるので、判定は甘めに取る。
  * OK 帯まで髪は生える。ネギになるのは本当に打っていないときだけ */
+/* ネギになる閾値(0.72拍)は据え置き＝遊びやすさは変えない。
+ * 一方 PERFECT / GOOD は絞り、ミク度で差がつくようにする */
 const grade = d => { const a = Math.abs(d);
-  return a <= 0.16 ? "PERFECT" : a <= 0.36 ? "GOOD" : a <= 0.72 ? "OK" : "MISS"; };
+  return a <= 0.11 ? "PERFECT" : a <= 0.26 ? "GOOD" : a <= 0.72 ? "OK" : "MISS"; };
 function pop(text, col, x, y) { effects.push({ text, col, x, y, t: songTime() }); }
 
 const chain = new Map();                       // a -> "held" | "resolved"
@@ -327,8 +333,8 @@ function growNegi(a) {
   const na = r.u.negiAnchor;
   const loc = na ? toLocal(r.u, na.x, na.y, r.side)
                  : { rx: ANCHOR[r.side].x * r.u.obj.w, ry: ANCHOR[r.side].y * r.u.obj.h };
-  r.u.tails[r.side] = { kind: "negi", ...loc, quality: 0 };
-  combo = 0; buzzer(ac.currentTime);
+  r.u.tails[r.side] = { kind: "negi", ...loc, grade: "MISS", quality: 0 };
+  combo = 0; buzzer(atNextBeat());
   const pp = unitPos(r.u, songTime());
   pop("ネギ", "#8fd45a", pp.x + loc.rx * pp.scale, pp.y + loc.ry * pp.scale - 24);
 }
@@ -368,10 +374,10 @@ function finalize(s) {
   }
   chain.set(s.a, "resolved");
   s.u.done[s.side] = true;
-  shakin(ac.currentTime, s.side === "L" ? -0.6 : 0.6);
+  shakin(atBeat(doneBeat(s.a)), s.side === "L" ? -0.6 : 0.6);   // 髪が生えるのは常に4拍目
   combo++; maxCombo = Math.max(maxCombo, combo);
   score += Math.round(GRADE[s.tapGrade].s * 2 * (1 + Math.min(combo, 20) / 20));
-  s.u.tails[s.side] = { kind: "hair", rx: s.rx, ry: s.ry,
+  s.u.tails[s.side] = { kind: "hair", rx: s.rx, ry: s.ry, grade: s.tapGrade,
                         angle: Math.atan2(dy, dx), len: Math.min(dist, 260),
                         quality: GRADE[s.tapGrade].s / 100,
                         chars: LYRIC.slice(Math.floor(rnd01(s.a) * 20)).slice(0, 7) };
@@ -379,19 +385,58 @@ function finalize(s) {
 function onUp() { if (!slide) return; const s = slide; slide = null; finalize(s); }
 
 // ---- ユニットの完成 ---------------------------------------------------------
+/* ============================ ミク度の定義 ============================
+ * 完成した 1 体について、次の 4 指標の合計（0〜100）で決める。
+ * リズムの正確さ（50）と、出来上がった造形（50）を半々にしている。
+ *
+ *   R 拍の正確さ (0-50)  房ごとの判定を PERFECT 25 / GOOD 15 / OK 6 / ネギ 0
+ *   S 左右の対称 (0-20)  向きの鏡映一致 10 ＋ 長さの一致 10（両方が髪のときのみ）
+ *   L 長さ       (0-15)  平均房長 ÷ お題の高さ。0.35 で 0 点、0.90 以上で満点
+ *   D 垂れ具合   (0-15)  下向き成分 sin(θ) の「悪い方」。0.30 で 0 点、0.85 以上で満点
+ *
+ * 造形点は「両方が髪」でなければ 0。片方ネギならミク度は最大でも 50。
+ * ==================================================================== */
+const clamp01 = v => Math.max(0, Math.min(1, v));
+const RHYTHM_PT = { PERFECT: 25, GOOD: 15, OK: 6, MISS: 0 };
+function normAngle(a) {
+  while (a > Math.PI) a -= Math.PI * 2;
+  while (a < -Math.PI) a += Math.PI * 2;
+  return a;
+}
+function mikuScore(u) {
+  const L = u.tails.L, R = u.tails.R;
+  const H = u.obj.h * MAIN_SCALE;
+  const rhythm = (RHYTHM_PT[L && L.grade] || 0) + (RHYTHM_PT[R && R.grade] || 0);
+  const bothHair = L && R && L.kind === "hair" && R.kind === "hair";
+  let sym = 0, len = 0, drop = 0;
+  if (bothHair) {
+    // 左房を垂直軸で鏡映して右房と比べる
+    const dTheta = Math.abs(normAngle((Math.PI - L.angle) - R.angle));
+    sym = 10 * clamp01(1 - dTheta / 0.6)
+        + 10 * clamp01(1 - Math.abs(L.len - R.len) / Math.max(L.len, R.len, 1) / 0.5);
+    len = 15 * clamp01(((L.len + R.len) / 2 / H - 0.35) / 0.55);
+    drop = 15 * clamp01((Math.min(Math.sin(L.angle), Math.sin(R.angle)) - 0.30) / 0.55);
+  }
+  const total = Math.round(rhythm + sym + len + drop);
+  return { total, rhythm: Math.round(rhythm), sym: Math.round(sym),
+           len: Math.round(len), drop: Math.round(drop) };
+}
+/** ミク度から掛け声と称号を決める。上位は厳しめに置く */
+function rankOf(m, objName) {
+  if (m >= 92) return { text: "ミクーッ！", label: "本人", glow: 1 };
+  if (m >= 78) return { text: "ミク！",     label: "ほぼミク", glow: 0.6 };
+  if (m >= 60) return { text: "ミク。",     label: "ミク見習い", glow: 0 };
+  if (m >= 40) return { text: "ミク？",     label: "言い張ればミク", glow: 0 };
+  return { text: "だれ？", label: "ただの" + objName, glow: 0 };
+}
+
 function finish(u) {
   u.judged = true; finishedUnits.add(u.c);
-  const hairs = ["L", "R"].filter(k => u.tails[k] && u.tails[k].kind === "hair");
-  const q = hairs.reduce((a, k) => a + u.tails[k].quality, 0);
-  let text, label;
-  if (hairs.length === 2 && q >= 1.9)      { text = "ミクーッ！"; label = "本人"; }
-  else if (hairs.length === 2 && q >= 1.4) { text = "ミク！";     label = "ほぼミク"; }
-  else if (hairs.length === 2)             { text = "ミク。";     label = "ミク見習い"; }
-  else if (hairs.length === 1)             { text = "ミク？";     label = "片方ネギ"; }
-  else                                     { text = "ネギ。";     label = "ただの" + u.obj.name; }
-  say(text);
-  flash = { text, label, t: songTime() };
-  gallery.push({ obj: u.obj, tails: u.tails,
+  const m = mikuScore(u), r = rankOf(m.total, u.obj.name);
+  say(r.text);
+  score += m.total * 5;
+  flash = { text: r.text, label: r.label, miku: m.total, t: songTime() };
+  gallery.push({ obj: u.obj, tails: u.tails, miku: m.total, rank: r, detail: m,
                  x: 60 + rnd01(u.c * 5.1) * (W - 120),
                  y: 78 + rnd01(u.c * 9.3) * 210,
                  s: 0.26 + rnd01(u.c * 2.4) * 0.12, seed: gallery.length });
@@ -441,7 +486,7 @@ function tailPath(ax, ay, tail, t, N = 16) {
   const { angle, len } = tail, outward = Math.cos(angle) < 0 ? -1 : 1;
   const rootAngle = -Math.PI / 2 + outward * 0.42;
   let fall = angle;
-  const minA = 0.22, maxA = Math.PI - 0.22;
+  const minA = 0.88, maxA = Math.PI - 0.88;      // 毛先は必ず十分に下を向く
   if (Math.sin(fall) < Math.sin(minA)) fall = outward > 0 ? minA : maxA;
   const step = len / N, pts = []; let x = ax, y = ay;
   for (let i = 0; i <= N; i++) {
@@ -450,7 +495,7 @@ function tailPath(ax, ay, tail, t, N = 16) {
     let d = fall - rootAngle;
     while (d > Math.PI) d -= Math.PI * 2;
     while (d < -Math.PI) d += Math.PI * 2;
-    const a = rootAngle + d * k + 0.5 * Math.max(0, u - 0.5) + Math.sin(t * 2 + u * 2.5) * 0.02 * u;
+    const a = rootAngle + d * k + 0.95 * Math.max(0, u - 0.32) + Math.sin(t * 2 + u * 2.5) * 0.02 * u;
     x += Math.cos(a) * step; y += Math.sin(a) * step;
   }
   return { pts, rootAngle, N };
@@ -555,7 +600,18 @@ function render() {
   g.save(); g.globalAlpha = .8;
   for (const it of gallery) {
     const bob = Math.sin(t * Math.PI / BEAT * .5 + it.seed) * (2.5 + combo * .2);
-    drawObject(g, it.obj, it.x, it.y + bob, it.s, it.tails, t);
+    const y = it.y + bob;
+    if (it.rank && it.rank.glow > 0) {          // 良い記録はあとからも分かるよう淡く光る
+      const k = it.rank.glow;
+      const pulse = 0.72 + 0.28 * Math.sin(t * Math.PI / BEAT * .5 + it.seed * 1.7);
+      const rad = (110 + 60 * k) * it.s + 40;
+      const grd = g.createRadialGradient(it.x, y, 0, it.x, y, rad);
+      grd.addColorStop(0, `rgba(168,255,246,${(0.10 + 0.16 * k) * pulse})`);
+      grd.addColorStop(0.55, `rgba(120,235,226,${(0.05 + 0.09 * k) * pulse})`);
+      grd.addColorStop(1, "rgba(120,235,226,0)");
+      g.fillStyle = grd; g.beginPath(); g.arc(it.x, y, rad, 0, 7); g.fill();
+    }
+    drawObject(g, it.obj, it.x, y, it.s, it.tails, t);
   }
   g.restore();
 
@@ -618,7 +674,8 @@ function render() {
     const u = (t - flash.t) / 1.2, s = 1 + (1 - Math.min(1, u * 5)) * .5;
     g.save(); g.translate(W / 2, 150); g.scale(s, s); g.globalAlpha = Math.min(1, (1 - u) * 3);
     g.fillStyle = "#ffe66d"; g.font = "bold 48px sans-serif"; g.fillText(flash.text, 0, 0);
-    g.fillStyle = "#7fe8e0"; g.font = "bold 15px sans-serif"; g.fillText(flash.label, 0, 28);
+    g.fillStyle = "#7fe8e0"; g.font = "bold 15px sans-serif";
+    g.fillText(flash.label + "　ミク度 " + flash.miku, 0, 28);
     g.restore();
   }
   requestAnimationFrame(render);
@@ -656,7 +713,9 @@ window.__act = a => {            // 検証用: 房 a を掴む（実際の判定
   if (r && stateOf(a) === 'pending') { const an = anchorOf(r.u, r.side); onDown(an.x, an.y); }
   if (slide) onMove(slide.x0 + (slide.side === 'L' ? -70 : 70), slide.y0 + 150);
 };
-window.GALLERY_KINDS = () => gallery.map(x => [x.obj.name, ['L','R'].map(k => x.tails[k] ? x.tails[k].kind : '-').join('/')]);
+window.GALLERY_KINDS = () => gallery.map(x => [x.obj.name,
+  ['L','R'].map(k => x.tails[k] ? (x.tails[k].grade || '?')[0] : '-').join('/'),
+  x.miku, x.rank.label, x.detail]);
 window.RHYTHM_DEBUG = () => ({ score, combo, maxCombo, mikus: gallery.length,
   units: units.map(u => ({ c: u.c, obj: u.obj.name, order: u.order.join(""),
                            tails: ['L','R'].map(k => u.tails[k] ? (u.tails[k].kind === 'hair' ? k : 'n') : '-').join('') })) });
