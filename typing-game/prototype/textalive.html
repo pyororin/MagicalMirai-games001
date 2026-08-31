@@ -213,7 +213,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 27</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 28</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -228,6 +228,10 @@
     <button class="ghost" data-diff="NORMAL" aria-pressed="true">NORMAL</button>
     <button class="ghost" data-diff="HARD" aria-pressed="false">HARD</button>
     <button class="ghost" id="tutorial">あそびかた</button>
+    <span style="width:10px"></span>
+    <span class="label">持ち手</span>
+    <button class="ghost" data-hand="right" aria-pressed="true" title="右手で打つ(ミクとスコアを左に寄せる)">右</button>
+    <button class="ghost" data-hand="left" aria-pressed="false" title="左手で打つ(ミクとスコアを右に寄せる)">左</button>
     <span style="flex:1"></span>
     <label class="label" for="songPick">課題曲</label>
     <select id="songPick" aria-label="課題曲"></select>
@@ -323,7 +327,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 27;
+  var BUILD = 28;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -726,11 +730,17 @@
 
   /* ============ 再生速度・音量・先読み ============ */
   var speedRate=1, volume=80, leadMs=2000, offsetMs=0, lastAvgDelta=null;
+  /* 持ち手。打つ指で画面の片側が隠れるので、ミクとスコアを反対側へ寄せる。
+     right = 右手で打つ → 右下が指で隠れるので、ミクとスコアは左へ。 */
+  var handed="right";
+  function mikuOnLeft(){ return handed==="right"; }
   function mediaAudio(){ return document.querySelector("#media audio"); }
   function loadPrefs(){
     try{
       var s=localStorage.getItem("daken.speed"), v=localStorage.getItem("daken.volume"),
-          l=localStorage.getItem("daken.lead"), o=localStorage.getItem("daken.offset");
+          l=localStorage.getItem("daken.lead"), o=localStorage.getItem("daken.offset"),
+          h=localStorage.getItem("daken.hand");
+      if(h==="left"||h==="right") handed=h;
       if(o) offsetMs=Math.min(150,Math.max(-150,parseInt(o,10)));
       if(s) speedRate=Math.min(1,Math.max(.5,parseFloat(s)));
       if(v!==null) volume=Math.min(100,Math.max(0,parseInt(v,10)));
@@ -743,6 +753,7 @@
       localStorage.setItem("daken.volume",String(volume));
       localStorage.setItem("daken.lead",String(leadMs));
       localStorage.setItem("daken.offset",String(offsetMs));
+      localStorage.setItem("daken.hand",handed);
     }catch(e){}
   }
   function applySpeed(){
@@ -782,7 +793,7 @@
     offsetMs=Math.max(-150,Math.min(150,Math.round((offsetMs+lastAvgDelta)/5)*5));
     applyOffset(); savePrefs();
   });
-  applyLead(); applyOffset();
+  applyLead(); applyOffset(); applyHand();   // 保存された持ち手をボタンに反映
 
   /* ============ 譜面(全ノートを1本の時間軸で持つ) ============ */
   function selectIdx(notes,diff){
@@ -1089,8 +1100,9 @@
     var w=32*scale, h=40*scale;
     var idle=calmMotion ? 0.5 : (Math.sin(performance.now()/620)+1)/2;
     var bounce=Math.round((beatPulse*2+idle*0.6)*G);
+    /* 打つ手と反対側へ置く。右手で打つなら右下が指と手のひらで隠れるので左へ。 */
     var x = inMargin ? Math.round((fieldX0()+fieldW()+(marginW-w)/2)/G)*G
-                     : Math.round((cw-w-G*2)/G)*G;
+                     : Math.round((mikuOnLeft() ? G*2 : cw-w-G*2)/G)*G;
     // 下端で切れないよう、必ずスピーカー帯より下・キャンバス内に収める
     var y = Math.round((inMargin ? ch-h-G*3
                                  : Math.min(ch-h-G, jy+speakerBandH()))/G)*G - bounce;
@@ -1171,9 +1183,12 @@
   function drawInfoPanel(jy, mk){
     var top=jy+speakerBandH()+G*2;
     if(top>ch-G*6) return;
-    var x=fieldX0()+G;
-    var right=(mk ? mk.x-G*2 : cw-G);
-    var maxW=right-x;
+    /* ミクの隣に置く。ミクが左なら情報は右、ミクが右なら情報は左。
+       どちらも指で隠れる側を避けた配置になる。 */
+    var x, maxW;
+    if(mk && mikuOnLeft()){ x=mk.x+mk.w+G*2; maxW=cw-G-x; }
+    else if(mk){ x=fieldX0()+G; maxW=(mk.x-G*2)-x; }
+    else { x=fieldX0()+G; maxW=cw-G-x; }
     if(maxW<60) return;
     var u=Math.max(2, Math.round(G*0.9));                 // 文字サイズの基準
     ctx.save();
@@ -1230,16 +1245,20 @@
     var tw=0;
     lines.forEach(function(l){ tw=Math.max(tw, ctx.measureText(l).width); });
     var bw=Math.round((tw+G*6)/G)*G, bh=Math.round((lines.length*lh+G*5)/G)*G;
-    // しっぽがミクの頭の上に来る位置へ寄せる(誰が話しているかを迷わせない)
-    var bx=Math.max(G*2, Math.min(Math.round(mk.x+mk.w*0.45-bw), cw-bw-G*2));
+    // しっぽがミクの頭の上に来る位置へ寄せる(誰が話しているかを迷わせない)。
+    // ミクが左にいるときは右へ、右にいるときは左へ伸ばす。
+    var anchor = mikuOnLeft() ? Math.round(mk.x+mk.w*0.55)
+                              : Math.round(mk.x+mk.w*0.45-bw);
+    var bx=Math.max(G*2, Math.min(anchor, cw-bw-G*2));
     var by=Math.max(G*2, mk.y-bh-G*3);
     ctx.globalAlpha=alpha;
     dot(bx+G, by+G, bw, bh, PAL.shade);                   // 影
     dot(bx, by, bw, bh, PAL.night2);                      // 本体
     dot(bx, by, bw, G, PAL.ink); dot(bx, by+bh-G, bw, G, PAL.ink);
     dot(bx, by, G, bh, PAL.ink); dot(bx+bw-G, by, G, bh, PAL.ink);
-    dot(bx+bw-G*5, by+bh, G*2, G, PAL.ink);               // しっぽ(ミクの方へ)
-    dot(bx+bw-G*4, by+bh+G, G*2, G, PAL.ink);
+    var tail = mikuOnLeft() ? bx+G*3 : bx+bw-G*5;         // しっぽ(ミクの方へ)
+    dot(tail, by+bh, G*2, G, PAL.ink);
+    dot(mikuOnLeft() ? tail+G : tail+G, by+bh+G, G*2, G, PAL.ink);
     ctx.fillStyle=PAL.ink;
     lines.forEach(function(l,i){ ctx.fillText(l, bx+G*3, by+G*2+i*lh); });
     ctx.restore();
@@ -1924,6 +1943,20 @@
   },true);
 
   /* ============ 難易度・選曲 ============ */
+  /* 持ち手の切り替え。打つ指で隠れる側を避けて、ミクとスコアを反対側へ寄せる。 */
+  function applyHand(){
+    Array.prototype.forEach.call(document.querySelectorAll("[data-hand]"),function(o){
+      o.setAttribute("aria-pressed", String(o.getAttribute("data-hand")===handed));
+    });
+    if(state) drawField();
+  }
+  Array.prototype.forEach.call(document.querySelectorAll("[data-hand]"),function(b){
+    b.addEventListener("click",function(){
+      handed=b.getAttribute("data-hand");
+      savePrefs(); applyHand();
+    });
+  });
+
   Array.prototype.forEach.call(document.querySelectorAll("[data-diff]"),function(b){
     b.addEventListener("click",function(){
       difficulty=b.getAttribute("data-diff");
