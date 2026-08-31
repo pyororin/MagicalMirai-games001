@@ -24,8 +24,9 @@
 <body>
 <h1>ミクの本体はツインテールである — リズム版 検証モック</h1>
 <div id="hint">
-  髪留めが<b>1拍ごとに近づいてきます</b>。到達する<b>4拍目（音が変わる所）でタップ</b> →
-  星を伸ばして <b>次の小節アタマでリリース</b>。左右は<b>音の定位</b>で分かります（ヘッドホン推奨）。
+  髪留めが近づいてきます。到達する<b>4拍目（音が変わる所）でタップ</b>して星を伸ばし、
+  <b>次の小節の4拍目で離す</b>と髪が生えます。＝毎回4拍目で「離して、掴む」。
+  外すと<b>ネギが真っ直ぐ生えます</b>。左右は<b>音の定位</b>で分かります（ヘッドホン推奨）。
 </div>
 <canvas id="stage" width="960" height="600"></canvas>
 <div id="ui">
@@ -33,7 +34,7 @@
   <button id="auto" class="sub">観賞モード</button>
   <label><input type="checkbox" id="guide"> 目印を出す（練習用）</label>
 </div>
-<div id="build">build 2 ・ 擬似曲 130BPM（本番は TextAlive の課題曲に置き換え）</div>
+<div id="build">build 3 ・ 擬似曲 130BPM（本番は TextAlive の課題曲に置き換え）</div>
 <script>
 "use strict";
 /* =========================================================================
@@ -45,8 +46,15 @@
 const BPM = 130, BEAT = 60 / BPM;
 const CYCLE = 8;                        // 1体 = 8拍(2小節)
 const LYRIC = [..."ミクノホンタイハツインテールデアルコエガカタチヲツクル"];
-// サイクル内の拍の役割: 3,7 = 髪留め(TAP) / 0,4 = 髪の毛(RELEASE) / 他 = 素の拍
-const TAP_BEAT = [3, 7], REL_BEAT = [4, 8];
+
+/* 操作は「各小節の4拍目」だけに起きる。
+ * そこで前の房を離し(髪の毛が生える)、同時に次の房を掴む(髪留め)。
+ * つまり掴んでから離すまでの猶予は 4 拍 = 1 小節まるごと。
+ *   房 a: 掴む = actionBeat(a) / 離す = actionBeat(a+1)
+ *   体 c: 房 2c(1本目) と 2c+1(2本目) を持ち、2c+1 を離した拍で完成する */
+const actionBeat = a => a * 4 + 3;
+const tailUnit = a => Math.floor(a / 2);
+const tailSlot = a => a % 2;
 
 // ---- 音 -------------------------------------------------------------------
 let ac = null, master = null, songGain = null, beatGain = null, sfxGain = null, NOISE = null;
@@ -180,20 +188,21 @@ const bt = b => b * BEAT;
 const rnd01 = n => { let h = Math.sin(n * 12.9898) * 43758.5453; return h - Math.floor(h); };
 /** サイクル c の i 番目に打つ房。順序は毎回入れ替わる＝耳で聞く必要がある */
 const sideOf = (c, i) => (rnd01(c) < 0.5 ? ["L", "R"] : ["R", "L"])[i];
-const absTap = (c, i) => c * CYCLE + TAP_BEAT[i];
-const absRel = (c, i) => c * CYCLE + REL_BEAT[i];
 
 function scheduleBeat(b) {
   const at = startAt + bt(b);
   songBeat(b, at);
-  const c = Math.floor(b / CYCLE), i = b % CYCLE;
-  if (i === 3 || i === 7) {                       // 髪留めの拍
-    tieBeat(at, sideOf(c, i === 3 ? 0 : 1) === "L" ? -0.8 : 0.8);
-  } else if (i === 0 || i === 4) {                // 髪の毛の拍（0 は前サイクル2房目の解決）
-    const s = i === 0 ? sideOf(c - 1, 1) : sideOf(c, 0);
-    hairBeat(at, s === "L" ? -0.55 : 0.55);
+  if (b % 4 === 3) {
+    // 操作拍。離す房(前)と掴む房(次)が同時に来るので、両方の音を僅かにずらして重ねる
+    const a = (b - 3) / 4;
+    if (a > 0) {
+      const prev = sideOf(tailUnit(a - 1), tailSlot(a - 1));
+      hairBeat(at, prev === "L" ? -0.55 : 0.55);          // 髪の毛が生える
+    }
+    const next = sideOf(tailUnit(a), tailSlot(a));
+    tieBeat(at + 0.03, next === "L" ? -0.8 : 0.8);        // 髪留めを掴む
   } else {
-    click(at, false);
+    click(at, b % 4 === 0);
   }
 }
 function scheduler() { while (bt(nextBeat) < songTime() + 0.25) { scheduleBeat(nextBeat); nextBeat++; } }
@@ -245,88 +254,119 @@ let gallery = [], score = 0, combo = 0, maxCombo = 0, flash = null, effects = []
 
 function makeUnit(c) {
   return { c, obj: objOf(c), order: [sideOf(c, 0), sideOf(c, 1)],
-           tails: { L: null, R: null }, done: { L: false, R: false },
-           judged: false, autoFired: { L: false, R: false } };
+           tails: { L: null, R: null }, done: { L: false, R: false }, judged: false };
 }
 const unitOf = c => units.find(u => u.c === c);
-/** そのユニットの中心 X。完成間際の体と開始したての体が重ならないよう少しずらす */
-const unitX = () => W / 2;
-function anchorOf(u, side) {
-  const s = MAIN_SCALE;
-  return { x: unitX() + ANCHOR[side].x * u.obj.w * s,
-           y: GROUND_Y - u.obj.h * s / 2 + ANCHOR[side].y * u.obj.h * s };
+/** 体の位置。前の体が退場する拍と次の体を掴む拍は同じなので、
+ *  次の体は右に現れてから中央へ滑り込み、前の体は上へ抜ける（横にずらして重なりを避ける）*/
+const settledY = u => GROUND_Y - u.obj.h * MAIN_SCALE / 2;
+function unitPos(u, t) {
+  const first = bt(actionBeat(u.c * 2)), doneAt = bt(actionBeat(u.c * 2 + 2));
+  const age = (t - first) / BEAT;
+  const inP = Math.max(0, Math.min(1, age / 0.9));
+  const slideIn = inP * inP * (3 - 2 * inP);
+  const appear = Math.max(0, Math.min(1, (age + 0.3) / 0.4));
+  const ex = Math.max(0, Math.min(1, (t - doneAt - BEAT * 0.3) / (BEAT * 0.35)));
+  return { x: W / 2 + (1 - slideIn) * 250, y: settledY(u) - ex * 210,
+           scale: MAIN_SCALE * (1 - ex * 0.5), alpha: appear * (1 - ex), exit: ex };
+}
+function anchorOf(u, side, t) {
+  const p = unitPos(u, t === undefined ? songTime() : t);
+  return { x: p.x + ANCHOR[side].x * u.obj.w * MAIN_SCALE,
+           y: settledY(u) + ANCHOR[side].y * u.obj.h * MAIN_SCALE };
+}
+/** 触った位置を体からの相対で覚える。背景へ縮小しても髪の付き位置が保たれる */
+function toLocal(u, x, y, t) {
+  const p = unitPos(u, t === undefined ? songTime() : t);
+  return { rx: (x - p.x) / MAIN_SCALE, ry: (y - settledY(u)) / MAIN_SCALE };
 }
 
 // ---- 判定 -------------------------------------------------------------------
 const GRADE = { PERFECT: { s: 100, label: "PERFECT", col: "#ffe66d" },
                 GOOD:    { s: 60,  label: "GOOD",    col: "#7fe8e0" },
                 MISS:    { s: 0,   label: "MISS",    col: "#ff7a8a" } };
-const grade = d => { const a = Math.abs(d); return a <= 0.11 ? "PERFECT" : a <= 0.24 ? "GOOD" : "MISS"; };
+const grade = d => { const a = Math.abs(d); return a <= 0.12 ? "PERFECT" : a <= 0.26 ? "GOOD" : "MISS"; };
 function pop(text, col, x, y) { effects.push({ text, col, x, y, t: songTime() }); }
+
+const chain = new Map();                       // a -> "held" | "resolved"
+const stateOf = a => chain.get(a) || "pending";
+function tailRef(a) {
+  const u = unitOf(tailUnit(a));
+  return u ? { u, side: u.order[tailSlot(a)] } : null;
+}
+/** 失敗した房。ネギが真っ直ぐ生えてしまう */
+function growNegi(a) {
+  const r = tailRef(a); if (!r) return;
+  chain.set(a, "resolved");
+  r.u.done[r.side] = true;
+  const anc = r.u.negiAnchor || anchorOf(r.u, r.side);
+  r.u.tails[r.side] = { kind: "negi", ...toLocal(r.u, anc.x, anc.y), quality: 0 };
+  combo = 0; flop(ac.currentTime);
+  pop("ネギ", "#8fd45a", anc.x, anc.y - 20);
+}
 
 function onDown(px, py) {
   const t = songTime();
+  // 直近の操作拍を探す。タップ位置は問わない（触った所から髪が生える）
+  const near = Math.round((t / BEAT - 3) / 4);
   let best = null;
-  for (const u of units) for (let i = 0; i < 2; i++) {
-    const side = u.order[i];
-    if (u.done[side]) continue;
-    const d = (t - bt(absTap(u.c, i))) / BEAT;
-    if (Math.abs(d) < 0.55 && (!best || Math.abs(d) < Math.abs(best.d))) best = { u, i, side, d };
+  for (const a of [near - 1, near, near + 1]) {
+    if (a < 0 || stateOf(a) !== "pending" || !tailRef(a)) continue;
+    const d = (t - bt(actionBeat(a))) / BEAT;
+    if (Math.abs(d) < 0.55 && (!best || Math.abs(d) < Math.abs(best.d))) best = { a, d };
   }
   if (!best) { flop(ac.currentTime); combo = 0; pop("そこじゃない", "#ff7a8a", px, py); return; }
   const g = grade(best.d);
-  if (g === "MISS") { flop(ac.currentTime); combo = 0; best.u.done[best.side] = true;
-                      pop(best.d < 0 ? "早い" : "遅い", "#ff7a8a", px, py); return; }
-  const pan = best.side === "L" ? -0.7 : 0.7;
+  if (g === "MISS") { pop(best.d < 0 ? "早い" : "遅い", "#ff7a8a", px, py); growNegi(best.a); return; }
+  const r = tailRef(best.a), pan = r.side === "L" ? -0.7 : 0.7;
+  chain.set(best.a, "held");
   osc(ac.currentTime, 520, "sine", 0.13, 0.1, sfxGain, pan);
-  shimmerGain = shimmer(ac.currentTime, BEAT, pan);
-  const a = anchorOf(best.u, best.side);
-  slide = { u: best.u, i: best.i, side: best.side, tapGrade: g, x0: a.x, y0: a.y, x: px, y: py };
-  pop(GRADE[g].label, GRADE[g].col, a.x, a.y - 26);
+  shimmerGain = shimmer(ac.currentTime, BEAT * 4, pan);
+  // 髪の根元は「触った位置」。厳密な位置合わせは求めない
+  const loc = toLocal(r.u, px, py, t);
+  slide = { a: best.a, u: r.u, side: r.side, tapGrade: g, ...loc, x0: px, y0: py, x: px, y: py };
+  pop(GRADE[g].label, GRADE[g].col, px, py - 26);
 }
 const onMove = (px, py) => { if (slide) { slide.x = px; slide.y = py; } };
 function onUp() {
   if (!slide) return;
   const t = songTime(), s = slide; slide = null;
   if (shimmerGain) { shimmerGain.gain.setTargetAtTime(0.0001, ac.currentTime, 0.02); shimmerGain = null; }
-  const d = (t - bt(absRel(s.u.c, s.i))) / BEAT;
+  const d = (t - bt(actionBeat(s.a + 1))) / BEAT;
   let g = grade(d);
   const dx = s.x - s.x0, dy = s.y - s.y0, dist = Math.hypot(dx, dy);
-  const wrong = (s.side === "L" && dx > 40) || (s.side === "R" && dx < -40);
   if (dist < 30) { g = "MISS"; pop("伸びてない", "#ff7a8a", s.x, s.y); }
-  else if (wrong) { g = "MISS"; pop("逆！", "#ff7a8a", s.x, s.y); }
+  else if (g === "MISS") pop(d < 0 ? "早い" : "遅い", "#ff7a8a", s.x, s.y);
   else pop(GRADE[g].label, GRADE[g].col, s.x, s.y);
+  if (g === "MISS") { s.u.negiAnchor = { x: s.x0, y: s.y0 }; growNegi(s.a); return; }
+  chain.set(s.a, "resolved");
   s.u.done[s.side] = true;
-  if (g === "MISS") { flop(ac.currentTime); combo = 0; }
-  else {
-    shakin(ac.currentTime, s.side === "L" ? -0.6 : 0.6);
-    combo++; maxCombo = Math.max(maxCombo, combo);
-    score += Math.round((GRADE[s.tapGrade].s + GRADE[g].s) * (1 + Math.min(combo, 20) / 20));
-    s.u.tails[s.side] = { angle: Math.atan2(dy, dx), len: Math.min(dist, 250),
-                          quality: (GRADE[s.tapGrade].s + GRADE[g].s) / 200,
-                          chars: LYRIC.slice(Math.floor(rnd01(s.u.c + s.i) * 20)).slice(0, 7) };
-  }
+  shakin(ac.currentTime, s.side === "L" ? -0.6 : 0.6);
+  combo++; maxCombo = Math.max(maxCombo, combo);
+  score += Math.round((GRADE[s.tapGrade].s + GRADE[g].s) * (1 + Math.min(combo, 20) / 20));
+  s.u.tails[s.side] = { kind: "hair", rx: s.rx, ry: s.ry,
+                        angle: Math.atan2(dy, dx), len: Math.min(dist, 260),
+                        quality: (GRADE[s.tapGrade].s + GRADE[g].s) / 200,
+                        chars: LYRIC.slice(Math.floor(rnd01(s.a) * 20)).slice(0, 7) };
 }
 
 // ---- ユニットの完成 ---------------------------------------------------------
 function finish(u) {
   u.judged = true;
-  const L = u.tails.L, R = u.tails.R, q = (L ? L.quality : 0) + (R ? R.quality : 0);
+  const hairs = ["L", "R"].filter(k => u.tails[k] && u.tails[k].kind === "hair");
+  const q = hairs.reduce((a, k) => a + u.tails[k].quality, 0);
   let text, label;
-  if (L && R && q >= 1.9)      { text = "ミクーッ！"; label = "本人"; }
-  else if (L && R && q >= 1.4) { text = "ミク！";     label = "ほぼミク"; }
-  else if (L && R)             { text = "ミク。";     label = "ミク見習い"; }
-  else if (L || R)             { text = "ミク？";     label = "片ツインテール"; }
-  else                         { text = "だれ？";     label = "ただの" + u.obj.name; }
+  if (hairs.length === 2 && q >= 1.9)      { text = "ミクーッ！"; label = "本人"; }
+  else if (hairs.length === 2 && q >= 1.4) { text = "ミク！";     label = "ほぼミク"; }
+  else if (hairs.length === 2)             { text = "ミク。";     label = "ミク見習い"; }
+  else if (hairs.length === 1)             { text = "ミク？";     label = "片方ネギ"; }
+  else                                     { text = "ネギ。";     label = "ただの" + u.obj.name; }
   say(text);
   flash = { text, label, t: songTime() };
-  // 背景へはランダムな位置・大きさで散らす
-  const n = gallery.length;
   gallery.push({ obj: u.obj, tails: u.tails,
                  x: 60 + rnd01(u.c * 5.1) * (W - 120),
                  y: 78 + rnd01(u.c * 9.3) * 210,
-                 s: 0.26 + rnd01(u.c * 2.4) * 0.12,
-                 seed: n });
+                 s: 0.26 + rnd01(u.c * 2.4) * 0.12, seed: gallery.length });
 }
 
 function tick() {
@@ -334,34 +374,42 @@ function tick() {
   const t = songTime();
   scheduler();
   const c = Math.floor(t / BEAT / CYCLE);
-  if (!unitOf(c)) units.push(makeUnit(c));
-  for (const u of units) {
-    for (let i = 0; i < 2; i++) {                       // 打ち逃し
-      const side = u.order[i];
-      if (!u.done[side] && t > bt(absTap(u.c, i)) + BEAT * 0.55 && !(slide && slide.side === side && slide.u === u)) {
-        u.done[side] = true; combo = 0; flop(ac.currentTime);
-        pop("スルー", "#ff7a8a", anchorOf(u, side).x, anchorOf(u, side).y);
-      }
-    }
-    // 2房目のリリース拍 = このユニットの完成。次のユニットはもう始まっている
-    if (!u.judged && t >= bt(absRel(u.c, 1)) + BEAT * 0.3) finish(u);
+  for (const k of [c, c + 1]) if (k >= 0 && !unitOf(k)) units.push(makeUnit(k));
+  const near = Math.floor((t / BEAT - 3) / 4);
+  for (let a = Math.max(0, near - 1); a <= near; a++)          // 掴み損ね
+    if (stateOf(a) === "pending" && tailRef(a) && t > bt(actionBeat(a)) + BEAT * 0.55) growNegi(a);
+  if (slide && t > bt(actionBeat(slide.a + 1)) + BEAT * 0.35) { // 離し損ね
+    const s2 = slide; slide = null;
+    if (shimmerGain) { shimmerGain.gain.setTargetAtTime(0.0001, ac.currentTime, 0.02); shimmerGain = null; }
+    s2.u.negiAnchor = { x: s2.x0, y: s2.y0 };
+    pop("離し忘れ", "#ff7a8a", s2.x, s2.y);
+    growNegi(s2.a);
   }
+  for (const u of units)
+    if (!u.judged && t >= bt(actionBeat(u.c * 2 + 2)) + BEAT * 0.4) finish(u);
   units = units.filter(u => !u.judged);
   if (autoPlay) autoTick(t);
 }
 
 // ---- 観賞モード -------------------------------------------------------------
 function autoTick(t) {
-  for (const u of units) for (let i = 0; i < 2; i++) {
-    const side = u.order[i], a = anchorOf(u, side), out = side === "L" ? -1 : 1;
-    if (!u.autoFired[side] && !u.done[side] && !slide && t >= bt(absTap(u.c, i))) {
-      u.autoFired[side] = true; onDown(a.x, a.y);
+  if (slide && t >= bt(actionBeat(slide.a + 1))) onUp();      // 操作拍で離し、
+  if (!slide) {                                              // 続けて次を掴む
+    const near = Math.round((t / BEAT - 3) / 4);
+    for (const a of [near - 1, near, near + 1]) {
+      if (a < 0 || stateOf(a) !== "pending") continue;
+      const r = tailRef(a); if (!r) continue;
+      const tb = bt(actionBeat(a));
+      if (t >= tb && t < tb + BEAT * 0.4) {
+        const anc = anchorOf(r.u, r.side, t);
+        onDown(anc.x + (r.side === "L" ? -14 : 14), anc.y + 6);
+        break;
+      }
     }
-    if (slide && slide.u === u && slide.side === side) {
-      const p = Math.min(1, (t - bt(absTap(u.c, i))) / BEAT);
-      onMove(a.x + out * 78 * p, a.y + 150 * p);
-      if (t >= bt(absRel(u.c, i))) onUp();
-    }
+  }
+  if (slide) {
+    const p = Math.min(1, (t - bt(actionBeat(slide.a))) / (BEAT * 4));
+    onMove(slide.x0 + (slide.side === "L" ? -1 : 1) * 74 * p, slide.y0 + 158 * p);
   }
 }
 
@@ -423,43 +471,49 @@ function drawTie(g, x, y, rot, scale = 1) {
   g.fillStyle = "rgba(236,64,142,.95)"; rr(g, -4.5, -5.5, 9, 11, 2);
   g.restore();
 }
-function drawObject(g, o, x, y, scale, tails, t) {
-  g.save(); g.translate(x, y); g.scale(scale, scale);
-  o.draw(g);
+/** 失敗の証。ネギが真っ直ぐ生えてしまう */
+function drawNegi(g, x, y, sc) {
+  g.save(); g.translate(x, y); g.scale(sc, sc);
+  g.fillStyle = "#6fbf4a"; rr(g, -9, -100, 7, 70, 4); rr(g, -1, -108, 7, 78, 4); rr(g, 7, -94, 6, 64, 4);
+  g.fillStyle = "#eef6e2"; rr(g, -10, -36, 20, 42, 6);
+  g.fillStyle = "#d9e7c4"; rr(g, -10, -40, 20, 7, 3);
   g.restore();
-  for (const side of ["L", "R"]) if (tails && tails[side])
-    drawTail(g, x + ANCHOR[side].x * o.w * scale, y + ANCHOR[side].y * o.h * scale,
-             tails[side], t, 1, scale);
+}
+function drawObject(g, o, x, y, scale, tails, t) {
+  g.save(); g.translate(x, y); g.scale(scale, scale); o.draw(g); g.restore();
+  for (const side of ["L", "R"]) {
+    const tl = tails && tails[side]; if (!tl) continue;
+    const rx = tl.rx !== undefined ? tl.rx : ANCHOR[side].x * o.w;
+    const ry = tl.ry !== undefined ? tl.ry : ANCHOR[side].y * o.h;
+    const ax = x + rx * scale, ay = y + ry * scale;
+    if (tl.kind === "negi") drawNegi(g, ax, ay, scale);
+    else drawTail(g, ax, ay, tl, t, 1, scale);
+  }
 }
 
-/** 髪留めが1拍ごとに近づく。連続移動ではなく拍で刻むので、拍を数える助けになる */
-function drawApproach(g, u, i, t) {
-  const side = u.order[i];
-  if (u.done[side] || (slide && slide.u === u && slide.side === side)) return;
-  const target = bt(absTap(u.c, i));
-  const left = (target - t) / BEAT;                 // 残り拍数
-  if (left > 3.4 || left < -0.5) return;
-  const stepsLeft = Math.max(0, Math.ceil(left - 0.001));   // 拍ごとに離散でジャンプ
-  const frac = Math.max(0, Math.min(1, left - stepsLeft + 1));
-  const a = anchorOf(u, side), out = side === "L" ? -1 : 1;
-  const dist = stepsLeft * 108;
-  const bounce = Math.sin(Math.min(1, (1 - frac) * 3) * Math.PI) * 7;  // 着地ごとに弾む
-  const x = a.x + out * dist, y = a.y - dist * 0.5 - bounce;
-  const near = 1 - stepsLeft / 3.4;
+/** 髪留めが滑らかに近づいてくる。到達する拍がタップの拍 */
+function drawApproach(g, a, t) {
+  if (stateOf(a) !== "pending") return;
+  const r = tailRef(a); if (!r) return;
+  const tb = bt(actionBeat(a)), left = (tb - t) / BEAT;
+  if (left > 3.1 || left < -0.55) return;
+  const p = Math.max(0, Math.min(1, 1 - left / 3));
+  const e = p * p * (3 - 2 * p);                       // 連続補間（点滅させない）
+  const anc = anchorOf(r.u, r.side, t), out = r.side === "L" ? -1 : 1;
+  const d = (1 - e) * 330;
+  const x = anc.x + out * d, y = anc.y - d * 0.42;
   g.save();
-  g.globalAlpha = 0.35 + 0.65 * near;
-  // 髪留めの後ろに、これから生える房の影がついてくる
-  drawTail(g, x, y, { angle: Math.atan2(1, out * 0.5), len: 34 + 30 * near, quality: 0, chars: [] },
-           t, 0.22 + 0.2 * near);
-  drawTie(g, x, y, -Math.PI / 2 + out * 0.42, 0.85 + 0.25 * near);
-  if (stepsLeft === 0) {                            // 到達＝いま打つ拍
-    g.globalAlpha = 1;
-    g.strokeStyle = "#ffe66d"; g.lineWidth = 3;
-    g.beginPath(); g.arc(x, y, 20 + frac * 14, 0, 7); g.stroke();
+  g.globalAlpha = 0.3 + 0.7 * e;
+  drawTail(g, x, y, { angle: Math.atan2(1, out * 0.55), len: 30 + 34 * e, quality: 0, chars: [] },
+           t, 0.2 + 0.22 * e);
+  drawTie(g, x, y, -Math.PI / 2 + out * 0.42, 0.82 + 0.3 * e);
+  if (left < 0.55) {                                    // 到達＝いま掴む拍
+    g.globalAlpha = 1; g.strokeStyle = "#ffe66d"; g.lineWidth = 3;
+    g.beginPath(); g.arc(x, y, 20 + Math.abs(left) * 22, 0, 7); g.stroke();
   }
   if (showGuide) {
     g.globalAlpha = 1; g.fillStyle = "#ffe66d"; g.font = "bold 13px sans-serif"; g.textAlign = "center";
-    g.fillText(side === "L" ? "◀ 左" : "右 ▶", x, y - 26);
+    g.fillText(r.side === "L" ? "◀ 左" : "右 ▶", x, y - 26);
   }
   g.restore();
 }
@@ -471,7 +525,7 @@ function render() {
     g.fillStyle = "#7fe8e0"; g.font = "bold 20px sans-serif"; g.textAlign = "center";
     g.fillText("▶ スタート を押す", W / 2, H / 2 - 10);
     g.fillStyle = "#8fa6ae"; g.font = "13px sans-serif";
-    g.fillText("髪留めが拍ごとに近づく → 到達した4拍目でタップ → 小節アタマで離す", W / 2, H / 2 + 20);
+    g.fillText("4拍目で掴む → 1小節かけて伸ばす → 次の4拍目で離す（外すとネギ）", W / 2, H / 2 + 20);
     requestAnimationFrame(render); return;
   }
   // 背景: これまでのミクたち（ランダム配置。ボーカルに合わせて揺れる）
@@ -482,54 +536,49 @@ function render() {
   }
   g.restore();
 
-  // 拍インジケータ。4拍目(髪留め)と1拍目(髪の毛)を色分け
-  const inCycle = Math.floor(t / BEAT) % CYCLE, ph = (t / BEAT) % 1;
-  for (let i = 0; i < CYCLE; i++) {
-    const on = i === inCycle, isTap = i === 3 || i === 7, isRel = i === 0 || i === 4;
-    g.fillStyle = on ? (isTap ? "#ffe66d" : isRel ? "#ff8fc0" : "#39c5bb") : "#243039";
-    g.beginPath(); g.arc(34 + i * 22, 30, on ? 9 - ph * 2 : 5, 0, 7); g.fill();
+  // 拍インジケータ。各小節の4拍目が操作拍（離して掴む）
+  const inBar = Math.floor(t / BEAT) % 4, ph = (t / BEAT) % 1;
+  for (let i = 0; i < 4; i++) {
+    const on = i === inBar, act = i === 3;
+    g.fillStyle = on ? (act ? "#ffe66d" : "#39c5bb") : "#243039";
+    g.beginPath(); g.arc(34 + i * 24, 30, on ? 10 - ph * 2 : 5.5, 0, 7); g.fill();
   }
   g.fillStyle = "#8fa6ae"; g.font = "11px sans-serif"; g.textAlign = "left";
-  g.fillText("● 髪留め(TAP)　● 髪の毛(離す)", 214, 34);
+  g.fillText("4拍目 = 離して掴む", 146, 34);
   g.textAlign = "right"; g.fillStyle = "#9fb6bd"; g.font = "12px sans-serif";
   g.fillText(`SCORE ${score}`, W - 20, 26);
   g.fillText(`COMBO ${combo}${maxCombo ? "  (MAX " + maxCombo + ")" : ""}`, W - 20, 44);
 
-  // 進行中のユニット
+  // 進行中の体
   for (const u of units) {
     if (u.judged) continue;
-    const born = bt(u.c * CYCLE), rise = Math.min(1, (t - born) / (BEAT * 1.2));
-    // 2房目のリリースを過ぎたら、完成体は縮みながら背景へ飛んでいく
-    const exit = Math.max(0, Math.min(1, (t - bt(absRel(u.c, 1))) / (BEAT * 0.45)));
-    const oy = GROUND_Y - u.obj.h * MAIN_SCALE / 2 + (1 - rise) * 70 - exit * 120;
-    g.save(); g.globalAlpha = Math.max(0, rise) * (1 - exit * 0.9);
-    if (exit > 0) { g.translate(unitX(), oy); g.scale(1 - exit * 0.5, 1 - exit * 0.5); g.translate(-unitX(), -oy); }
-    // タップ受付範囲（オブジェクトの左右の広い帯。実際はどこを触っても判定する）
-    const active = u.order.some((s, i) => !u.done[s] && Math.abs(t - bt(absTap(u.c, i))) < BEAT * 1.2);
-    if (active) {
-      g.fillStyle = "rgba(57,197,187,.05)";
-      rr(g, unitX() - u.obj.w * MAIN_SCALE / 2 - 190, oy - u.obj.h * MAIN_SCALE / 2 - 40, 190, u.obj.h * MAIN_SCALE + 80, 14);
-      rr(g, unitX() + u.obj.w * MAIN_SCALE / 2, oy - u.obj.h * MAIN_SCALE / 2 - 40, 190, u.obj.h * MAIN_SCALE + 80, 14);
-    }
-    drawObject(g, u.obj, unitX(), oy, MAIN_SCALE, u.tails, t);
+    const pp = unitPos(u, t);
+    if (pp.alpha <= 0.01) continue;
+    g.save(); g.globalAlpha = pp.alpha;
+    if (pp.exit > 0) { g.translate(pp.x, pp.y); g.scale(1 - pp.exit * 0.45, 1 - pp.exit * 0.45); g.translate(-pp.x, -pp.y); }
+    drawObject(g, u.obj, pp.x, pp.y, pp.scale, u.tails, t);
     g.restore();
-    for (let i = 0; i < 2; i++) drawApproach(g, u, i, t);
-    if (u === units[units.length - 1]) {
+    if (pp.exit === 0) {
       g.fillStyle = "#5f7681"; g.font = "12px sans-serif"; g.textAlign = "center";
       g.fillText("お題: " + u.obj.name, W / 2, 26);
     }
   }
+  // 近づいてくる髪留め（今と次の房）
+  const na = Math.round((t / BEAT - 3) / 4);
+  for (const a of [na - 1, na, na + 1, na + 2]) if (a >= 0) drawApproach(g, a, t);
 
   // スライド中の星（歌詞の文字）
   if (slide) {
+    const sp = unitPos(slide.u, t);
+    const sx = sp.x + slide.rx * sp.scale, sy = sp.y + slide.ry * sp.scale;
     g.strokeStyle = "rgba(127,232,224,.5)"; g.lineWidth = 3;
-    g.beginPath(); g.moveTo(slide.x0, slide.y0); g.lineTo(slide.x, slide.y); g.stroke();
+    g.beginPath(); g.moveTo(sx, sy); g.lineTo(slide.x, slide.y); g.stroke();
     for (let i = 0; i < 9; i++) {
       const u = (i + (t * 2.4 % 1)) / 9;
       g.fillStyle = `rgba(255,246,190,${1 - u})`; g.font = `${14 - u * 4}px sans-serif`;
       g.textAlign = "center";
       g.fillText(LYRIC[(i + Math.floor(t * 6)) % LYRIC.length],
-                 slide.x0 + (slide.x - slide.x0) * u, slide.y0 + (slide.y - slide.y0) * u);
+                 sx + (slide.x - sx) * u, sy + (slide.y - sy) * u);
     }
   }
   effects = effects.filter(e => t - e.t < .7);
@@ -572,6 +621,7 @@ document.getElementById("auto").onclick = () => {
   autoPlay = !autoPlay;
 };
 document.getElementById("guide").onchange = e => { showGuide = e.target.checked; };
+window.GALLERY_KINDS = () => gallery.map(x => [x.obj.name, ['L','R'].map(k => x.tails[k] ? x.tails[k].kind : '-').join('/')]);
 window.RHYTHM_DEBUG = () => ({ score, combo, maxCombo, mikus: gallery.length,
   units: units.map(u => ({ c: u.c, obj: u.obj.name, order: u.order.join(""),
                            tails: Object.keys(u.tails).filter(k => u.tails[k]).join("") })) });
