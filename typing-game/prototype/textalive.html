@@ -213,7 +213,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 24</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 25</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -323,7 +323,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 24;
+  var BUILD = 25;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -512,7 +512,10 @@
     if(!actx){
       var C=window.AudioContext||window.webkitAudioContext;
       if(!C) return null;
-      try{ actx=new C({latencyHint:"interactive"}); }catch(e){ actx=new C(); }
+      /* latencyHint に秒数を渡すと、対応環境では出力バッファをより小さく取る。
+         受け付けない環境のために "interactive" → 引数なし の順で落とす。 */
+      try{ actx=new C({latencyHint:0}); }
+      catch(e1){ try{ actx=new C({latencyHint:"interactive"}); }catch(e2){ actx=new C(); } }
       seBus=actx.createGain(); seBus.gain.value=1.0; seBus.connect(actx.destination);
     }
     if(actx.state!=="running"){
@@ -594,12 +597,19 @@
     blip(f*2, 0.05, "square", 0.09, SE_SWEEP[dir]||1);   // 倍音を薄く足して抜けを良くする
   }
   function prewarmTones(a){
+    toneBuffer(a,1320,0.022,"square",0.10,undefined);
     Object.keys(SE_PITCH).forEach(function(d){
       var f=SE_PITCH[d]*0.75;
       if(d==="c") toneBuffer(a,f,0.05,"square",0.24,undefined);
       else{ toneBuffer(a,f,0.09,"triangle",0.26,SE_SWEEP[d]); toneBuffer(a,f*2,0.05,"square",0.09,SE_SWEEP[d]); }
     });
   }
+  /* 触れた瞬間の「ティック」。フリック音は指を離したときなので、
+     押した時点では無音になり「鳴っていない」と感じる。
+     フリックキーボードと同じく、接触=短いティック、離す=方向音、の2段にする。
+     方向音と混ざらないよう、高くごく短い音にしておく。 */
+  function seTouch(){ blip(1320, 0.022, "square", 0.10); }
+
   function seJudge(g,dir){
     var f=SE_PITCH[dir]||659.25;
     if(g==="JUST"){ blip(f,0.10,"triangle",0.20); blip(f*2,0.13,"triangle",0.10,1.02); }
@@ -1809,6 +1819,7 @@
     surface.addEventListener("touchstart",function(e){
       if(ignore(e)) return;
       e.preventDefault();
+      seTouch();                       // 触れた瞬間の手応え(描画より先に鳴らす)
       var r=rectOf();
       for(var i=0;i<e.changedTouches.length;i++){
         var t=e.changedTouches[i];
@@ -1852,6 +1863,7 @@
     // マウス(PC の確認用)は従来どおり1本だけ
     surface.addEventListener("mousedown",function(e){
       if(ignore(e)) return;
+      seTouch();
       var r=rectOf();
       msx=e.clientX; msy=e.clientY; mouseActive=true;
       renderCross(e.clientX-r.left, e.clientY-r.top); highlight("c");
