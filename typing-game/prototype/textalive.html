@@ -174,10 +174,16 @@
   .result td+td{text-align:right;color:var(--ink);font-variant-numeric:tabular-nums}
   .result td .chip{display:inline-block;width:9px;height:9px;margin-right:7px;vertical-align:-1px}
   .overlay .err{color:var(--bad);font-family:var(--pixel);font-size:13px;max-width:52ch;margin:0 auto 14px;word-break:break-all;white-space:pre-line;text-align:left}
+  /* 一時停止中だけ出る「中断してメニューへ」。誤爆しないよう控えめな見た目にする */
+  .overlay .quit{margin-left:8px;background:transparent;border:2px solid var(--line);color:var(--dim)}
+  .overlay .quit:hover{border-color:var(--bad);color:var(--bad)}
   .overlay .share{display:inline-block;margin-left:8px;font-family:var(--pixel);font-size:14px;
     letter-spacing:.08em;padding:11px 18px;color:var(--ink);text-decoration:none;
     border:2px solid var(--line)}
   .overlay .share:hover{border-color:var(--key);color:var(--key)}
+  /* display を指定したぶん [hidden] が効かなくなるので明示的に消す
+     (結果が出る前から共有リンクが見えていた) */
+  .overlay .share[hidden]{display:none}
   .keyhint{font-family:var(--pixel);font-size:11px;color:var(--dim);letter-spacing:.08em;line-height:1.9;margin:10px 0 0}
 
   button{font-family:var(--pixel);font-size:15px;letter-spacing:.08em;background:var(--key);color:var(--night);
@@ -213,7 +219,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 35</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 36</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -288,6 +294,7 @@
         <p class="err" id="ovErr" hidden></p>
         <div class="result" id="ovResult" hidden></div>
         <button id="startBtn" disabled>スタート</button>
+        <button class="quit" id="quitBtn" hidden>メニューへ戻る</button>
         <a class="share" id="share" hidden target="_blank" rel="noopener">結果を共有</a>
         <p class="keyhint">
           <b style="color:var(--key)">←</b> い段 ・
@@ -330,7 +337,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 35;
+  var BUILD = 36;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -724,7 +731,7 @@
   /* ============ 要素 ============ */
   var el={};
   ["screen","field","notes","judge","delta","score","combo","progress","pauseBtn","veil",
-   "overlay","ovTitle","ovText","ovErr","ovResult","startBtn","songmeta","songUrl","loadSong","songPick","hudTitle",
+   "overlay","ovTitle","ovText","ovErr","ovResult","startBtn","quitBtn","songmeta","songUrl","loadSong","songPick","hudTitle",
    "cross","flickfb","lead","leadVal","speed","speedVal","vol","volVal","speedNote","offset","offsetVal","autoCal","share","tutorial"]
     .forEach(function(id){ el[id]=document.getElementById(id); });
 
@@ -2060,6 +2067,7 @@
     var avg = state.deltas.length ?
       Math.round(state.deltas.reduce(function(a,b){return a+b;},0)/state.deltas.length) : null;
     lastAvgDelta=avg; applyOffset();
+    el.quitBtn.hidden=true;
     el.ovTitle.textContent="RESULT";
     var speedNote = speedRate<1 ? "速度 "+speedRate.toFixed(2)+"× の練習プレイです(等速ではありません)。" : "";
     el.ovText.textContent = speedNote + (avg==null ? "" :
@@ -2118,10 +2126,32 @@
     el.ovResult.hidden=true;
     el.startBtn.textContent="再開";
     el.startBtn.disabled=false;
+    el.quitBtn.hidden=false;                       // 中断してメニューへ戻る道を用意する
     el.overlay.style.display="grid";
+  }
+  /* 曲を中断してメニュー(スタート前の状態)へ戻す。
+     プレイ中の状態は捨て、譜面を組み直して最初から選べる状態にする。 */
+  function quitToMenu(){
+    paused=false;
+    if(state) state.running=false;
+    tutorial=false;
+    try{ player.requestPause(); }catch(e){}
+    exitPlayLayout();
+    startAttract();
+    el.quitBtn.hidden=true;
+    el.share.hidden=true;
+    el.ovTitle.textContent=difficulty+" で挑戦";
+    el.ovText.textContent="スタートで曲の頭から始まります。";
+    el.ovResult.hidden=true;
+    el.startBtn.textContent="スタート";
+    el.startBtn.disabled=!videoPhrases;
+    el.overlay.style.display="grid";
+    if(videoPhrases){ state=buildState(); window.DAKEN_STATE=state; renderKaraoke(); drawField(); }
+    else state=null;
   }
   function resume(){
     stopAttract();
+    el.quitBtn.hidden=true;
     paused=false; state.running=true;
     enterPlayLayout();
     el.overlay.style.display="none";
@@ -2133,6 +2163,7 @@
     if(document.hidden) pauseGame("タブが非表示になったため一時停止しました。");
   });
   el.pauseBtn.addEventListener("click",function(){ pauseGame("一時停止中です。"); });
+  el.quitBtn.addEventListener("click",quitToMenu);
 
   function start(){
     if(!videoPhrases) return;
@@ -2147,7 +2178,7 @@
     el.screen.classList.remove("fever");
     el.overlay.style.display="none";
     if(el.veil) el.veil.classList.remove("on");     // 前回のアウトロの暗転を戻す
-    el.share.hidden=true;
+    el.share.hidden=true; el.quitBtn.hidden=true;
     stopAttract();
     state.running=true;
     state.seekPending=true; state.seekDeadline=performance.now()+4000;
@@ -2204,6 +2235,7 @@
     exitPlayLayout();
     startAttract();
     var c=state.counts, hit=c.JUST+c.GREAT+c.GOOD+c.TYPED+c.LATE;
+    el.quitBtn.hidden=true;
     el.ovTitle.textContent="あそびかた";
     el.ovText.textContent="5方向を "+hit+"/5 でした。ノーツの横位置がそのまま入力方向です"+
       "(左から ← ↑ ● → ↓)。判定ラインに重なる瞬間に、指を離してください。";
