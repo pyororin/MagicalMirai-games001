@@ -213,7 +213,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 30</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 31</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -327,7 +327,7 @@
 <script>
 (function(){
   "use strict";
-  var BUILD = 30;
+  var BUILD = 31;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -396,7 +396,7 @@
      確定するまでの待ち時間」でもある。600ms もあると、失敗音がリズムから
      半拍以上遅れて鳴り、音ゲーとして違和感になる。打ちやすさを残しつつ、
      フィードバックがリズムに乗る範囲まで詰める。 */
-  var WIN={just:80,great:180,good:300,late:360};
+  var WIN={just:80,great:170,good:250,late:300};
   var MULT={JUST:2,GREAT:1.5,GOOD:1,TYPED:1,LATE:.5,MISS:0};
   function clampWindow(notes,i){
     var t=notes[i].time;
@@ -1533,15 +1533,31 @@
   function sendDir(dir){
     if(!state||!state.running||state.outroAt) return;
     mikuSway=1; mikuSwayDir=dir;                 // 入力方向へ髪がなびく
-    var n=target();
+    var t=now(), n=target();
     // 打つべきノーツが無いときの空打ちも、無反応にせず「からうち」と伝える
     if(!n){ seFree(); showFlickFeedback(dir,"free",null,null); return; }
+    /* 取りこぼしの確定を待つ間、列の先頭には「もう取れないノーツ」が残る。
+       そのままだと次のノーツを打った入力がそれに吸われて方向違いになる。
+       先頭が GOOD 窓を過ぎていて、直後に方向の合うノーツが来ているなら、
+       間に挟まったぶんをその場で取りこぼしとして流し、指を次へ通す。 */
+    if(t-n.time > WIN.good){
+      for(var k=state.idx; k<state.notes.length; k++){
+        var m=state.notes[k];
+        if(m.time-t > WIN.good) break;            // まだ先すぎるノーツ
+        if(m.dir===dir && Math.abs(m.time-t) <= WIN.late){
+          while(state.idx<k) dropNote();
+          break;
+        }
+      }
+      n=target();
+      if(!n){ seFree(); showFlickFeedback(dir,"free",null,null); return; }
+    }
     if(n.dir!==dir){                              // 方向違いはノーツを消費しない
       showFlickFeedback(dir,"ng",null,n.dir);
       markLyric(n,"warn");
       flashMiss(dir); return;
     }
-    var r=applyJudgement(state.idx, now());
+    var r=applyJudgement(state.idx, t);
     showFlickFeedback(dir, (r&&r==="JUST")?"just":"ok", n.kana, null);
     state.idx++;
   }
@@ -1555,7 +1571,7 @@
       置いている最中に勝手に MISS になると、その打ち方が成立しない。
       ただし置きっぱなしで曲が進むと、離した瞬間に溜まった MISS が一度に出るので、
       猶予は HOLD_GRACE までに留める(長すぎると失敗音がさらに遅れる)。 */
-  var HOLD_GRACE=400;
+  var HOLD_GRACE=350;
   var heldCount=0;                                   // いま画面に触れている指(＋マウス)の数
   function reap(){
     var t=now();
@@ -1564,17 +1580,19 @@
       else return;
     }
     var late=WIN.late + (heldCount>0 ? HOLD_GRACE : 0);
-    while(state.idx<state.notes.length && t-state.notes[state.idx].time>late){
-      var n=state.notes[state.idx];
-      n.result="MISS"; n.hitAt=performance.now();
-      markLyric(n,"missed");
-      state.counts.MISS++;
-      state.combo=0; el.combo.textContent=0;
-      el.screen.classList.remove("fever");
-      state.effects.push({lane:n.lane, dir:n.dir, at:performance.now(), color:"MISS"});
-      state.idx++;
-      showJudge("MISS",0);
-    }
+    while(state.idx<state.notes.length && t-state.notes[state.idx].time>late) dropNote();
+  }
+  /** 先頭のノーツを取りこぼしとして流す */
+  function dropNote(){
+    var n=state.notes[state.idx];
+    n.result="MISS"; n.hitAt=performance.now();
+    markLyric(n,"missed");
+    state.counts.MISS++;
+    state.combo=0; el.combo.textContent=0;
+    el.screen.classList.remove("fever");
+    state.effects.push({lane:n.lane, dir:n.dir, at:performance.now(), color:"MISS"});
+    state.idx++;
+    showJudge("MISS",0);
   }
 
   function loop(){
@@ -1621,7 +1639,10 @@
     }
     /* 曲が終わっても即結果画面にはしない。
        3秒ほどステージのまま置いて、ミクのひとことを見せてから暗転して切り替える。 */
-    var done=(dur>0 && t>=dur-200) || (state.idx>=state.notes.length && t>last.time+1500);
+    /* 歌詞が終わっても曲は続く(間奏・アウトロ)。曲の長さが分かるならそれを待つ。
+       長さが取れないときだけ、最後のノーツからの経過で打ち切る。 */
+    var done = dur>0 ? (t>=dur-200)
+                     : (state.idx>=state.notes.length && t>last.time+1500);
     if(done && !state.outroAt){
       state.outroAt=performance.now();
       state.outroMsg=mikuLine();
