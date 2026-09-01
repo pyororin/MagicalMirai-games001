@@ -1,0 +1,223 @@
+# リズムゲームの判定・入力・体感の知見（打鍵ミライ build 19〜40 で確立）
+# 楽曲アプリ全般で効くもの。スキーマは ontology/README.md を参照
+domain: rhythm-game-feel
+
+concepts:
+  - id: judge-window
+    what: >
+      判定窓（just/great/good/late）は「どこまで許容するか」だけの数値ではない。
+      late は同時に「取りこぼしを MISS と確定するまでの待ち時間」でもあるため、
+      広げるほどプレイは易しくなるが、失敗のフィードバックは遅れる。
+      窓を決めるときは必ず「その時間だけ失敗音が遅れてよいか」を併せて考える。
+
+  - id: input-commit-on-release
+    what: >
+      フリック（タップ＋スライド）方式では、文字が確定するのは指を離した瞬間。
+      押下は入力の途中でしかないので、押下で音を鳴らしたり判定したりしない。
+      逆に「押している間は待機できる」ことが操作の前提になる。
+    depends_on: [judge-window]
+
+  - id: note-queue
+    what: >
+      ノーツを 1 本の時間軸の配列で持ち、先頭（state.idx）だけを判定対象にする実装は、
+      「先頭がまだ確定していない間、次のノーツを打てない」という副作用を持つ。
+      取りこぼしの確定を待つ時間だけ、次の入力が古いノーツに吸われる。
+    depends_on: [judge-window]
+
+  - id: feedback-latency-budget
+    what: >
+      体感の遅れは「入力イベント→判定→音の生成→出力」の総和。
+      このうちアプリが詰められるのは判定と生成だけで、出力（端末の
+      オーディオ経路）は詰められない。切り分けるには実測値を画面に出す
+      （AudioContext.outputLatency / baseLatency）。
+    depends_on: [judge-window]
+
+  - id: speed-multiplier
+    what: >
+      「先読み時間」と「ノーツの速さ」は同じものの裏表。画面上の間隔 =
+      速度 × 時間差 なので、速度倍率を上げる＝先読みを短くする＝ノーツの間隔が
+      広がる。ユーザーに見せるパラメータは 1 本（速度倍率）にしたほうが伝わる。
+
+  - id: radial-vs-lane
+    what: >
+      落下レーン式は目線が横に走る代わりに助走距離を稼げる。
+      四方から中心へ集める放射式は目線が 1 点に固定できるが、縦長の画面では
+      軸ごとの距離が最大 2 倍以上違う。速度を揃えるか助走を揃えるかの
+      どちらかしか選べない（両立しない）。
+    depends_on: [speed-multiplier]
+
+pitfalls:
+  - id: miss-declared-too-late
+    symptom: >
+      成功音は違和感がないのに、失敗（取りこぼし）の音だけリズムから
+      明らかに遅れて鳴る。半拍〜1拍ずれて聞こえる。
+    cause: >
+      取りこぼしを MISS と確定するのが late 窓の満了時だから。late=600ms なら
+      失敗音は必ず 600ms 遅れる。さらに「指を置いている間は刈り取らない」
+      猶予を足していると、その分も上乗せされる。
+    solution: >
+      late 窓を、フィードバックがリズムに乗る範囲まで詰める（打鍵ミライでは
+      600 → 300ms）。猶予も短くする。判定の甘さが欲しいなら late ではなく
+      good 窓を広げる（good は「打てた」ので即座に音が返る）。
+    detection: >
+      ノーツ時刻と MISS 音の発火時刻の差を実測する（ヘッドレスで
+      AudioBufferSourceNode.start をフックし、曲時刻と突き合わせる）。
+    verified: 2026-08-31 (typing-game build 27)
+    refs: [typing-game/prototype/textalive.html]
+
+  - id: stale-note-eats-next-input
+    symptom: >
+      少し遅れた直後、次のノーツを正しい方向で打っているのに「方向違い」に
+      なり、指が反応していないように感じる。
+    cause: >
+      取りこぼしが確定するまで列の先頭に残り、入力がそちらに向かうため
+      （note-queue の副作用）。窓を詰めても、詰めた時間だけは必ず起きる。
+    solution: >
+      入力時に先頭が good 窓を過ぎていたら、直後（±late）に方向の合うノーツが
+      あるか探し、間に挟まったものをその場で取りこぼしとして流してから判定する。
+      まだ取れる位置のノーツを違う方向で打った場合は、先読みで次を拾わない
+      （でないと適当な方向を連打するだけで当たってしまう）。
+    detection: >
+      ノーツ列を差し替えて「打ち逃し直後に次のノーツを打つ」状況を作り、
+      idx と counts の遷移を見る。
+    verified: 2026-08-31 (typing-game build 31)
+    refs: [typing-game/prototype/textalive.html]
+
+  - id: layered-sfx-feels-late
+    symptom: >
+      1 打あたりの音が「遅れて鳴る」「にじむ」と感じる。実際の発火は入力から
+      数 ms なのに体感が合わない。
+    cause: >
+      1 回の入力で方向音・倍音・判定音を時間差で重ねていたため、音の塊が
+      200ms 以上尾を引き、立ち上がりが埋もれていた。
+    solution: >
+      1 打 = 1 発にまとめ、60ms 程度で切る。方向は音階、判定は同時に重ねる
+      倍音で表す（時間差で足さない）。
+    detection: >
+      AudioBufferSourceNode.start をフックし、1 打で鳴る音の数と長さを数える。
+    verified: 2026-08-31 (typing-game build 27)
+    refs: [typing-game/prototype/textalive.html]
+
+  - id: oscillator-per-hit-latency
+    symptom: >
+      打鍵のたびに音が数十 ms 遅れて聞こえる。端末によって差が大きい。
+    cause: >
+      打つたびに OscillatorNode + GainNode を組み、setValueAtTime /
+      exponentialRampToValueAtTime で包絡線を予約していた。組み立てと予約の
+      ぶんだけ遅れる。初回は波形生成でさらに詰まる。
+    solution: >
+      波形を AudioBuffer に焼いて使い回し、AudioBufferSourceNode.start() を
+      予約時刻なしで呼ぶ。使う音は最初のユーザー操作でまとめて焼いておく
+      （プリウォーム）。AudioContext は latencyHint:0 で作る。
+    detection: >
+      createBuffer の呼び出し回数を数える（プレイ中に増えるならプリウォーム漏れ）。
+    verified: 2026-08-31 (typing-game build 24〜25)
+    refs: [typing-game/prototype/textalive.html, ontology/infra.yaml#webaudio-se-silent-on-mobile]
+
+  - id: hold-should-not-auto-miss
+    symptom: >
+      「早めに指を置いて、タイミングで離す」打ち方をすると、置いている最中に
+      勝手に MISS になる。
+    cause: >
+      取りこぼしの刈り取りが指の状態を見ていない。フリックは離した瞬間が
+      確定なのに、押している間も時間だけが過ぎていく。
+    solution: >
+      画面に触れている指の数を持ち、触れている間は late 窓に猶予を足す。
+      ただし置きっぱなしで曲が進むと、離した瞬間に溜まった MISS が一度に出るので
+      猶予は 0.3〜0.4 秒程度に留める。判定自体は従来どおり離した時刻で行う。
+    verified: 2026-08-31 (typing-game build 26)
+    refs: [typing-game/prototype/textalive.html]
+
+  - id: press-with-no-feedback-feels-broken
+    symptom: >
+      タップした瞬間に何も起きないため「反応していない」と感じる。
+    cause: >
+      確定が離した瞬間なので、設計上は正しく無音。だが押下で何も返さないと
+      入力が届いたかどうか分からない。
+    solution: >
+      音は鳴らさず（確定ではないので）、押した位置に方向ガイドを出す・
+      次に打つ方向を光らせるなど、視覚だけで受理を返す。
+      押下に音を付けるとフリックキーボード風になるが、音数が倍になり
+      リズムがにじむのでリズムゲームでは避ける。
+    verified: 2026-08-31 (typing-game build 25〜26 で入れて外した)
+    refs: [typing-game/prototype/textalive.html]
+
+  - id: radial-portrait-tradeoff
+    symptom: >
+      四方から中心へ集めるレイアウトで、左右のノーツだけ「遅い」「唐突に出る」
+      と感じる。
+    cause: >
+      縦長の画面では中心から上下端までの距離が左右端までの 2 倍以上ある。
+      距離を活かすと軸ごとに速度が変わり、速度を揃えると軸ごとに助走時間が変わる。
+    solution: >
+      どちらを優先するか先に決める。打鍵ミライは最終的に
+      「助走距離を最短軸に合わせて全軸で速度も時間も揃える」を選び、
+      縦に余った上下を照明・客席として画に使った。
+      速度優先で助走が短くなる軸には、画面外から入ってくる予告表示が要る。
+    verified: 2026-08-31 (typing-game build 33〜35)
+    refs: [typing-game/docs/DESIGN.md]
+
+  - id: same-hue-icon-on-colored-note
+    symptom: >
+      ノーツの方向記号が読めない。色は付いているのに形が判別できない。
+    cause: >
+      方向色のノーツの上に、同系色（col.lit）で記号を描いていたため明度差が
+      ほとんど無かった。色相だけで区別させると、明るい環境やドット絵では潰れる。
+    solution: >
+      暗い台座を敷いて白抜きで描く。どの方向色でもコントラストが一定になる。
+      文字（かな）と記号は領域を分けて置く（台座が文字に掛かると今度は文字が読めない）。
+    verified: 2026-08-31 (typing-game build 23〜24)
+    refs: [typing-game/prototype/textalive.html]
+
+  - id: judge-text-collides-with-finger-feedback
+    symptom: >
+      大きくした判定表示（JUST/MISS）が、指のそばに出るフィードバックと重なって
+      結局読めない。
+    cause: >
+      どちらも「判定ラインの近く」に置いたため。指は判定ラインの周辺にある。
+    solution: >
+      判定表示は指が来ない場所（落下領域の中央、リングの上など）へ逃がす。
+      レイアウトを変えたら、指の当たる領域と表示物の位置関係を必ず引き直す。
+    verified: 2026-08-31 (typing-game build 23)
+    refs: [typing-game/prototype/textalive.html]
+
+  - id: beat-bounce-too-busy
+    symptom: >
+      キャラクターが拍ごとに跳ねて落ち着かない。曲によってはうるさい。
+    cause: >
+      拍（beat）ごとに等しく跳ねていた。4 拍子でも 3 拍子でも毎拍動く。
+    solution: >
+      小節の頭（beat.position === 1）だけ跳ねる。拍子に関係なく
+      「3 拍子なら 3 回に 1 回」になる。振幅も控えめにする。
+    verified: 2026-09-01 (typing-game build 40)
+    refs: [typing-game/prototype/miku/README.md]
+
+  - id: effect-state-not-reset-on-restart
+    symptom: >
+      中断して開始し直しても、前回のプレイの演出（客席のペンライトなど）が
+      残っている。
+    cause: >
+      演出用の配列をモジュール変数で持ち、プレイ状態（state）の外に置いたため、
+      state を作り直しても初期化されない。
+    solution: >
+      「プレイの寿命と同じもの」は state に入れるか、開始時に必ず通る
+      リセット関数にまとめる（開始・チュートリアル開始・中断の全経路から呼ぶ）。
+    detection: >
+      演出配列の長さを返すデバッグフックを出し、中断→再開始で 0 に戻るか見る。
+    verified: 2026-09-01 (typing-game build 40)
+    refs: [typing-game/prototype/textalive.html]
+
+  - id: character-motion-hard-to-extend
+    symptom: >
+      キャラクターの表情・ポーズ・仕草を足すたびに、描画関数と状態変数と
+      ループの条件分岐を同時に触ることになり、追加も削除もしづらい。
+    cause: >
+      スプライトの描画・状態遷移・アプリ側の都合（判定への反応、口パク、拍の跳ね）が
+      1 つの関数群に混ざっていた。
+    solution: >
+      「見た目と仕草」を別ファイルのコンポーネントに切り出し、表情・ポーズ・仕草を
+      それぞれ 1 つのテーブルに 1 行足すだけで増える形にする。アプリからは
+      キャンバスと「いま歌っているか」だけを渡す。追加手順を同じディレクトリの
+      README に書き、更新時は README も同じコミットで直す運用にする。
+    verified: 2026-09-01 (typing-game build 40)
+    refs: [typing-game/prototype/miku/README.md, typing-game/prototype/miku/miku.js]
