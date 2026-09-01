@@ -68,34 +68,50 @@ export function click(at, strong) {
   f.frequency.value = strong ? 900 : 1400;
   o.connect(f); f.connect(g); g.connect(beatGain); o.start(at); o.stop(at + 0.12);
 }
-/** 髪留めの拍（2 拍目・TAP）: 硬く高い「カンッ」。左右に定位する */
-export function tieBeat(at, pan) {
+/** 髪留めの拍（TAP）: 硬く高い「カンッ」。左右に定位する。
+ *  chord は曲のコードトーン（A4=0 の半音オフセット配列）。渡すと曲にハモる */
+export function tieBeat(at, pan, chord) {
   const p = ac.createStereoPanner(); p.pan.value = pan; p.connect(beatGain);
-  for (const [f, v, d] of [[2093, 0.20, 0.34], [3136, 0.10, 0.24], [4186, 0.05, 0.16]])
-    osc(at, f, "sine", v, d, p, 0, 0.002);
+  const base = chord ? 440 * Math.pow(2, (chord[0] + 24) / 12) : 2093;
+  const tones = chord
+    ? [[base, 0.20, 0.34], [base * Math.pow(2, chord[2] / 12) / 2, 0.10, 0.24], [base * 2, 0.05, 0.16]]
+    : [[2093, 0.20, 0.34], [3136, 0.10, 0.24], [4186, 0.05, 0.16]];
+  for (const [f, v, d] of tones) osc(at, f, "sine", v, d, p, 0, 0.002);
   const s = noiseSource();
   const bf = ac.createBiquadFilter(); bf.type = "highpass"; bf.frequency.value = 6000;
   const g = ac.createGain(); env(g, at, 0.10, 0.05, 0.001);
   s.connect(bf); bf.connect(g); g.connect(p); s.start(at); s.stop(at + 0.1);
 }
-/** 髪の毛の拍（4 拍目・確定）: やわらかく低い「ポワーン」 */
-export function hairBeat(at, pan) {
+/** 髪の毛の拍（確定）: やわらかく低い「ポワーン」。コードがあれば三和音で鳴らす */
+export function hairBeat(at, pan, chord) {
   const p = ac.createStereoPanner(); p.pan.value = pan; p.connect(beatGain);
+  if (chord) {
+    const f = st => 440 * Math.pow(2, (st + 12) / 12);
+    for (const [st, v, d] of [[chord[0], 0.15, 0.5], [chord[1], 0.07, 0.42], [chord[2], 0.08, 0.46]])
+      osc(at, f(st), "triangle", v, d, p, 0, 0.02);
+    osc(at, f(chord[0]) / 2, "triangle", 0.09, 0.55, p, 0, 0.02);
+    return;
+  }
   for (const [f, v, d] of [[784, 0.17, 0.5], [1176, 0.07, 0.4], [392, 0.09, 0.55]])
     osc(at, f, "triangle", v, d, p, 0, 0.02);
 }
 
 /* ---- 効果音（sfxGain）------------------------------------------------- */
-export function shimmer(at, dur, pan) {
+/** 伸ばしている間の「シャラララー」。コードトーンを積み上げて登らせるので、
+ *  曲の和音から外れた音が鳴らない（findChord の使いどころ） */
+export function shimmer(at, dur, pan, chord) {
   const g = ac.createGain(); g.gain.value = 1;
   const p = ac.createStereoPanner(); p.pan.value = pan;
   g.connect(p); p.connect(sfxGain);
-  const st = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24], n = 11, step = dur / n;
+  const n = 11, step = dur / n;
+  const st = chord
+    ? Array.from({ length: n }, (_, i) => chord[i % 3] + 12 * Math.floor(i / 3))
+    : [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
   for (let i = 0; i < n; i++)
     osc(at + i * step, 523.25 * Math.pow(2, st[i] / 12), "sine", 0.10, step * 2.4, g, 0, 0.004);
   return g;
 }
-export function shakin(at, pan) {
+export function shakin(at, pan, chord) {
   const p = ac.createStereoPanner(); p.pan.value = pan; p.connect(sfxGain);
   const s = noiseSource();
   const f = ac.createBiquadFilter(); f.type = "bandpass"; f.Q.value = 2.5;
@@ -103,11 +119,24 @@ export function shakin(at, pan) {
   f.frequency.exponentialRampToValueAtTime(7000, at + 0.09);
   const g = ac.createGain(); env(g, at, 0.3, 0.42, 0.003);
   s.connect(f); f.connect(g); g.connect(p); s.start(at); s.stop(at + 0.6);
+  // 落ち着く先の音程をコードの第 5 音に合わせる（合わない「シャキーン」は耳につく）
+  const land = chord ? 440 * Math.pow(2, (chord[2] + 24) / 12) : 1900;
   const o = ac.createOscillator(), og = ac.createGain();
-  o.type = "triangle"; o.frequency.setValueAtTime(3400, at);
-  o.frequency.exponentialRampToValueAtTime(1900, at + 0.3);
+  o.type = "triangle"; o.frequency.setValueAtTime(land * 1.8, at);
+  o.frequency.exponentialRampToValueAtTime(land, at + 0.3);
   env(og, at, 0.16, 0.38, 0.003);
   o.connect(og); og.connect(p); o.start(at); o.stop(at + 0.5);
+}
+/** サビの決めポーズ。コードの分散和音を駆け上がる短いキメ */
+export function kime(at, chord) {
+  const out = ac.createGain(); out.gain.value = 1; out.connect(sfxGain);
+  const c = chord || [0, 4, 7];
+  [c[0], c[1], c[2], c[0] + 12].forEach((st, i) =>
+    osc(at + i * 0.045, 440 * Math.pow(2, (st + 12) / 12), "square", 0.13, 0.3, out, 0, 0.003));
+  const s = noiseSource();
+  const f = ac.createBiquadFilter(); f.type = "highpass"; f.frequency.value = 5000;
+  const g = ac.createGain(); env(g, at, 0.12, 0.25, 0.002);
+  s.connect(f); f.connect(g); g.connect(out); s.start(at); s.stop(at + 0.35);
 }
 /** ネギ確定。クイズの不正解のような、あからさまな「ブッブー」 */
 export function buzzer(at) {

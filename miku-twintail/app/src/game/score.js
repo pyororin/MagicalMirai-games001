@@ -46,6 +46,25 @@ export const objSize = o => Math.max(o.h, o.w * 0.62);
 export const targetLen = (style, obj, scale) => style.len * objSize(obj) * scale;
 
 export const RHYTHM_PT = { PERFECT: 20, GOOD: 12, OK: 5, MISS: 0 };
+
+/* 難易度。**ミク度の定義そのものは変えない**（角度の許容 0.35rad は全難易度で共通）。
+ * 変わるのは「拍の判定窓」「お題の髪型ガイドの出し方」「サビのキメ」だけ。
+ * こうしておくと、難易度をまたいでもミク度は同じ物差しのままになる。
+ *   window  … これを超えるとネギ（拍単位）
+ *   perfect / good … 判定帯（拍単位）
+ *   guide   … always(常時) / approach(近づいてくる間) / slide(伸ばしている間だけ)
+ *   kime    … サビの決めポーズを出すか */
+export const DIFFICULTY = {
+  easy:   { key: "easy",   name: "やさしい",   window: 1.00, perfect: 0.16, good: 0.36, guide: "always",   kime: false },
+  normal: { key: "normal", name: "ふつう",     window: 0.72, perfect: 0.11, good: 0.26, guide: "approach", kime: true  },
+  hard:   { key: "hard",   name: "むずかしい", window: 0.45, perfect: 0.07, good: 0.17, guide: "slide",    kime: true  },
+};
+export const gradeOf = (d, diff) => { const a = Math.abs(d);
+  return a <= diff.perfect ? "PERFECT" : a <= diff.good ? "GOOD" : a <= diff.window ? "OK" : "MISS"; };
+
+/** サビでは髪型をロング寄りに寄せる。同じ 2 拍でより長く伸ばす必要があり、
+ *  操作の構造を変えずに「サビだけ手が忙しくなる」感覚を作れる */
+export const CHORUS_STYLES = ["long", "fuwa", "straight"];
 const ANG_TOL = 0.35;          // これだけずれると角度点が 0（髪型の差が出る幅に合わせた）
 export const WRONG_SIDE_PT = 12;   // 左右取り違え 1 房あたりの減点
 

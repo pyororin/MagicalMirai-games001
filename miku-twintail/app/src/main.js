@@ -12,7 +12,7 @@ import { createGame } from "./game/core.js";
 import { createTextAliveSong } from "./song/textalive.js";
 import { unlockAudio, audioState } from "./game/audio.js";
 
-export const BUILD = 8;
+export const BUILD = 9;
 const TOKEN = "VQRxHB1a0q8fVvnm";
 
 // 選曲リスト: マジカルミライ 2025 楽曲コンテスト受賞 6 曲。
@@ -59,7 +59,9 @@ const song = createTextAliveSong(player);
 // 再生の主導権は TextAlive 側にあるので、ゲーム開始＝再生要求にする
 song.start = () => { try { player.requestPlay(); } catch (e) {} };
 
+const q = new URLSearchParams(location.search);
 const game = createGame($("stage"), song, {
+  difficulty: q.get("diff") || "normal",
   onFinishSong: r => setMeta(`おつかれさま！ ミク ${r.mikus} 体 / 平均ミク度 ${r.avg} / SCORE ${r.total}`),
 });
 window.MIKU_GAME = game;
@@ -137,6 +139,8 @@ function buildSongPicker() {
   sel.value = String(SONGS.indexOf(DEV_SONG));
   $("songwrap").hidden = false;
 }
+$("diff").value = q.get("diff") || "normal";
+$("diff").onchange = e => game.setDifficulty(e.target.value);
 $("guide").onchange = e => game.setGuide(e.target.checked);
 
 // ---- 起動診断（「読み込み中」で止まったとき、原因を画面に出す） ----------------
