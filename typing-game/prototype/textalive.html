@@ -219,7 +219,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 39</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 40</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -332,12 +332,13 @@
 </div>
 
 <!-- CDN 依存を避けるため検証済みバージョンを同梱(広告ブロッカー等による欠落も防ぐ) -->
+<script src="./miku/miku.js?v=40"></script>
 <script src="./vendor/axios.min.js"></script>
 <script src="./vendor/textalive-app-api-0.5.2.js"></script>
 <script>
 (function(){
   "use strict";
-  var BUILD = 39;
+  var BUILD = 40;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -635,98 +636,19 @@
   }
 
   /* ============================================================
-     はちゅねミク:32x40 の全身ドット絵。表情・口・腕のポーズを持ち、
-     拍で跳ね、入力方向へツインテールがなびく。
-     スプライトは変化があったときだけ描き直し、揺れは描画側で足す。
+     ミクの見た目と仕草は miku/miku.js のコンポーネントに置いてある。
+     表情・ポーズ・仕草を足すときはあちらだけを触る(miku/README.md)。
+     ここではアプリ側の都合(判定への反応・口パク・拍の跳ね)を橋渡しする。
      ============================================================ */
-  var mikuCv=document.getElementById("miku"), mikuCtx=mikuCv.getContext("2d");
-  mikuCv.width=32; mikuCv.height=40;
-  var MK={
-    hair:"#39C5BB", hair2:"#2A9E96", hair3:"#1F7C76", skin:"#FBE3D4", skin2:"#E9C4B2",
-    eye:"#1E3A5F", eyeHi:"#EAF6FF", mouth:"#8E2B47", tongue:"#FF7FA8", blush:"#FFB3C7",
-    shirt:"#EDF1FF", shirt2:"#A9B4D6", tie:"#39C5BB", skirt:"#2B3566", skirt2:"#1E2749",
-    leg:"#39424F", boot:"#2A9E96", line:"#141A33"
-  };
-  var mikuExpr="normal", mikuExprUntil=0, mikuMouth=0, mikuPose="idle", mikuKey="";
-  function mp(x,y,w,h,c){ mikuCtx.fillStyle=c; mikuCtx.fillRect(x,y,w,h); }
-  function drawMiku(){
-    var key=mikuExpr+"/"+mikuMouth+"/"+mikuPose;
-    if(key===mikuKey) return;                 // 変化が無ければ描き直さない
-    mikuKey=key;
-    mikuCtx.clearRect(0,0,32,40);
-
-    // ツインテール(左右)。房を3段に分けて陰影を付ける
-    mp(4,6,4,12,MK.hair);   mp(24,6,4,12,MK.hair);
-    mp(4,18,4,6,MK.hair2);  mp(24,18,4,6,MK.hair2);
-    mp(5,24,3,4,MK.hair2);  mp(24,24,3,4,MK.hair2);
-    mp(5,28,3,2,MK.hair3);  mp(24,28,3,2,MK.hair3);
-    mp(4,5,4,2,MK.hair3);   mp(24,5,4,2,MK.hair3);   // 結び目
-
-    // 頭
-    mp(10,2,12,3,MK.hair);
-    mp(9,3,14,3,MK.hair);
-    mp(9,6,14,10,MK.skin);
-    mp(9,5,14,1,MK.hair2);
-    mp(8,6,1,9,MK.hair2); mp(23,6,1,9,MK.hair2);
-    mp(9,16,14,1,MK.skin2);
-    mp(9,6,14,2,MK.hair);                    // 前髪
-    mp(12,8,3,1,MK.hair); mp(17,8,3,1,MK.hair);
-    mp(10,12,2,1,MK.blush); mp(20,12,2,1,MK.blush);
-
-    // 目
-    if(mikuExpr==="ok"){
-      mp(11,10,1,1,MK.eye); mp(12,9,2,1,MK.eye); mp(14,10,1,1,MK.eye);
-      mp(18,10,1,1,MK.eye); mp(19,9,2,1,MK.eye); mp(21,10,1,1,MK.eye);
-    } else if(mikuExpr==="miss"){
-      mp(11,9,1,1,MK.eye); mp(12,10,1,1,MK.eye); mp(11,11,1,1,MK.eye);
-      mp(21,9,1,1,MK.eye); mp(20,10,1,1,MK.eye); mp(21,11,1,1,MK.eye);
-      mp(13,9,1,1,MK.eye); mp(19,9,1,1,MK.eye);
-    } else {
-      mp(11,9,3,4,MK.eye); mp(19,9,3,4,MK.eye);
-      mp(12,9,1,1,MK.eyeHi); mp(20,9,1,1,MK.eyeHi);
-    }
-    // 口
-    if(mikuMouth<=0){ mp(15,14,2,1,MK.mouth); }
-    else if(mikuMouth===1){ mp(15,14,3,2,MK.mouth); mp(15,14,3,1,MK.tongue); }
-    else { mp(14,13,5,4,MK.mouth); mp(15,15,3,1,MK.tongue); }
-
-    // 首と肩
-    mp(15,17,3,1,MK.skin2);
-    mp(11,18,10,7,MK.shirt);
-    mp(11,18,10,1,MK.tie);                    // 襟
-    mp(15,19,2,4,MK.tie);                     // ネクタイ
-    mp(11,24,10,1,MK.shirt2);
-
-    // 腕(ポーズで変える)。袖は本体より一段暗くして白いシャツから浮かせる
-    if(mikuPose==="up"){                      // ヒット:両手を上げる
-      mp(8,11,2,8,MK.shirt2); mp(22,11,2,8,MK.shirt2);
-      mp(8,10,2,1,MK.line);   mp(22,10,2,1,MK.line);
-      mp(8,8,2,2,MK.skin);    mp(22,8,2,2,MK.skin);
-    } else if(mikuPose==="down"){              // ミス:うなだれる
-      mp(9,20,2,7,MK.shirt2); mp(21,20,2,7,MK.shirt2);
-      mp(9,27,2,2,MK.skin);   mp(21,27,2,2,MK.skin);
-    } else {                                   // 通常
-      mp(9,19,2,6,MK.shirt2); mp(21,19,2,6,MK.shirt2);
-      mp(9,25,2,2,MK.skin);   mp(21,25,2,2,MK.skin);
-    }
-
-    // スカート・脚・ブーツ
-    mp(10,25,12,4,MK.skirt);
-    mp(9,28,14,2,MK.skirt2);
-    mp(13,30,2,5,MK.leg); mp(17,30,2,5,MK.leg);
-    mp(12,35,4,3,MK.boot); mp(16,35,4,3,MK.boot);
-    mp(12,38,4,1,MK.line); mp(16,38,4,1,MK.line);
-  }
-  function mikuReact(g){
-    mikuExpr = (g==="MISS") ? "miss" : "ok";
-    mikuPose = (g==="MISS") ? "down" : "up";
-    mikuExprUntil = performance.now() + 520;
-    drawMiku();
-  }
-  drawMiku();
+  var mikuCv=document.getElementById("miku");
+  MikuActor.init(mikuCv);
+  function drawMiku(){ MikuActor.render(); }
+  function mikuReact(g){ MikuActor.react(g); }
   window.DAKEN_MIKU=function(expr,mouth,pose){
-    mikuExpr=expr; mikuMouth=mouth|0; mikuPose=pose||"idle"; mikuKey=""; drawMiku();
+    MikuActor.setExpr(expr); MikuActor.setMouth(mouth); MikuActor.setPose(pose||"idle");
+    MikuActor.render();
   };
+  window.DAKEN_MIKU_PEEK=function(){ return MikuActor.peek(); };   // 検証用
 
   /* ============ 要素 ============ */
   var el={};
@@ -1167,6 +1089,9 @@
   /* 打ち返したかなが客席へ飛び、道中でペンライトに変わって席に着く。
      「自分が返した声が客席の灯りになった」という因果を、途切れさせずに見せる。 */
   var flyers=[], FLY_MS=560;
+  /* プレイを始めるたびに客席を空にする。前回の灯りが残っていると、
+     何本返したのかが景色として読めなくなる。 */
+  function resetStageFx(){ lights.length=0; flyers.length=0; wiperPh=0; wiperLast=0; }
   function launchFlyer(dir, kana, from){
     var seat=seatFor(dir);
     flyers.push({kana:kana, x0:from.x, y0:from.y, x1:seat.x, y1:seat.y,
@@ -1285,8 +1210,8 @@
                          : Math.min(6, Math.floor(below/40));   // 歌詞が抜けた分ミクを大きく置ける
     if(!inMargin && scale<2) return null;             // 置く余地が無ければ描かない(下段を優先)
     var w=32*scale, h=40*scale;
-    var idle=calmMotion ? 0.5 : (Math.sin(performance.now()/620)+1)/2;
-    var bounce=Math.round((beatPulse*2+idle*0.6)*G);
+    // 跳ねは小節の頭だけ・振幅も控えめ(コンポーネント側の規定)
+    var bounce=Math.round(MikuActor.bounce(beatPulse, beatNow&&beatNow.position, calmMotion)*G);
     /* 打つ手と反対側へ置く。右手で打つなら右下が指と手のひらで隠れるので左へ。 */
     var x = inMargin ? Math.round((fieldX0()+fieldW()+(marginW-w)/2)/G)*G
                      : Math.round((mikuOnLeft() ? G*2 : cw-w-G*2)/G)*G;
@@ -1889,8 +1814,7 @@
     var g=ring();
     var scale=Math.max(3, Math.min(5, Math.floor(g.R*1.6/40)));   // 中心の主役なので一回り大きく
     var w=32*scale, h=40*scale;
-    var idle=calmMotion ? 0.5 : (Math.sin(performance.now()/620)+1)/2;
-    var bounce=Math.round((beatPulse*2+idle*0.6)*G);
+    var bounce=Math.round(MikuActor.bounce(beatPulse, beatNow&&beatNow.position, calmMotion)*G);
     var x=Math.round((g.cx-w/2)/G)*G, y=Math.round((g.cy-h/2)/G)*G-bounce;
     ctx.save();
     ctx.imageSmoothingEnabled=false;
@@ -2183,12 +2107,10 @@
     var m = !singing ? 0 : (amp>0.5 ? 2 : amp>0.18 ? 1 : (Math.floor(t/110)%2)+1);
     // アウトロ中は「話している」口に。歌が終わってもミクが動いている感じを残す
     if(state.outroAt) m=(Math.floor((performance.now()-state.outroAt)/150)%2)+1;
-    var live=performance.now()<mikuExprUntil;
-    var expr = live ? mikuExpr : "normal";
-    var pose = live ? mikuPose : "idle";
-    if(m!==mikuMouth || expr!==mikuExpr || pose!==mikuPose){
-      mikuMouth=m; mikuExpr=expr; mikuPose=pose; drawMiku();
-    }
+    /* 口パクを渡し、あとはコンポーネントに任せる。
+       歌っていない間(間奏)は、ミクが自分でランダムな仕草をする。 */
+    MikuActor.setMouth(m);
+    MikuActor.tick(performance.now(), {singing:singing||!!state.outroAt, playing:true});
 
     var last=state.notes[state.notes.length-1];
     if(state.isTutorial){
@@ -2204,7 +2126,7 @@
     if(done && !state.outroAt){
       state.outroAt=performance.now();
       state.outroMsg=mikuLine();
-      mikuExpr="ok"; mikuPose="up"; mikuExprUntil=performance.now()+OUTRO_HOLD; drawMiku();
+      MikuActor.setExpr("ok", OUTRO_HOLD); MikuActor.setPose("up", OUTRO_HOLD); drawMiku();
     }
     if(state.outroAt){
       var age=performance.now()-state.outroAt;
@@ -2319,6 +2241,7 @@
     startAttract();
     el.quitBtn.hidden=true;
     el.share.hidden=true;
+    resetStageFx(); MikuActor.reset();              // 客席の灯りを持ち越さない
     el.ovTitle.textContent=difficulty+" で挑戦";
     el.ovText.textContent="スタートで曲の頭から始まります。";
     el.ovResult.hidden=true;
@@ -2354,6 +2277,7 @@
     el.score.textContent="0"; el.combo.textContent="0";
     el.judge.textContent=""; el.delta.textContent="";
     heldCount=0;                                    // 前回の指の残りで刈り取りが止まらないように
+    resetStageFx(); MikuActor.reset();              // 客席の灯りとミクの仕草を初期化
     el.screen.classList.remove("fever");
     el.overlay.style.display="none";
     if(el.veil) el.veil.classList.remove("on");     // 前回のアウトロの暗転を戻す
@@ -2399,6 +2323,7 @@
     el.score.textContent="0"; el.combo.textContent="0";
     el.judge.textContent=""; el.delta.textContent="";
     heldCount=0;                                    // 前回の指の残りで刈り取りが止まらないように
+    resetStageFx(); MikuActor.reset();              // 客席の灯りとミクの仕草を初期化
     el.screen.classList.remove("fever");
     el.overlay.style.display="none";
     el.share.hidden=true;
