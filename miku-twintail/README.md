@@ -123,6 +123,7 @@ app/src/game/     ゲーム本体
 app/src/song/     ソングアダプタ（楽曲へ触る唯一の口）
   mock.js           擬似曲（130BPM を自前合成）
   textalive.js      実曲（TextAlive App API）
+app/src/ui/       音量つまみ（楽曲 / 拍・効果音。localStorage に保存）
 app/index.html    実曲版      app/mock.html  擬似曲版
 prototype/        v1（自由描画版）の参考モック
 ```
