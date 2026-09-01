@@ -52,12 +52,14 @@ cd typing-game/prototype && npm install && npm test  # vitest 43件
 
 ## ⚠ 開発前に読むこと — ontology/
 
-**API・インフラで躓いた点の知見は [ontology/](ontology/) に集約している**(症状から引ける YAML)。
-「読み込み中で止まる」「Pages が 404」「sandbox から API に届かない」などは既知の解決策がある。
-新しいセッション・別アプリの開発時は、デバッグの前にまずここを読むこと。解決した躓きは追記すること。
+**躓いた点の知見は [ontology/](ontology/) に集約している**(症状から引ける YAML)。
+「読み込み中で止まる」「Pages が 404」「sandbox から API に届かない」「効果音が遅れて聞こえる」
+などは既知の解決策がある。新しいセッション・別アプリの開発時は、デバッグの前にまずここを読むこと。
+解決した躓きは追記すること。
 
-- [ontology/textalive.yaml](ontology/textalive.yaml) — TextAlive / Songle(必要ドメイン、Card data resolver エラーの2系統の原因とフォールバック、読みデータ非提供、無音で止まる問題ほか)
-- [ontology/infra.yaml](ontology/infra.yaml) — GitHub Pages / Actions / sandbox(gh-pages の消し合い、Pages 手動有効化、キャッシュとビルド番号、ヘッドレス Chromium の TLS 回避ほか)
+- [ontology/textalive.yaml](ontology/textalive.yaml) — TextAlive / Songle(必要ドメイン、Card data resolver エラーの2系統の原因とフォールバック、読みデータ非提供、曲の長さと歌詞の終わりの違い、口パクの同期元ほか)
+- [ontology/infra.yaml](ontology/infra.yaml) — GitHub Pages / Actions / sandbox / ブラウザ実装(gh-pages の消し合い、キャッシュとビルド番号、タグ push が通らない、ヘッドレス検証の型、[hidden] が効かない、var の巻き上げで演出が消える ほか)
+- [ontology/rhythm-game.yaml](ontology/rhythm-game.yaml) — リズムゲームの判定・入力・体感(判定窓が失敗音の遅れを決める、打ち逃しが次の入力を吸う、効果音の重ねすぎ、放射レイアウトのトレードオフ ほか)
 
 ## デプロイ
 

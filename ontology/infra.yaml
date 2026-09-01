@@ -232,3 +232,74 @@ pitfalls:
       $HTTPS_PROXY/__agentproxy/status でも許可状況を確認できる。
     verified: 2026-08-31 (typing-game build 24)
     refs: [.github/workflows/pages-typing-game.yml]
+
+  - id: git-proxy-rejects-tag-push
+    symptom: >
+      ブランチの push は成功するのに、タグの push だけが
+      `send-pack: unexpected disconnect while reading sideband packet` /
+      `fatal: the remote end hung up unexpectedly` で失敗する。
+      軽量タグでも注釈付きタグでも同じ。
+    cause: >
+      sandbox の git 中継が refs/heads 以外の ref 更新を通していない。
+      リポジトリやネットワークの問題ではないので、リトライしても解決しない。
+    solution: >
+      「戻れる点」が目的ならリリース用のブランチを作る
+      （git push origin <sha>:refs/heads/release/<name>）。
+      正式な tag / Release が要るなら、GitHub の Web UI から
+      そのブランチを指して作ってもらう。GitHub MCP にもタグ作成 API は無い。
+    detection: >
+      git ls-remote --tags origin は成功する（＝到達性の問題ではない）のに
+      push だけ切れる、という組み合わせで判別できる。
+    verified: 2026-08-31 (typing-game v1.0-lanes)
+    refs: [.github/workflows/pages-typing-game.yml]
+
+  - id: headless-verification-hooks
+    symptom: >
+      キャンバスで描くゲームは、実機でしか分からない要素（音の遅れ、演出の
+      有無、状態の初期化漏れ）が多く、スクリーンショットだけでは検証しきれない。
+    cause: >
+      描画結果しか観測できないと、内部状態（判定の進み、演出配列、音の発火）が
+      追えない。目視は主観でもある。
+    solution: >
+      検証用のフックを本体に少しだけ用意する（window.DAKEN_STATE / _FX /
+      _RING / _LEAD / _MIKU_PEEK のような読み取り専用の関数）。
+      そのうえで Playwright から:
+      - 音は AudioContext.prototype.createBufferSource / createBuffer を
+        addInitScript でラップし、発火時刻と回数を数える
+      - スプライトの状態は、その部位のピクセルを getImageData で直接読む
+        （口の開閉など、見た目の差を数値にできる）
+      - 判定やタイミングは state を直接書き換えて状況を作る
+        （ノーツ列を差し替えて「打ち逃し直後」を再現する等）
+      フックは数行なので本番に残しても害が少なく、実機の切り分けにも使える。
+    verified: 2026-09-01 (typing-game build 24〜40)
+    refs: [typing-game/prototype/textalive.html]
+
+  - id: hidden-attribute-defeated-by-display
+    symptom: >
+      hidden 属性を付けている要素が表示されたままになる（結果が出る前から
+      共有リンクが見えている等）。JS では hidden=true になっている。
+    cause: >
+      その要素に display を指定する CSS ルールがあると、
+      UA スタイルシートの [hidden]{display:none} を上書きしてしまう。
+    solution: >
+      display を指定したセレクタには [hidden] 版も書く
+      （.overlay .share[hidden]{display:none}）。
+    detection: >
+      要素の hidden プロパティと getComputedStyle の display を突き合わせる。
+    verified: 2026-08-31 (typing-game build 36)
+    refs: [typing-game/prototype/textalive.html]
+
+  - id: var-hoisting-silently-kills-effects
+    symptom: >
+      演出が一度も出ない。エラーも出ない。
+    cause: >
+      var は巻き上げられるので、宣言より前で参照しても ReferenceError にならず
+      undefined になる。undefined を使った計算は NaN になり、
+      「経過時間 < 閾値」のような判定が常に false になって、
+      配列が毎フレーム空になるなど静かに壊れる。
+    solution: >
+      描画ループのように長い関数では、時刻などの共有値を関数の先頭で 1 度だけ
+      宣言する。演出が出ないときは、まず参照している変数が NaN でないか見る。
+    verified: 2026-08-31 (typing-game build 22)
+    refs: [typing-game/prototype/textalive.html]
+
