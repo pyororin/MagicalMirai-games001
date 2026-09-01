@@ -422,3 +422,42 @@ pitfalls:
       止まる直前に PAGEERR で音源読み込み失敗が出ていないか確認する。
     verified: 2026-09-01 (miku-twintail、Playwright の route 中継下で発生)
     refs: [miku-twintail/app/src/main.js]
+
+  - id: find-chorus-is-sparse
+    symptom: >
+      findChorus() / getChoruses() に合わせたサビ演出が、曲中ほとんど発火しない。
+      発火しても場所が曲の実感とずれる（イントロで「サビ」になる等）。
+    cause: >
+      課題曲の repetitiveSegment 解析では、getChoruses() が **1 区間しか返さない**ことがある。
+      2025 年課題曲の実測:
+        ロンリーラン       222秒中 1区間 (71〜107秒) = 16%
+        ハロー、フェルミ。 202秒中 1区間 ( 2〜 13秒) = 5%（イントロに乗ってしまう）
+      3〜4分の曲なら普通サビは 2〜3 回あるので、これだけでは演出の土台にならない。
+    solution: >
+      ボーカル音量の包絡で補う。getVocalAmplitude を 0.5 秒刻みでサンプルし、
+      4 秒の移動平均でならして「上位 30%（分位点）」を盛り上がり区間とする。
+      findChorus の結果とのOR を取る。短い山(8秒未満)は捨て、短い谷(4秒未満)は繋ぐ。
+      **しきい値をピーク比で決めてはいけない**——ならした包絡は歌っている間ずっと平らなので、
+      「ピークの 62%」では曲の 51〜86% が該当してしまい「常時サビ」になる。
+      分位点で切ると課題曲6曲すべてで 33〜44% に収まった。
+    detection: >
+      getChoruses() の区間数と合計秒数を曲の尺と並べて出す。1 区間しか出ないならこれ。
+    verified: 2026-09-01 (miku-twintail build 9、課題曲6曲で実測)
+    refs: [miku-twintail/app/src/song/textalive.js]
+
+  - id: chord-name-parsing
+    symptom: >
+      findChord() の name をそのまま使おうとして、効果音の音程が決められない。
+    what_to_use: |
+      name は "Am" だけでなく "EM7/F" "Esus2/C#" "Eadd9" "G#7/C" "Bbm7" "Gb" のような
+      テンション・スラッシュ・フラットを含む文字列で返る。合いの手の音程を決めるだけなら
+      三和音まで落として十分:
+        1. "/" の前だけを見る（ベース音は捨てる）
+        2. 先頭の [A-G][#b]? を根音に
+        3. sus2 → [0,2,7] / sus4 → [0,5,7]
+        4. m(ただし maj は除く) や dim → 短三度、それ以外 → 長三度
+           dim → 減五度、aug → 増五度、それ以外 → 完全五度
+      課題曲6曲・全区間のサンプルで未解釈は 4〜34%（コード無しの区間）にとどまり、
+      解釈できた分は 13〜36 種類。コード無しの区間は null を返してフォールバックさせる。
+    verified: 2026-09-01 (miku-twintail build 9)
+    refs: [miku-twintail/app/src/song/textalive.js]

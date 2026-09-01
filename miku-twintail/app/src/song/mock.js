@@ -41,6 +41,13 @@ export function createMockSong({ bpm = 130, bars = 40 } = {}) {
       if (i % 2 === 1) A.osc(at + BEAT / 2, 440 * Math.pow(2, SCALE_RIFF[(i + 1) % 8] / 12),
                              "square", 0.028, BEAT * 0.3, A.songGain, 0.25);
     },
+    /** 伴奏と同じ和音を返す（A4=0 の半音オフセット 3 音）。実曲版の findChord に対応する */
+    chordAt(sec) {
+      const i = Math.max(0, Math.floor(sec / BEAT)) % 8;
+      return { name: ["Am", "Em", "Dm", "F#m"][Math.floor(i / 2)], tones: CHORD[i] };
+    },
+    /** 8 小節ごとに 4 小節のサビが来る擬似構成。実曲版の findChorus に対応する */
+    chorusAt: sec => Math.floor(sec / (BAR * 4)) % 2 === 1,
     charAt: sec => LYRIC[Math.floor(sec / BEAT * 2) % LYRIC.length],
     vocalAt: sec => 0.5 + 0.5 * Math.sin(sec * 3.1),
     ended: () => (A.ac ? A.ac.currentTime - startAt : 0) > TOTAL * BEAT + 1.2,

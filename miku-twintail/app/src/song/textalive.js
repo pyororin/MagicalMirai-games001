@@ -12,7 +12,57 @@
 import * as A from "../game/audio.js";
 
 export function createTextAliveSong(player) {
-  let bars = [], flat = [], duration = 0;
+  let bars = [], flat = [], duration = 0, hot = [];
+
+  /* 盛り上がり区間の検出。
+   * findChorus() は課題曲では 1 区間しか返らないことがあり
+   * （「ハロー、フェルミ。」ではイントロの 2〜13 秒だけ）、
+   * それだけに頼るとサビ演出がほとんど出ない / 出る場所が曲とずれる。
+   * そこでボーカル音量の包絡を 4 秒でならし、その上位 30% にあたる区間を
+   * 「盛り上がり」として補う。findChorus の結果とのORを chorusAt が返す。
+   *
+   * しきい値をピーク比（例「ピークの 62%」）で決めると、ならした包絡は
+   * 歌っている間ずっと平らなので曲の 5〜9 割が該当してしまい、サビが
+   * 「常時オン」になって意味を失う。曲ごとの分布に対する分位点で切ると、
+   * どの曲でも 3 割前後に収まる。 */
+  const HOT_STEP = 0.5, HOT_SMOOTH = 4, HOT_PCT = 0.70, HOT_MIN = 8, HOT_GAP = 4;
+  function buildHot() {
+    hot = [];
+    if (!duration) return;
+    let max = 0;
+    try { max = player.getMaxVocalAmplitude() || 0; } catch (e) { return; }
+    if (!max) return;
+    const n = Math.floor(duration / HOT_STEP);
+    const amp = new Array(n);
+    for (let i = 0; i < n; i++) {
+      let v = 0;
+      try { v = player.getVocalAmplitude(i * HOT_STEP * 1000) / max; } catch (e) { v = 0; }
+      amp[i] = Math.max(0, Math.min(1, v || 0));
+    }
+    const w = Math.round(HOT_SMOOTH / HOT_STEP), sm = new Array(n);
+    for (let i = 0; i < n; i++) {
+      let a = 0, c = 0;
+      for (let j = Math.max(0, i - w); j <= Math.min(n - 1, i + w); j++) { a += amp[j]; c++; }
+      sm[i] = a / c;
+    }
+    const sorted = sm.slice().sort((a, b) => a - b);
+    const th = sorted[Math.min(n - 1, Math.floor(n * HOT_PCT))];
+    if (!(th > 0)) return;
+    const runs = [];
+    let start = -1;
+    for (let i = 0; i < n; i++) {
+      if (sm[i] >= th) { if (start < 0) start = i; }
+      else if (start >= 0) { runs.push([start, i]); start = -1; }
+    }
+    if (start >= 0) runs.push([start, n]);
+    for (const [a, b] of runs) {                      // 短い隙間は繋ぎ、短すぎる山は捨てる
+      const seg = { s: a * HOT_STEP, e: b * HOT_STEP };
+      const last = hot[hot.length - 1];
+      if (last && seg.s - last.e < HOT_GAP) last.e = seg.e;
+      else hot.push(seg);
+    }
+    hot = hot.filter(r => r.e - r.s >= HOT_MIN);
+  }
 
   /** 拍列を小節へ束ねる。頭とお尻の欠けた小節、3 拍未満の小節は捨てる */
   function rebuild() {
@@ -38,9 +88,31 @@ export function createTextAliveSong(player) {
       last: j === bar.beats.length - 1 })));
     duration = (player.video && player.video.duration ? player.video.duration / 1000 : 0)
             || (flat.length ? flat[flat.length - 1].t + 2 : 0);
+    buildHot();
   }
 
   const posSec = () => (player.timer ? player.timer.position / 1000 : 0);
+
+  /* コード名（"Am" / "EM7/F" / "Bb" など）を A4=0 の半音オフセット 3 音へ。
+   * スラッシュコードはベース音を捨てて上物だけを見る（合いの手にはそれで足りる）。*/
+  const PC = { C: 3, D: 5, E: 7, F: 8, G: 10, A: 0, B: 2 };
+  function chordTones(name) {
+    if (!name) return null;
+    const head = String(name).split("/")[0].trim();
+    const m = /^([A-G])([#b]?)(.*)$/.exec(head);
+    if (!m) return null;
+    let root = PC[m[1]] + (m[2] === "#" ? 1 : m[2] === "b" ? -1 : 0);
+    root = ((root % 12) + 12) % 12;
+    const rest = m[3];
+    if (/^sus2/.test(rest)) return [root, root + 2, root + 7];
+    if (/^sus4?/.test(rest)) return [root, root + 5, root + 7];
+    const minor = /^m(?!aj)/.test(rest);
+    const dim = /^(dim|o)/.test(rest);
+    const aug = /^(aug|\+)/.test(rest);
+    const third = minor || dim ? 3 : 4;
+    const fifth = dim ? 6 : aug ? 8 : 7;
+    return [root, root + third, root + fifth];
+  }
 
   return {
     name: "TextAlive",
@@ -59,6 +131,23 @@ export function createTextAliveSong(player) {
       return ans;
     },
     onBeat() { /* 実曲では伴奏を合成しない。拍の音だけを重ねる */ },
+    /** いま鳴っているコード。効果音の音程合わせに使う（findChord） */
+    chordAt(sec) {
+      try {
+        const c = player.findChord(sec * 1000);
+        if (!c) return null;
+        const tones = chordTones(c.name);
+        return tones ? { name: c.name, tones } : null;
+      } catch (e) { return null; }
+    },
+    /** 盛り上がり区間か。findChorus の結果と、ボーカル音量から求めた山のOR。
+     *  ここが true の間は髪型がロング寄りになり、決めポーズが出る */
+    chorusAt(sec) {
+      try { if (player.findChorus(sec * 1000)) return true; } catch (e) { /* 続けて包絡を見る */ }
+      for (const r of hot) if (sec >= r.s && sec < r.e) return true;
+      return false;
+    },
+    hotSections: () => hot.slice(),
     charAt(sec) {
       if (!player.video) return null;
       const c = player.video.findChar(sec * 1000, { loose: true });
