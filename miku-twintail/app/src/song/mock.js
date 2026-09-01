@@ -12,12 +12,16 @@ const CHORD = [[0, 3, 7], [0, 3, 7], [-5, -1, 2], [-5, -1, 2],
 
 export function createMockSong({ bpm = 130, bars = 40 } = {}) {
   const BEAT = 60 / bpm, BAR = BEAT * 4, TOTAL = bars * 4;
-  let startAt = 0;
+  let startAt = 0, pausedAt = null;
+  const now = () => (A.ac ? (pausedAt !== null ? pausedAt : A.ac.currentTime) - startAt : 0);
   return {
     name: `擬似曲（${bpm}BPM / ${bars}小節）`,
-    start() { A.initAudio(); startAt = A.ac.currentTime + 0.2; },
+    start() { A.initAudio(); startAt = A.ac.currentTime + 0.2; pausedAt = null; },
+    /** 止めている間は時計を進めない。再開時に基準時刻を止めていた分だけ後ろへずらす */
+    pause() { if (A.ac && pausedAt === null) pausedAt = A.ac.currentTime; },
+    resume() { if (A.ac && pausedAt !== null) { startAt += A.ac.currentTime - pausedAt; pausedAt = null; } },
     ready: () => true,
-    time: () => (A.ac ? A.ac.currentTime - startAt : 0),
+    time: now,
     atAudio: s => startAt + s,
     beat(k) {
       if (k < 0 || k >= TOTAL) return null;
@@ -26,7 +30,8 @@ export function createMockSong({ bpm = 130, bars = 40 } = {}) {
     bar(i) {
       if (i < 0 || i >= bars) return null;
       const beats = [0, 1, 2, 3].map(j => ({ t: (i * 4 + j) * BEAT, pos: j + 1 }));
-      return { i, beats, tapIdx: 1, tap: beats[1].t, done: beats[3].t, dur: BEAT };
+      // 髪留めは最後の 1 拍前（＝3 拍目）、髪は最後の拍（＝4 拍目）
+      return { i, beats, tieIdx: 2, tap: beats[2].t, done: beats[3].t, dur: BEAT };
     },
     barIndexAt: sec => Math.floor(sec / BAR),
     /** 伴奏。拍の音を邪魔しないよう songGain(0.8) 側で鳴らす */
@@ -50,6 +55,6 @@ export function createMockSong({ bpm = 130, bars = 40 } = {}) {
     chorusAt: sec => Math.floor(sec / (BAR * 4)) % 2 === 1,
     charAt: sec => LYRIC[Math.floor(sec / BEAT * 2) % LYRIC.length],
     vocalAt: sec => 0.5 + 0.5 * Math.sin(sec * 3.1),
-    ended: () => (A.ac ? A.ac.currentTime - startAt : 0) > TOTAL * BEAT + 1.2,
+    ended: () => now() > TOTAL * BEAT + 1.2,
   };
 }

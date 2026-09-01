@@ -8,22 +8,29 @@
  *   time()             再生位置 [sec]
  *   atAudio(songSec)   その曲時刻に対応する AudioContext 時刻
  *   beat(k)            k 番目の拍 {t, pos, bar, dur} | null
- *   bar(i)             i 番目の小節 {i, tap, done, dur, beats} | null
+ *   bar(i)             i 番目の小節 {i, tieIdx, tap, done, dur, beats} | null
+ *   pause() / resume() (任意) 一時停止と再開
  *   barIndexAt(sec)    その時刻の小節番号
  *   onBeat(beat, at)   拍ごとの伴奏（擬似曲のみ実装。実曲では何もしない）
  *   charAt(sec)        発声中の文字 | null
  *   vocalAt(sec)       ボーカル音量 0..1
  *   ended()            曲が終わったか
  *
- * タイミング（四拍子の場合。拍子はアダプタが吸収する）:
- *   2 拍目 … 髪留めをタップ（判定はここ 1 点だけ）＝ 小節の最後から 2 拍前
- *   2→4 拍目 … スライドして髪を伸ばす（お題の髪型の角度・長さに合わせる）
- *   4 拍目 … 髪が生える（離さなくても確定）＝ 小節の最後の拍
- *   1 体 = 2 小節。左右そろった 4 拍目にミク度を判定して背景へ飛ばす。
+ * 房には 2 種類ある。何が飛んでくるかで、叩く拍が変わる。
+ *
+ *   髪留め（□が飛んでくる）… 3 拍目でタップ → 4 拍目までスライド。
+ *                            **なぞった軌跡がそのまま髪の形になる**
+ *   髪   （房が飛んでくる）… 4 拍目でタップするだけ。お題の髪型どおりの
+ *                            綺麗な髪が付く
+ *
+ * 拍子には依存させず「小節の最後の拍＝髪」「その 1 拍前＝髪留め」で定義する。
+ * どちらの房も小節の最後の拍で確定する。1 体 = 2 小節。
+ * いま自分が叩くべき拍の音だけが左右にパンするので、耳でも type が分かる。
  * ========================================================================== */
 import * as A from "./audio.js";
 import { STAGES, stageOf } from "./stages.js";
-import { drawTail, drawGhostTail, drawNegi, drawObject, drawTie, ANCHOR } from "./hair.js";
+import { drawTail, drawGhostTail, drawNegi, drawObject, drawTie, ANCHOR,
+         synthPath, pathFromStroke, pathMetrics } from "./hair.js";
 import { STYLES, CHORUS_STYLES, DIFFICULTY, gradeOf, targetAngle, targetLen as styleLen,
          mikuScore, rankOf, clamp01 } from "./score.js";
 
@@ -44,6 +51,8 @@ export function createGame(canvas, song, opts = {}) {
   const W = canvas.width, H = canvas.height;
   const onFinishSong = opts.onFinishSong || (() => {});
 
+  const onState = opts.onState || (() => {});
+  let state = "menu";                       // menu / playing / paused / results
   let running = false, autoPlay = false, showGuide = false;
   let diff = DIFFICULTY[opts.difficulty] || DIFFICULTY.normal;
   let units = [], slide = null, shimmerGain = null, nextBeat = 0;
@@ -57,7 +66,16 @@ export function createGame(canvas, song, opts = {}) {
   const grade = d => gradeOf(d, diff);
   const finished = new Set(), chain = new Map();
 
+  const setState = v => { if (state !== v) { state = v; onState(v); } };
   const stateOf = a => chain.get(a) || "pending";
+  /** 房 a の種類と叩く拍。偶数房と奇数房で偏らないようハッシュで決める */
+  function slotOf(a) {
+    const b = barOf(a); if (!b) return null;
+    const kind = hash(a * 97 + 13) % 5 < 2 ? "hair" : "tie";   // 4 割が「髪」
+    return kind === "hair"
+      ? { kind, tap: b.done, done: b.done, dur: b.dur }
+      : { kind, tap: b.tap, done: b.done, dur: b.dur };
+  }
   const unitOf = c => units.find(u => u.c === c);
   const barOf = a => song.bar(a);
 
@@ -115,10 +133,14 @@ export function createGame(canvas, song, opts = {}) {
       const at = song.atAudio(b.t);
       if (at > A.ac.currentTime + 0.002) {
         song.onBeat(b, at);
-        const r = tailRef(b.bar), pan = !r ? 0 : (r.side === "L" ? -0.8 : 0.8);
+        const r = tailRef(b.bar), slot = slotOf(b.bar);
+        const side = !r ? 0 : (r.side === "L" ? -1 : 1);
         const bar = song.bar(b.bar), ch = tonesAt(b.t);
-        if (bar && b.pos === bar.beats[bar.tapIdx].pos) A.tieBeat(at, pan, ch); // 髪留め＝ここで打つ
-        else if (b.last) A.hairBeat(at, pan * 0.7, ch);                         // 小節の最後＝髪が生える
+        // 自分が叩く拍だけを左右へパンする。耳だけで「どちら側の・どの拍か」が分かる
+        const isTie = bar && b.pos === bar.beats[bar.tieIdx].pos;
+        const mine = slot && ((isTie && slot.kind === "tie") || (b.last && slot.kind === "hair"));
+        if (isTie) A.tieBeat(at, mine ? side * 0.8 : 0, ch);
+        else if (b.last) A.hairBeat(at, mine ? side * 0.8 : 0, ch);
         else A.click(at, b.pos === 1);
       }
       nextBeat++;
@@ -139,6 +161,7 @@ export function createGame(canvas, song, opts = {}) {
 
   function growNegi(a) {
     const r = tailRef(a); if (!r) return;
+    if (stateOf(a) === "resolved") return;
     chain.set(a, "resolved");
     const na = r.u.negiAnchor;
     const loc = na ? toLocal(r.u, na.x, na.y)
@@ -156,9 +179,9 @@ export function createGame(canvas, song, opts = {}) {
     const near = song.barIndexAt(t);
     let best = null;
     for (const a of [near - 1, near, near + 1]) {
-      const b = barOf(a); if (a < 0 || !b || stateOf(a) !== "pending" || !tailRef(a)) continue;
-      const d = (t - b.tap) / b.dur;
-      if (Math.abs(d) < 0.85 && (!best || Math.abs(d) < Math.abs(best.d))) best = { a, d };
+      const sl = slotOf(a); if (a < 0 || !sl || stateOf(a) !== "pending" || !tailRef(a)) continue;
+      const d = (t - sl.tap) / sl.dur;
+      if (Math.abs(d) < 1.05 && (!best || Math.abs(d) < Math.abs(best.d))) best = { a, d, sl };
     }
     // サビの決めポーズ。房のタップより近ければそちらを取る（拍が 1 つ離れているので競合しない）
     if (kime && !kime.hit) {
@@ -179,37 +202,54 @@ export function createGame(canvas, song, opts = {}) {
                          r.u.negiAnchor = { x: px, y: py }; growNegi(best.a); return; }
     const pan = r.side === "L" ? -0.7 : 0.7;
     chain.set(best.a, "held");
-    A.osc(A.ac.currentTime, 520, "sine", 0.13, 0.1, A.sfxGain, pan);
-    shimmerGain = A.shimmer(A.ac.currentTime, barOf(best.a).dur * 2, pan, tonesAt(t));
     const loc = toLocal(r.u, px, py);
     const wrong = (r.side === "L" ? loc.rx > 0 : loc.rx < 0);
-    slide = { a: best.a, u: r.u, side: r.side, tapGrade: gr, ...loc,
-              x0: px, y0: py, x: px, y: py, chars: [], wrong };
     if (wrong) pop("左右が逆！", "#ff7a8a", px, py - 46);
     pop(gr, GRADE[gr].col, px, py - 26);
+    if (best.sl.kind === "hair") {          // 髪はタップだけで綺麗に付く
+      A.shakin(Math.max(A.ac.currentTime + 0.005, song.atAudio(best.sl.done)), pan, tonesAt(best.sl.done));
+      growHair(best.a, r, loc, gr, null);
+      return;
+    }
+    A.osc(A.ac.currentTime, 520, "sine", 0.13, 0.1, A.sfxGain, pan);
+    shimmerGain = A.shimmer(A.ac.currentTime, best.sl.dur, pan, tonesAt(t));
+    slide = { a: best.a, u: r.u, side: r.side, tapGrade: gr, ...loc, done: best.sl.done,
+              x0: px, y0: py, x: px, y: py, stroke: [{ x: px, y: py }], chars: [], wrong };
   }
-  const onMove = (px, py) => { if (slide) { slide.x = px; slide.y = py; } };
+  const onMove = (px, py) => {
+    if (!slide) return;
+    slide.x = px; slide.y = py;
+    // 軌跡をそのまま髪にするので、動いた分だけ点を足していく
+    const last = slide.stroke[slide.stroke.length - 1];
+    if (Math.hypot(px - last.x, py - last.y) > 3) slide.stroke.push({ x: px, y: py });
+  };
 
-  /** 房を確定する。離しても、離さずに小節の最後を迎えても同じ結果になる */
+  /** 房を生やす。stroke があればその軌跡、無ければお題の髪型どおりの理想曲線 */
+  function growHair(a, r, loc, gr, stroke) {
+    chain.set(a, "resolved");
+    const u = r.u;
+    let pts = stroke ? pathFromStroke(stroke) : null;
+    if (pts) pts = pts.map(q => ({ x: q.x / MAIN_SCALE, y: q.y / MAIN_SCALE }));
+    else pts = synthPath(targetAngle(r.side, u.style), styleLen(u.style, u.obj, 1));
+    const m = pathMetrics(pts);
+    combo++; maxCombo = Math.max(maxCombo, combo);
+    score += Math.round(GRADE[gr].s * 2 * (1 + Math.min(combo, 20) / 20));
+    u.tails[r.side] = { kind: "hair", rx: loc.rx, ry: loc.ry, grade: gr, pts,
+                        angle: m.angle, len: m.len, reach: m.reach, descent: m.descent,
+                        auto: !stroke, quality: GRADE[gr].s / 100,
+                        chars: (slide && slide.a === a ? slide.chars : []).slice(0, 7) };
+  }
+
+  /** 髪留めの房を確定する。離しても、離さずに最後の拍を迎えても同じ結果になる */
   function finalize(s) {
     if (shimmerGain) { shimmerGain.gain.setTargetAtTime(0.0001, A.ac.currentTime, 0.02); shimmerGain = null; }
-    const dx = s.x - s.x0, dy = s.y - s.y0, dist = Math.hypot(dx, dy);
-    if (dist < 14) {                       // 掴んだが伸ばしていない
+    if (Math.hypot(s.x - s.x0, s.y - s.y0) < 14) {   // 掴んだが伸ばしていない
       pop("伸びてない", "#ff7a8a", s.x, s.y);
       s.u.negiAnchor = { x: s.x0, y: s.y0 }; growNegi(s.a); return;
     }
-    chain.set(s.a, "resolved");
-    const b = barOf(s.a);
-    A.shakin(Math.max(A.ac.currentTime + 0.005, song.atAudio(b.done)),
-             s.side === "L" ? -0.6 : 0.6, tonesAt(b.done));
-    combo++; maxCombo = Math.max(maxCombo, combo);
-    score += Math.round(GRADE[s.tapGrade].s * 2 * (1 + Math.min(combo, 20) / 20));
-    // 房の長さは「お題ローカル座標」で持つ（rx/ry と同じ土俵）。
-    // 画面へ描くときも背景へ縮小するときも drawTail 側で倍率を掛けるので、
-    // ここで画面ピクセルのまま持つと本体サイズのぶん二重に拡大されてしまう。
-    s.u.tails[s.side] = { kind: "hair", rx: s.rx, ry: s.ry, grade: s.tapGrade,
-                          angle: Math.atan2(dy, dx), len: Math.min(dist, 380) / MAIN_SCALE,
-                          quality: GRADE[s.tapGrade].s / 100, chars: s.chars.slice(0, 7) };
+    A.shakin(Math.max(A.ac.currentTime + 0.005, song.atAudio(s.done)),
+             s.side === "L" ? -0.6 : 0.6, tonesAt(s.done));
+    growHair(s.a, { u: s.u, side: s.side }, { rx: s.rx, ry: s.ry }, s.tapGrade, s.stroke);
   }
   const onUp = () => { if (slide) { const s = slide; slide = null; finalize(s); } };
 
@@ -231,12 +271,14 @@ export function createGame(canvas, song, opts = {}) {
                    miku: m.total, rank: r, detail: m, seed: gallery.length,
                    x: 62 + rnd01(u.c * 5.1 + 0.3) * (W - 124),
                    y: 74 + rnd01(u.c * 9.3 + 0.7) * 330,
-                   s: 0.30 + rnd01(u.c * 2.4) * 0.13,
+                   // 大きさは体ごとにばらす。並んだときに「同じ縮尺で整列」に見えない
+                   s: 0.40 + rnd01(u.c * 2.4) * 0.28,
+                   sJitter: 0.82 + rnd01(u.c * 6.7 + 2.1) * 0.36,
                    fromX: p.x, fromY: p.y, fromS: p.scale, flyT: song.time() });
   }
 
   function endSong() {
-    running = false;
+    running = false; clearInterval(timer); timer = null; setState("results");
     const n = gallery.length || 1;
     results = { total: score, mikus: gallery.length, maxCombo, kime: kimeHits, difficulty: diff.name,
                 avg: Math.round(gallery.reduce((a, b) => a + b.miku, 0) / n),
@@ -256,16 +298,18 @@ export function createGame(canvas, song, opts = {}) {
     // 置き損ね → ネギ
     const nb = song.barIndexAt(t);
     for (let a = Math.max(0, nb - 1); a <= nb; a++) {
-      const b = barOf(a);
-      if (b && stateOf(a) === "pending" && tailRef(a) && t > b.tap + b.dur * diff.window + 0.02) growNegi(a);
+      const sl = slotOf(a);
+      if (sl && stateOf(a) === "pending" && tailRef(a) && t > sl.tap + sl.dur * diff.window + 0.02) growNegi(a);
     }
     if (kime && t > kime.t + kime.dur * diff.window) kime = null;   // 逃しても罰はない
-    if (slide) { const b = barOf(slide.a);
+    if (slide) {
       const ch = song.charAt(t);
       if (ch && slide.chars[slide.chars.length - 1] !== ch) slide.chars.push(ch);
-      if (b && t >= b.done) { const s2 = slide; slide = null; finalize(s2); } }
+      if (t >= slide.done) { const s2 = slide; slide = null; finalize(s2); }
+    }
+    // 「髪」の房は最後の拍がそのまま判定拍なので、その窓が閉じるまで完成を待つ
     for (const u of units) { const b = barOf(u.c * 2 + 1);
-      if (!u.judged && b && t >= b.done + b.dur * 0.25) finish(u); }
+      if (!u.judged && b && t >= b.done + b.dur * (diff.window + 0.12)) finish(u); }
     units = units.filter(u => !u.judged);
     if (autoPlay) autoTick(t);
     if (song.ended()) endSong();
@@ -277,41 +321,49 @@ export function createGame(canvas, song, opts = {}) {
     if (!slide) {
       const nb = song.barIndexAt(t);
       for (const a of [nb - 1, nb, nb + 1]) {
-        const b = barOf(a); if (a < 0 || !b || stateOf(a) !== "pending") continue;
+        const sl = slotOf(a); if (a < 0 || !sl || stateOf(a) !== "pending") continue;
         const r = tailRef(a); if (!r) continue;
-        if (t >= b.tap && t < b.tap + b.dur * 0.35) {
+        if (t >= sl.tap && t < sl.tap + sl.dur * 0.3) {
           const anc = anchorOf(r.u, r.side); onDown(anc.x, anc.y); break;
         }
       }
     }
-    if (slide) {
-      const b = barOf(slide.a), u = slide.u;
-      const p = clamp01((t - b.tap) / (b.done - b.tap));
-      const ang = targetAngle(slide.side, u.style), len = targetLen(u) * p;
-      onMove(slide.x0 + Math.cos(ang) * len, slide.y0 + Math.sin(ang) * len);
+    if (slide) {                       // お題の理想曲線をなぞる
+      const u = slide.u, sl = slotOf(slide.a);
+      const p = clamp01((t - (sl.done - sl.dur)) / sl.dur);
+      const ideal = synthPath(targetAngle(slide.side, u.style), targetLen(u));
+      const i = Math.min(ideal.length - 1, Math.round(p * (ideal.length - 1)));
+      onMove(slide.x0 + ideal[i].x, slide.y0 + ideal[i].y);
     }
   }
 
   /* ---- 描画 ------------------------------------------------------------ */
+  /** 飛んでくるもの。**髪留め（□だけ）か、髪そのものか**で見た目を変える。
+   *  何が来るかで叩く拍が決まるので、ここが最大の情報源になる */
   function drawApproach(a, t) {
     if (stateOf(a) !== "pending") return;
-    const r = tailRef(a), b = barOf(a); if (!r || !b) return;
-    const left = (b.tap - t) / b.dur;
+    const r = tailRef(a), sl = slotOf(a); if (!r || !sl) return;
+    const left = (sl.tap - t) / sl.dur;
     if (left > 3.1 || left < -0.6) return;
     const e = smooth(1 - left / 3);
     const anc = anchorOf(r.u, r.side), out = r.side === "L" ? -1 : 1;
     const d = (1 - e) * 330, x = anc.x + out * d, y = anc.y - d * 0.42;
     g.save(); g.globalAlpha = 0.3 + 0.7 * e;
-    drawTail(g, x, y, { angle: Math.atan2(1, out * 0.55), len: 30 + 34 * e, quality: 0 },
-             t, 0.2 + 0.22 * e);
-    drawTie(g, x, y, -Math.PI / 2 + out * 0.42, 0.82 + 0.3 * e);
+    if (sl.kind === "hair") {                 // 髪が飛んでくる＝タップだけで付く
+      const len = (30 + 60 * e);
+      drawTail(g, x, y, { pts: synthPath(targetAngle(r.side, r.u.style), len), quality: 0.5 },
+               t, 0.35 + 0.4 * e);
+    } else {                                  // 髪留めが飛んでくる＝タップして伸ばす
+      drawTie(g, x, y, -Math.PI / 2 + out * 0.42, 0.9 + 0.35 * e);
+    }
     if (left < 0.6) {
-      g.globalAlpha = 1; g.strokeStyle = "#ffe66d"; g.lineWidth = 3;
+      g.globalAlpha = 1;
+      g.strokeStyle = sl.kind === "hair" ? "#7fe8e0" : "#ffe66d"; g.lineWidth = 3;
       g.beginPath(); g.arc(x, y, 20 + Math.abs(left) * 22, 0, 7); g.stroke();
     }
     if (showGuide) {
       g.globalAlpha = 1; g.fillStyle = "#ffe66d"; g.font = "bold 13px sans-serif"; g.textAlign = "center";
-      g.fillText(r.side === "L" ? "◀ 左" : "右 ▶", x, y - 26);
+      g.fillText((r.side === "L" ? "◀ 左" : "右 ▶") + (sl.kind === "hair" ? " 押すだけ" : " 伸ばす"), x, y - 26);
     }
     g.restore();
   }
@@ -321,10 +373,11 @@ export function createGame(canvas, song, opts = {}) {
     for (const side of ["L", "R"]) {
       if (u.tails[side]) continue;
       const a = u.c * 2 + u.order.indexOf(side);
-      const b = barOf(a); if (!b || t > b.done + b.dur * 0.2) continue;
+      const sl = slotOf(a); if (!sl || t > sl.done + sl.dur * 0.2) continue;
+      if (sl.kind === "hair") continue;      // タップだけの房は狙う必要がない
       const holding = !!(slide && slide.a === a);
       if (diff.guide === "slide" && !holding) continue;
-      if (diff.guide === "approach" && !holding && t < b.tap - b.dur * 2.2) continue;
+      if (diff.guide === "approach" && !holding && t < sl.tap - sl.dur * 2.2) continue;
       let ax, ay;
       if (slide && slide.a === a) { ax = slide.x0; ay = slide.y0; }
       else { const anc = anchorOf(u, side); ax = anc.x; ay = anc.y; }
@@ -338,17 +391,22 @@ export function createGame(canvas, song, opts = {}) {
     const stage = (units[0] && units[0].stage) || STAGES[0];
     stage.draw(g, W, H, t);
 
-    if (!running && !results) {
+    if (state === "menu") {
       g.fillStyle = "#7fe8e0"; g.font = "bold 20px sans-serif"; g.textAlign = "center";
-      g.fillText(song.ready() ? "▶ スタート を押す" : "楽曲を読み込み中……", W / 2, H / 2 - 10);
+      g.fillText(song.ready() ? "▶ スタート を押す" : "楽曲を読み込み中……", W / 2, H / 2 - 34);
       g.fillStyle = "#cfe6ea"; g.font = "13px sans-serif";
-      g.fillText("2拍目で髪留めをタップ → お題の髪型どおりに伸ばす → 4拍目で髪が生える", W / 2, H / 2 + 20);
+      g.fillText("□ 髪留めが飛んできたら … タップして、次の拍まで指でなぞる", W / 2, H / 2 - 2);
+      g.fillText("　　　　　　　　　　　　 なぞった線がそのまま髪になります", W / 2, H / 2 + 20);
+      g.fillText("〜 髪が飛んできたら 　 … その拍でタップするだけ", W / 2, H / 2 + 46);
+      g.fillStyle = "#8fa6ae"; g.font = "12px sans-serif";
+      g.fillText("叩く拍の音だけが左右にパンします（ヘッドホン推奨）", W / 2, H / 2 + 76);
       requestAnimationFrame(render); return;
     }
 
     // 背景: これまでのミクたち（完成した位置から飛んでいく）
-    // 課題曲 1 曲で 50〜80 体たまるので、増えるほど全体を縮めて画面に収める
-    const shrink = Math.min(1, Math.sqrt(26 / (gallery.length + 14)));
+    // 課題曲 1 曲で 50〜80 体たまるので、増えるほど全体を縮めて画面に収める。
+    // 縮め方は体ごとに ±18% ばらつかせ、遠近のある群れに見せる
+    const shrink = Math.min(1.15, Math.sqrt(34 / (gallery.length + 12)));
     // 称号は「今の最高記録の 1 体」にだけ出す（全部に出すと文字だらけになる）
     let bestIdx = -1, bestMiku = -1;
     gallery.forEach((it, i) => { if (it.miku >= bestMiku) { bestMiku = it.miku; bestIdx = i; } });
@@ -358,7 +416,7 @@ export function createGame(canvas, song, opts = {}) {
       const bob = Math.sin(t * 1.9 + it.seed) * 2.6;
       const x = it.fromX + (it.x - it.fromX) * fly;
       const y = it.fromY + (it.y + bob - it.fromY) * fly;
-      const s = it.fromS + (it.s * shrink - it.fromS) * fly;
+      const s = it.fromS + (it.s * shrink * (it.sJitter || 1) - it.fromS) * fly;
       if (it.rank.glow > 0) {                 // 良い記録はあとからも分かるよう淡く光る
         const k = it.rank.glow;
         const pulse = 0.72 + 0.28 * Math.sin(t * 2.4 + it.seed * 1.7);
@@ -398,14 +456,14 @@ export function createGame(canvas, song, opts = {}) {
       const ph = bar.dur ? ((t - bar.tap) / bar.dur % 1 + 1) % 1 : 0;
       bar.beats.forEach((b, i) => {
         const on = i === pos;
-        const col = i === bar.tapIdx ? "#ffe66d" : i === bar.beats.length - 1 ? "#ff8fc0" : "#39c5bb";
-        const dim = i === bar.tapIdx ? "#4a4326" : i === bar.beats.length - 1 ? "#4a2a3a" : "#243039";
+        const col = i === bar.tieIdx ? "#ffe66d" : i === bar.beats.length - 1 ? "#ff8fc0" : "#39c5bb";
+        const dim = i === bar.tieIdx ? "#4a4326" : i === bar.beats.length - 1 ? "#4a2a3a" : "#243039";
         g.fillStyle = on ? col : dim;
         g.beginPath(); g.arc(36 + i * 26, 30, on ? 10 - ph * 2 : 6, 0, 7); g.fill();
       });
     }
     g.fillStyle = "#9fb6bd"; g.font = "11px sans-serif"; g.textAlign = "left";
-    g.fillText("黄=髪留めをタップ → 桃=髪が生える（小節の最後の拍）", 200, 34);
+    g.fillText("□が来たら黄でタップ→伸ばす／房が来たら桃でタップだけ", 200, 34);
     if (chorusAt(t)) {                       // サビ: 光って、髪型がロング寄りになる
       const pulse = 0.55 + 0.45 * Math.sin(t * 4.2);
       g.fillStyle = `rgba(255,143,192,${0.45 + 0.55 * pulse})`;
@@ -441,16 +499,16 @@ export function createGame(canvas, song, opts = {}) {
         g.restore();
       }
     }
-    // スライド中の星（歌詞の文字が流れ込む）
+    // スライド中は、なぞった軌跡をそのまま髪として見せる（確定後もこの形が残る）
     if (slide) {
-      const sp = unitPos(slide.u, t);
-      const sx = sp.x + slide.rx * sp.scale, sy = sp.y + slide.ry * sp.scale;
-      g.strokeStyle = "rgba(127,232,224,.5)"; g.lineWidth = 3;
-      g.beginPath(); g.moveTo(sx, sy); g.lineTo(slide.x, slide.y); g.stroke();
+      const pv = pathFromStroke(slide.stroke);
+      if (pv) drawTail(g, slide.stroke[0].x, slide.stroke[0].y,
+                       { pts: pv, quality: 0.6, chars: slide.chars.slice(0, 7) }, t, 0.85, 1);
       const src = slide.chars.length ? slide.chars : ["ミ", "ク"];
-      for (let i = 0; i < 9; i++) {
-        const u = (i + (t * 2.4 % 1)) / 9;
-        g.fillStyle = `rgba(255,246,190,${1 - u})`; g.font = `${14 - u * 4}px sans-serif`;
+      const sx = slide.x0, sy = slide.y0;
+      for (let i = 0; i < 7; i++) {          // 歌詞の星が指先へ流れ込む
+        const u = (i + (t * 2.4 % 1)) / 7;
+        g.fillStyle = `rgba(255,246,190,${1 - u})`; g.font = `${15 - u * 5}px sans-serif`;
         g.textAlign = "center";
         g.fillText(src[(i + Math.floor(t * 6)) % src.length],
                    sx + (slide.x - sx) * u, sy + (slide.y - sy) * u);
@@ -462,6 +520,17 @@ export function createGame(canvas, song, opts = {}) {
       const u = (t - e.t) / .7;
       g.globalAlpha = 1 - u; g.fillStyle = e.col; g.font = "bold 17px sans-serif";
       g.fillText(e.text, e.x, e.y - u * 26); g.globalAlpha = 1;
+    }
+    if (state === "paused") {                 // 一時停止。操作は DOM 側のボタンで受ける
+      g.fillStyle = "rgba(8,14,18,.72)"; g.fillRect(0, 0, W, H);
+      g.textAlign = "center";
+      g.fillStyle = "#ffe66d"; g.font = "bold 34px sans-serif";
+      g.fillText("一時停止中", W / 2, H / 2 - 24);
+      g.fillStyle = "#cfe6ea"; g.font = "14px sans-serif";
+      g.fillText(`SCORE ${score}　／　ミク ${gallery.length} 体　／　MAX COMBO ${maxCombo}`, W / 2, H / 2 + 10);
+      g.fillStyle = "#8fa6ae"; g.font = "12px sans-serif";
+      g.fillText("下のボタンで「再開」または「メニューへ戻る」", W / 2, H / 2 + 40);
+      requestAnimationFrame(render); return;
     }
     if (flash && t - flash.t < 1.2) {
       const u = (t - flash.t) / 1.2, s = 1 + (1 - Math.min(1, u * 5)) * .5;
@@ -494,7 +563,8 @@ export function createGame(canvas, song, opts = {}) {
       g.textAlign = "right"; g.fillStyle = "#e6f7f5";
       g.fillText(`ミク度 ${it.miku}  ${it.rank.label}`, W / 2 + 130, y);
       g.textAlign = "left"; g.fillStyle = "#6d848d"; g.font = "11px sans-serif";
-      g.fillText(`拍${it.detail.rhythm} 角${it.detail.ang} 位${it.detail.place} 対${it.detail.sym} 長${it.detail.len}`
+      g.fillText(`拍${it.detail.rhythm} 角${it.detail.ang} 形${it.detail.twin} `
+                 + `位${it.detail.place} 対${it.detail.sym} 長${it.detail.len}`
                  + (it.detail.penalty ? ` −${it.detail.penalty}` : ""), W / 2 + 150, y);
     });
     g.textAlign = "center"; g.fillStyle = "#8fa6ae"; g.font = "12px sans-serif";
@@ -513,6 +583,16 @@ export function createGame(canvas, song, opts = {}) {
   canvas.addEventListener("pointercancel", onUp);
 
   let timer = null;
+  /** 一時停止。予約済みの音が鳴り続けないよう出力ごと絞り、曲も止める */
+  function pauseAudio(on) {
+    if (!A.ac || !A.master) return;
+    A.master.gain.setTargetAtTime(on ? 0.0001 : A.MASTER_GAIN, A.ac.currentTime, 0.02);
+  }
+  /** 再開時に、いま以降の拍を鳴らし直せるよう予約位置を巻き戻す */
+  function resyncBeats() {
+    const t = song.time();
+    while (nextBeat > 0) { const b = song.beat(nextBeat - 1); if (b && b.t >= t) nextBeat--; else break; }
+  }
   const api = {
     start() {
       A.unlockAudio();
@@ -520,13 +600,45 @@ export function createGame(canvas, song, opts = {}) {
       score = 0; combo = 0; maxCombo = 0; flash = null; effects = [];
       nextBeat = 0; kime = null; kimeHits = 0; finished.clear(); chain.clear();
       if (song.start) song.start();
+      pauseAudio(false);
+      setState("playing");
       clearInterval(timer); timer = setInterval(tick, 16);
     },
     stop() { running = false; clearInterval(timer); timer = null; },
+    pause() {
+      if (state !== "playing") return false;
+      running = false; clearInterval(timer); timer = null;
+      // 伸ばしかけの房は、そこまで描けていれば確定。まだ短ければ
+      // お題どおりの髪を付けて終える（一時停止した人を罰しない）
+      if (slide) {
+        const s2 = slide; slide = null;
+        if (Math.hypot(s2.x - s2.x0, s2.y - s2.y0) >= 14) finalize(s2);
+        else growHair(s2.a, { u: s2.u, side: s2.side }, { rx: s2.rx, ry: s2.ry }, s2.tapGrade, null);
+      }
+      pauseAudio(true);
+      if (song.pause) song.pause();
+      setState("paused"); return true;
+    },
+    resume() {
+      if (state !== "paused") return false;
+      if (song.resume) song.resume();
+      resyncBeats(); pauseAudio(false);
+      running = true; setState("playing");
+      clearInterval(timer); timer = setInterval(tick, 16);
+      return true;
+    },
+    /** 一時停止からメニューへ。曲は止めたまま、成果は捨てる */
+    toMenu() {
+      api.reset(); pauseAudio(false);
+      if (song.pause) song.pause();
+      setState("menu");
+    },
+    state: () => state,
     /** 曲が差し替わったら、曲に紐づく状態を全部捨てる */
     reset() { api.stop(); units = []; gallery = []; slide = null; results = null;
-              nextBeat = 0; kime = null; kimeHits = 0;
-              finished.clear(); chain.clear(); score = 0; combo = 0; },
+              nextBeat = 0; kime = null; kimeHits = 0; flash = null; effects = [];
+              finished.clear(); chain.clear(); score = 0; combo = 0; maxCombo = 0;
+              setState("menu"); },
     setDifficulty(k) { if (DIFFICULTY[k]) diff = DIFFICULTY[k]; return diff.name; },
     difficulty: () => diff,
     toggleAuto() { if (!running) api.start(); autoPlay = !autoPlay; return autoPlay; },
@@ -540,6 +652,7 @@ export function createGame(canvas, song, opts = {}) {
         order: u.order.join(""), w: u.obj.w, h: u.obj.h, cx: W / 2, cy: settledY(u),
         ang: { L: targetAngle("L", u.style), R: targetAngle("R", u.style) }, len: targetLen(u),
         bars: [song.bar(u.c * 2), song.bar(u.c * 2 + 1)],
+        slots: [slotOf(u.c * 2), slotOf(u.c * 2 + 1)],
         tails: ["L", "R"].map(k => u.tails[k] ? u.tails[k].kind[0] : "-").join("") })) }),
     galleryDump: () => gallery.map(x => ({ stage: x.stage.name, obj: x.obj.name, style: x.style.name,
       chorus: !!x.chorus, miku: x.miku, label: x.rank.label, detail: x.detail })),
