@@ -193,6 +193,28 @@ pitfalls:
     verified: 2026-08-31 (typing-game build 21)
     refs: [typing-game/prototype/textalive.html]
 
+  - id: silent-patch-failure
+    symptom: >
+      仕様変更を実装したはずなのに、挙動が古いまま。コードを読むと直っているように
+      見えるが、実ファイルには反映されていない。原因の切り分けが「ロジックの誤り」へ
+      逸れて時間を溶かす。
+    cause: >
+      単一ファイルの大きなプロトタイプを sed / python の文字列置換で編集するとき、
+      置換元の文字列が（過去の別パッチで）1文字でも変わっていると、
+      str.replace は例外を出さず「何もせず成功」する。
+      置換が積み重なるほど、どのパッチが当たったか分からなくなる。
+    solution: >
+      置換は必ず成否を検査する。python なら
+        if old not in s: sys.exit("FAILED: " + label)
+      を全置換に付け、適用したラベルを出力する。
+      仕上げに、変更したはずの値を grep で実測して確認する
+      （例: grep -o 'dist < 14' file）。
+      「直したつもり」を潰すのはコードの読み直しではなく、ファイルの実測。
+    detection: >
+      期待した挙動にならないとき、まず該当箇所を grep して実ファイルの値を見る。
+      ログを仕込んで「呼ばれるはずの関数が呼ばれていない」ことを先に確定させると速い。
+    verified: 2026-08-31 (miku-twintail build 5。離し忘れ判定の削除が2度silentに失敗していた)
+    refs: [miku-twintail/app/src/game/core.js]
   - id: pages-unreachable-from-sandbox
     symptom: >
       デプロイ後の反映確認のために sandbox から公開 URL(*.github.io)を curl すると

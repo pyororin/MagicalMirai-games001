@@ -111,6 +111,19 @@ Debugger（ホスト）が曲やシーク位置をアプリに指示してくる
 - **クレジット**: TextAlive App API（産総研）と Songle の利用、および楽曲の著作権が
   各権利者に帰属することを画面に明示する（ライセンス要件）。
 
+## 4.6 拍を譜面として使う（本企画の実装）
+
+- 拍の全列は **`player.data.getBeats()`** で取る。`player.data.beats`（プロパティ）は
+  空のままのことがある（`ontology/textalive.yaml` の `player-data-beats-is-empty`）。
+- `IBeat.position === 1` を境目に小節へ束ねる。`IBeat.length` が小節の拍数。
+- **課題曲は四拍子とは限らない**（2025 年は「ロンリーラン」が 6 拍子）。
+  拍数を数えず「小節の最後の拍」「その 2 拍前」で譜面を定義すると、
+  どの拍子でも操作区間が 2 拍に保たれる
+  （`ontology/textalive.yaml` の `contest-songs-are-not-all-4-4`）。
+- 効果音を Web Audio で拍に重ねるときは、曲時刻 → AudioContext 時刻の換算を
+  `ac.currentTime + (曲時刻 − player.timer.position/1000)` で毎回取り直す。
+  先読みは 0.3 秒以内に収めればドリフトは気にならない。
+
 ## 5. 応募時の注意（例年の要件から）
 
 - アプリは URL で公開して応募する（GitHub Pages / Netlify 等）。ソースコード公開も例年求められる。
