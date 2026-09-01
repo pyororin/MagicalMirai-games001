@@ -5,45 +5,75 @@
 黄色いタイヤのホイールに緑のホースを巻き付けるとミクに見える——
 「ミクっぽさ」は少数の記号（ツインテール・青緑・シルエット）に宿る、という観察をゲームにします。
 
-プレイヤーは楽曲再生中、**まったく別の造形物**（ホイール、炊飯器、信号機……）に
-ツインテールを 2 本「生やして」いき、サビで **ミク度** が採点されます。
+**リズムに合わせて、日常のものにツインテールを生やす**ゲームです。
+四拍子なら 2 拍目で髪留めをタップし、お題の髪型どおりに伸ばして 4 拍目で髪を生やす。
+左右そろうと**ミク度**が判定され、そのミクが背景に並んでいきます。
+曲が終わるころには、画面が**ミクだらけ**になっています。
 
-ただの視覚ギャグ（出落ち）で終わらせないための核となる設計は一つ:
+ただの視覚ギャグ（出落ち）で終わらせないための核は 2 つ:
 
-> **ツインテールは「歌声」からしか生えない。**
-> 歌詞の文字が髪の毛としてストロークに沿って流れ込み、
-> ボーカル音量が髪を揺らし、ビートに合った操作だけが髪を定着させる。
+> **1. 譜面は曲そのもの。** 拍・小節・歌詞・尺はすべて TextAlive App API の実データ。
+> 曲が変われば譜面も尺も難度も変わる。作り込んだ譜面データは 1 つも持たない。
+>
+> **2. 「どちら側か」は耳でしか分からない。** 髪留めの合図音は付ける側にステレオ定位する。
+> 目で見て打つことはできず、左右を取り違えるとミク度が大きく下がる。
 
-つまり「声がミクのかたちを作る」——タイトルの逆説（本体はツインテール）を、
-プレイを通じて「本体は歌声だった」に反転させる構造です。
+## 遊ぶ（公開デモ）
+
+- **実曲版（本命 / TextAlive 接続）**: https://pyororin.github.io/MagicalMirai-games001/miku-twintail/
+  - `?song=0`〜`?song=5` で課題曲を直接指定できます
+- **擬似曲版（通信・トークン不要）**: https://pyororin.github.io/MagicalMirai-games001/miku-twintail/mock.html
+  - `?bars=8&bpm=100` で尺とテンポを変えられます
+
+遊び方: ▶ スタート → 拍が鳴りはじめたら、**黄色く光る拍**で髪留めをタップし、
+そのまま**黄色い破線（お題の髪型）どおりに**指を滑らせる。**桃色の拍**で髪が生えます。
+指は離しても離さなくてもかまいません。タップを外すと**ネギ**が生えます。
+左右は**音の定位**で示されるのでヘッドホン推奨。
 
 ## ドキュメント
 
 | ファイル | 内容 |
 | --- | --- |
+| [docs/DESIGN.md](docs/DESIGN.md) | 企画・設計書（基本ループ、**ミク度の厳密な定義**、ステージとお題、TextAlive 活用、枯れた技術の水平思考） |
 | [docs/MARKET_RESEARCH.md](docs/MARKET_RESEARCH.md) | 市場調査（コンテスト動向・類似作・文化的文脈） |
-| [docs/DESIGN.md](docs/DESIGN.md) | 企画・設計書（ゲームフロー、ミク度採点、TextAlive API 活用、枯れた技術の水平思考） |
-| [docs/TEXTALIVE_DEV.md](docs/TEXTALIVE_DEV.md) | TextAlive App API 開発ガイド（トークン取得、組み込みコード、Debugger での動作確認、モック移行対応表） |
-| [prototype/index.html](prototype/index.html) | 採点ロジックと髪物理の検証用モック（単体 HTML、依存なし） |
-| [app/](app/) | P1: TextAlive App API 接続版（Vite。課題曲の実ビート・実歌詞・実ボーカル音量で動作、サビで自動判定） |
+| [docs/TEXTALIVE_DEV.md](docs/TEXTALIVE_DEV.md) | TextAlive App API 開発ガイド（トークン取得、組み込み、Debugger での確認） |
+| [../ontology/textalive.yaml](../ontology/textalive.yaml) | TextAlive / Songle で躓いた点の集約（症状から引ける） |
 
-## 遊ぶ（公開デモ）
-
-- **TextAlive 接続版（実曲で動く本命）**: https://pyororin.github.io/MagicalMirai-games001/miku-twintail/
-- 検証モック（擬似曲・依存なし）: https://pyororin.github.io/MagicalMirai-games001/miku-twintail/prototype/
-
-遊び方: ♪再生 → ミクが歌っている間（VOCAL 点灯中）にドラッグしてツインテールを 2 本描く。
-描いている間に歌われた歌詞が髪になり、タップ中はコードトーンの合いの手が鳴る。
-タップ・リリースが拍に合うと「ハリ・ツヤ」が上がり、サビ突入でミク度が自動判定される。
-
-## モックの動かし方
+## 構成 — 擬似曲版と実曲版で同じゲーム本体を使う
 
 ```
-open miku-twintail/prototype/index.html   # ブラウザで開くだけ
+app/src/game/     ゲーム本体
+  stages.js         ステージ 4 種 × お題 24 種（背景と描画）
+  score.js          ミク度の定義（純関数。Node からも検証できる）
+  hair.js           髪の経路と描画（髪型ごとに角度・長さが変わる）
+  audio.js          拍の音・効果音・掛け声（Web Speech）
+  core.js           状態機械と描画ループ
+app/src/song/     ソングアダプタ（楽曲へ触る唯一の口）
+  mock.js           擬似曲（130BPM を自前合成）
+  textalive.js      実曲（TextAlive App API）
+app/index.html    実曲版      app/mock.html  擬似曲版
+prototype/        v1（自由描画版）の参考モック
 ```
 
-- ドラッグでホイールにツインテールを 2 本描く（擬似ボーカル中のみ描画可能）
-- 描いた髪は擬似ビート・擬似ボーカル音量で揺れる
-- 「ミク度判定」で対称性・つむじ位置・長さ比から採点
+`core.js` は楽曲をアダプタ越しにしか触りません
+（契約は `ready / time / atAudio / beat / bar / barIndexAt / onBeat / charAt / vocalAt / ended`）。
+モックで詰めた手触りが、そのまま実曲版の手触りになります。
 
-TextAlive App API には未接続の、採点式と手触りの検証用です。
+## 開発
+
+```sh
+cd miku-twintail/app
+npm ci
+npm run dev        # http://localhost:5173/           実曲版
+                   # http://localhost:5173/mock.html  擬似曲版
+npm run build      # dist/ に両ページを出力
+```
+
+ホスト接続（TextAlive App Debugger）での確認は [docs/TEXTALIVE_DEV.md](docs/TEXTALIVE_DEV.md) §3 を参照。
+
+## クレジット
+
+楽曲情報・歌詞の解析データは [TextAlive App API](https://developer.textalive.jp/)（産業技術総合研究所）と
+[Songle](https://songle.jp/) を利用しています。楽曲の著作権は各権利者に帰属します。
+「ミク！」の掛け声はブラウザの音声合成（Web Speech API）によるもので、
+**初音ミクの音声素材は使用していません**。

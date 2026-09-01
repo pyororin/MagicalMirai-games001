@@ -5,7 +5,7 @@ name: Deploy app to GitHub Pages
 # 他企画のディレクトリを保持するため destination_dir でサブディレクトリに配置する。
 on:
   push:
-    branches: [main, claude/magical-miku-contest-proposal-r37lcw]
+    branches: [main, claude/magical-miku-contest-proposal-r37lcw, claude/miku-rhythm-redesign-r37lcw]
     paths:
       - "miku-twintail/**"
       - ".github/workflows/pages.yml"
@@ -35,6 +35,7 @@ jobs:
       - name: Collect static files
         run: |
           mkdir -p _site/prototype
+          # dist には実曲版 index.html と擬似曲版 mock.html の両方が入る
           cp -r miku-twintail/app/dist/* _site/
           cp miku-twintail/prototype/index.html _site/prototype/
       - uses: peaceiris/actions-gh-pages@v4

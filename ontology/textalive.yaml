@@ -368,3 +368,57 @@ pitfalls:
       どちらも onVideoReady 後なら同期的に引ける（描画ループから毎フレーム呼んで問題ない）。
     verified: 2026-08-31 (typing-game build 11、ロンリーランで beat 300ms/6拍を確認)
     refs: [typing-game/prototype/textalive.html]
+
+  - id: player-data-beats-is-empty
+    symptom: >
+      player.data.beats が常に空配列。型定義には readonly beats: IBeat[] があるので
+      「拍データが来ていない」と誤診し、ネットワークやトークンを疑って迷走する。
+    cause: >
+      v0.5.2 の実データは player.data.songMap.beats に入っており、
+      player.data.beats（プロパティ）は空のままになる場合がある。
+      公開 API は player.data.getBeats()（と player.findBeat(ms)）。
+    solution: >
+      拍の全列が欲しいときは player.data.getBeats() を使う。
+      防御的に書くなら
+        const bs = (d && (typeof d.getBeats === "function" ? d.getBeats() : d.beats)) || [];
+      なお getBeats() は曲の切り替え中に undefined を返すことがあるので || [] を必ず付ける。
+    detection: >
+      player.data.songMap.beats.length と player.data.beats.length を並べて出す。
+      前者だけ 800 件などになっていればこれ。
+    verified: 2026-09-01 (miku-twintail、課題曲6曲すべてで getBeats() は取得成功)
+    refs: [miku-twintail/app/src/song/textalive.js]
+
+  - id: contest-songs-are-not-all-4-4
+    symptom: >
+      「四拍子の 4 拍目で操作」といった譜面設計が、特定の曲だけ間延びする / 合わない。
+    cause: >
+      課題曲は四拍子とは限らない。2025 年課題曲では
+      「ロンリーラン / 海風太陽」が IBeat.length === 6（6 拍子・1拍 300ms）で、
+      他の 5 曲は 4 拍子だった。曲頭・曲尾には端数の小節（length 3 や 4）も混ざる。
+    solution: >
+      拍数を数えず「小節内の相対位置」で定義する。例:
+        確定 = 小節の最後の拍 / 操作 = その 2 拍前
+      こうすると四拍子では「4拍目・2拍目」に一致し、6 拍子でも 3 拍子でも
+      操作区間がきっかり 2 拍に保たれる。
+      小節は IBeat.position === 1 を境目に束ね、3 拍未満の端数小節は捨てる。
+    detection: >
+      player.data.getBeats() の length を集計する（{4: 1, 6: 134} のような分布が出る）。
+    verified: 2026-09-01 (miku-twintail、課題曲6曲の拍子・小節数を実測)
+    refs: [miku-twintail/app/src/song/textalive.js, miku-twintail/docs/DESIGN.md]
+
+  - id: media-failure-fires-onpause
+    symptom: >
+      ヘッドレスや中継プロキシ越しの自動テストで、ゲームが数秒だけ動いて静かに止まる。
+      例外は出ない。ロジックのバグに見える。
+    cause: >
+      楽曲の音源が読めない（"Failed to load because no supported source was found"）と
+      Player が onPause / onStop を発火する。「ホストの再生に追従する」ために
+      onPause で進行を止める作りだと、そこで正しく停止してしまう。
+    solution: >
+      テストでは曲時刻を偽の時計に差し替えて（song.time を上書きして）
+      ゲームループだけを回し、拍データ由来の進行を検証する。
+      アプリ側は正しいので直さない——これはテスト環境の制約だと切り分けること。
+    detection: >
+      止まる直前に PAGEERR で音源読み込み失敗が出ていないか確認する。
+    verified: 2026-09-01 (miku-twintail、Playwright の route 中継下で発生)
+    refs: [miku-twintail/app/src/main.js]
