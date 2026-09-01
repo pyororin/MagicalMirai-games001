@@ -1,25 +1,34 @@
 /* =============================================================================
- * ミク度（この企画の根幹）
+ * ミク度（この企画の根幹）— v3
  *
- * 「ミクっぽさ」を、測れる 5 つの指標の合計 0〜100 点で厳密に定義する。
- * リズム（40）と造形（60）。造形は「髪型のお題どおりか」を最重視する。
+ * 「ミクっぽさ」を、測れる 6 つの指標の合計 0〜100 点で厳密に定義する。
+ * リズム（36）と造形（64）。造形は「お題の髪型どおりか」と
+ * 「そもそもツインテールの形になっているか」を柱にする。
  *
- *  R  リズム       40 = 房ごと 20（PERFECT 20 / GOOD 12 / OK 5 / ネギ 0）
- *  A  角度         20 = 房ごと 10。お題の髪型が指定する目標角との差 err[rad]
- *                       10 × clamp01(1 − err / 0.35)   （0.35rad ≒ 20°でゼロ）
- *  P  つけ位置     15 = 房ごと 7.5。正しい側 5 ＋ 根元の高さ 2.5
- *                       左右を取り違えるとその房の 5 点は 0（＝最大 −10 点）
- *  S  左右の対称   15 = 鏡映角の一致 8 ＋ 長さの一致 7（両房が髪のときのみ）
- *  L  長さ         10 = 平均房長 ÷ 目標長 が 1.0 で満点（両房が髪のときのみ）
+ *  R  リズム         36 = 房ごと 18（PERFECT 18 / GOOD 11 / OK 4 / ネギ 0）
+ *  A  角度           18 = 房ごと 9。お題の髪型が指定する目標角との差 err[rad]
+ *                        9 × clamp01(1 − err / 0.35)   （0.35rad ≒ 20°でゼロ）
+ *  T  ツインテールらしさ 16 = 房ごと 8。房の**形そのもの**を見る
+ *                        素直さ 4 × clamp01((reach − 0.55) / 0.20)
+ *                          reach = 毛先までの直線距離 ÷ 弧長。
+ *                          巻き込み・折り返し・往復はここで落ちる
+ *                        垂れ   4 × clamp01((descent − 0.45) / 0.40)
+ *                          descent = 下へ向かっている区間の割合。
+ *                          上へ跳ね上げた房はここで落ちる
+ *  P  つけ位置       12 = 房ごと 6。正しい側 4 ＋ 根元の高さ 2
+ *  S  左右の対称     10 = 鏡映角の一致 5 ＋ 長さの一致 5（両房が髪のときのみ）
+ *  L  長さ            8 = 平均房長 ÷ 目標長 が 1.0 で満点（両房が髪のときのみ）
  *
  * さらに減点:
  *  X  左右取り違え  −12 / 房。ツインテールとして成立していないため、
- *                    その房の側点 5 を失うことに加えて重く引く。
+ *                    その房の側点 4 を失うことに加えて重く引く。
  *                    1 本でも取り違えた時点で S（左右の対称）も 0 になる。
  *
- * ネギ（失敗）の房は R/A/P すべて 0 になり、S・L も成立しない。
- * ＝片方でもネギならミク度は最大 47.5。両方取り違えると最大 51。
+ * ネギ（失敗）の房は R/A/T/P すべて 0 になり、S・L も成立しない。
+ * ＝片方でもネギならミク度は最大 45。両方取り違えると最大 52。
  * 合計は 0〜100 にクランプする。
+ *
+ * 難易度を変えても**この定義は動かない**（§DIFFICULTY 参照）。
  * ========================================================================== */
 
 export const clamp01 = v => Math.max(0, Math.min(1, v));
@@ -29,7 +38,7 @@ export function normAngle(a) {
   return a;
 }
 
-/* お題の髪型。ang = 右房の目標角（0=真横, π/2=真下）。len = 目標長 ÷ お題の高さ */
+/* お題の髪型。ang = 右房の目標角（0=真横, π/2=真下）。len = 目標長 ÷ お題の大きさ */
 export const STYLES = [
   { key: "straight", name: "ストレート",     ang: 1.40, len: 0.85 },
   { key: "ha",       name: "ハの字",         ang: 1.05, len: 0.78 },
@@ -45,7 +54,7 @@ export const objSize = o => Math.max(o.h, o.w * 0.62);
 /** 目標の房長（ワールド座標）。ミク度の長さ点も操作ガイドもこの値を使う */
 export const targetLen = (style, obj, scale) => style.len * objSize(obj) * scale;
 
-export const RHYTHM_PT = { PERFECT: 20, GOOD: 12, OK: 5, MISS: 0 };
+export const RHYTHM_PT = { PERFECT: 18, GOOD: 11, OK: 4, MISS: 0 };
 
 /* 難易度。**ミク度の定義そのものは変えない**（角度の許容 0.35rad は全難易度で共通）。
  * 変わるのは「拍の判定窓」「お題の髪型ガイドの出し方」「サビのキメ」だけ。
@@ -68,23 +77,27 @@ export const CHORUS_STYLES = ["long", "fuwa", "straight"];
 const ANG_TOL = 0.35;          // これだけずれると角度点が 0（髪型の差が出る幅に合わせた）
 export const WRONG_SIDE_PT = 12;   // 左右取り違え 1 房あたりの減点
 
-/** 房 1 本の造形点。unit を持たずに検証できるよう分離してある */
+/** 房 1 本の点。unit を持たずに検証できるよう分離してある。
+ *  tail は pathMetrics 済みの angle / len / reach / descent を持つ */
 export function tailScore(tail, side, style, obj) {
-  const out = { rhythm: 0, ang: 0, side: 0, height: 0, wrongSide: false };
+  const out = { rhythm: 0, ang: 0, twin: 0, side: 0, height: 0, wrongSide: false };
   if (!tail) return out;
   out.rhythm = RHYTHM_PT[tail.grade] || 0;
   if (tail.kind !== "hair") { out.rhythm = 0; return out; }
   // 角度: お題の髪型どおりか
   const err = Math.abs(normAngle(tail.angle - targetAngle(side, style)));
-  out.ang = 10 * clamp01(1 - err / ANG_TOL);
+  out.ang = 9 * clamp01(1 - err / ANG_TOL);
   out.angErr = err;
+  // ツインテールらしさ: 素直に伸びているか＋垂れているか
+  out.twin = 4 * clamp01(((tail.reach || 0) - 0.55) / 0.20)
+           + 4 * clamp01(((tail.descent || 0) - 0.45) / 0.40);
   // つけ位置: 正しい側か（外向きを正とする）＋ 根元が上のほうか
   const dir = side === "L" ? -1 : 1, hw = obj.w / 2, hh = obj.h / 2;
   const outward = (tail.rx * dir) / hw;
   out.wrongSide = outward < 0;
-  out.side = 5 * clamp01((outward + 0.02) / 0.30);
+  out.side = 4 * clamp01((outward + 0.02) / 0.30);
   const hy = -tail.ry / hh;                      // 1 = 上端, 0 = 中央
-  out.height = 2.5 * clamp01(1 - Math.abs(hy - 0.88) / 0.7);
+  out.height = 2 * clamp01(1 - Math.abs(hy - 0.88) / 0.7);
   return out;
 }
 
@@ -95,24 +108,26 @@ export function mikuScore(u, scale = 1) {
   const sL = tailScore(L, "L", style, obj), sR = tailScore(R, "R", style, obj);
   const rhythm = sL.rhythm + sR.rhythm;
   const ang = sL.ang + sR.ang;
+  const twin = sL.twin + sR.twin;
   const place = sL.side + sL.height + sR.side + sR.height;
   const wrong = (sL.wrongSide ? 1 : 0) + (sR.wrongSide ? 1 : 0);
   const bothHair = L && R && L.kind === "hair" && R.kind === "hair";
   let sym = 0, len = 0;
   if (bothHair && wrong === 0) {
     const dTheta = Math.abs(normAngle((Math.PI - L.angle) - R.angle));
-    sym = 8 * clamp01(1 - dTheta / 0.55)
-        + 7 * clamp01(1 - Math.abs(L.len - R.len) / Math.max(L.len, R.len, 1) / 0.45);
+    sym = 5 * clamp01(1 - dTheta / 0.55)
+        + 5 * clamp01(1 - Math.abs(L.len - R.len) / Math.max(L.len, R.len, 1) / 0.45);
     const want = targetLen(style, obj, scale);
-    len = 10 * clamp01(1 - Math.abs((L.len + R.len) / 2 / want - 1) / 0.55);
+    len = 8 * clamp01(1 - Math.abs((L.len + R.len) / 2 / want - 1) / 0.55);
   } else if (bothHair) {                       // 取り違えていても長さの努力だけは見る
     const want = targetLen(style, obj, scale);
-    len = 10 * clamp01(1 - Math.abs((L.len + R.len) / 2 / want - 1) / 0.55);
+    len = 8 * clamp01(1 - Math.abs((L.len + R.len) / 2 / want - 1) / 0.55);
   }
   const penalty = WRONG_SIDE_PT * wrong;
-  const total = Math.max(0, Math.min(100, Math.round(rhythm + ang + place + sym + len - penalty)));
-  return { total, rhythm: +rhythm.toFixed(1), ang: +ang.toFixed(1), place: +place.toFixed(1),
-           sym: +sym.toFixed(1), len: +len.toFixed(1), penalty,
+  const total = Math.max(0, Math.min(100,
+    Math.round(rhythm + ang + twin + place + sym + len - penalty)));
+  return { total, rhythm: +rhythm.toFixed(1), ang: +ang.toFixed(1), twin: +twin.toFixed(1),
+           place: +place.toFixed(1), sym: +sym.toFixed(1), len: +len.toFixed(1), penalty,
            wrongSide: wrong,
            angErrDeg: [sL.angErr, sR.angErr].map(e => e === undefined ? null : Math.round(e * 180 / Math.PI)) };
 }

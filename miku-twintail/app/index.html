@@ -9,17 +9,23 @@
 <body>
 <h1>ミクの本体はツインテールである</h1>
 <div id="hint">
-  四拍子の<b>2拍目で髪留めをタップ</b>し、<b>お題の髪型（黄色い下書き）どおりに伸ばす</b>。
-  小節の<b>最後の拍で髪が生えます</b>（離さなくても確定）。左右は<b>音の定位</b>で分かります。
-  タップを外すと<b>ネギ</b>、左右を取り違えるとミク度が大きく下がります。
+  <b>□ 髪留めが飛んできたら</b>…その拍でタップし、次の拍まで指でなぞる。
+  <b>なぞった線がそのまま髪の形</b>になります。
+  <b>〜 髪が飛んできたら</b>…その拍でタップするだけで、お題の髪型どおりの髪が付きます。
+  <b>叩く拍の音だけが左右にパン</b>するので、耳でどちら側か分かります（ヘッドホン推奨）。
+  外すと<b>ネギ</b>、左右を取り違えるとミク度が大きく下がります。
 </div>
 <canvas id="stage" width="960" height="600"></canvas>
+<div id="pausemenu" hidden>
+  <button id="resume">▶ 再開</button>
+  <button id="tomenu" class="sub">≡ メニューへ戻る</button>
+</div>
 <div id="ui">
   <span id="songwrap" hidden><label for="song">曲</label><select id="song"></select></span>
   <span id="control" hidden>
     <button id="start" disabled>▶ スタート</button>
     <button id="auto" class="sub" disabled>観賞モード</button>
-    <button id="pause" class="sub" disabled>⏸ 停止</button>
+    <button id="hold" class="sub" disabled>⏸ 一時停止</button>
   </span>
   <span id="diffwrap"><label for="diff">難易度</label>
     <select id="diff">
