@@ -8,7 +8,8 @@
 | ファイル | ドメイン |
 | --- | --- |
 | [textalive.yaml](textalive.yaml) | TextAlive App API / Songle（楽曲・歌詞・音源まわり） |
-| [infra.yaml](infra.yaml) | GitHub Pages / Actions / Claude Code リモート環境（sandbox） |
+| [infra.yaml](infra.yaml) | GitHub Pages / Actions / Claude Code リモート環境（sandbox）・ブラウザ実装の落とし穴 |
+| [rhythm-game.yaml](rhythm-game.yaml) | リズムゲームの判定・入力・体感（判定窓、入力の確定点、効果音の遅れ、演出の初期化） |
 
 ## スキーマ
 

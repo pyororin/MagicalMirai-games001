@@ -461,3 +461,37 @@ pitfalls:
       解釈できた分は 13〜36 種類。コード無しの区間は null を返してフォールバックさせる。
     verified: 2026-09-01 (miku-twintail build 9)
     refs: [miku-twintail/app/src/song/textalive.js]
+
+  - id: video-duration-is-lyrics-end
+    symptom: >
+      曲の長さに player.video.duration を使うと、間奏やアウトロを残したまま
+      「曲が終わった」ことになり、演出が中途半端に切れる。
+    cause: >
+      video.duration は歌詞（ビデオ）の終わりであって、曲そのものの長さではない。
+      最後の歌詞が終わった時刻に等しい。
+    solution: >
+      player.data.song.length（秒）を優先し、メディア要素の duration も候補にして
+      最長を採る。単位を取り違えると逆に曲が終わらなくなるので、
+      常識的な範囲（20秒〜20分）に収まる候補だけを使う安全弁を入れる。
+    detection: >
+      曲の終わりで結果画面に移る時刻と、実際の音源の終わりを聴き比べる。
+    verified: 2026-08-31 (typing-game build 37)
+    refs: [typing-game/prototype/textalive.html]
+
+  - id: mouth-sync-source
+    symptom: >
+      キャラクターの口パクが歌と合わない。打鍵に合わせると歌っていない場所で
+      動き、ボーカル音量だけで動かすと歌詞の無いところでも開く。
+    cause: >
+      同期元の選択を誤っている。ノーツは難易度で間引かれ、小書き文字や記号は
+      そもそもノーツにならないので、ノーツ基準では歌詞を歌い切らない。
+      ボーカル音量（getVocalAmplitude）は伴奏やコーラスにも反応する。
+    solution: >
+      文字ごとの発声区間（char.startTime〜endTime）を一列に平坦化し、
+      その区間の中だけ口を動かす。60ms 未満の隙間は繋いで、息継ぎでない箇所で
+      口が閉じないようにする。ボーカル音量は「口の開き具合」を選ぶのに使う。
+    detection: >
+      スプライトの口の領域のピクセルを直接読み、発声区間の内と外で
+      形が変わるかを確認する。
+    verified: 2026-08-31 (typing-game build 30)
+    refs: [typing-game/prototype/textalive.html]

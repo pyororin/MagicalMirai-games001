@@ -4,10 +4,13 @@
 
 ## 最初に読むもの
 
-- **`ontology/`** — 過去セッションで躓いた API・インフラの知見集約（症状から引ける YAML）。
-  TextAlive App API / Songle / GitHub Pages / sandbox のネットワークまわりで問題が出たら、
-  デバッグを始める前に必ず `ontology/textalive.yaml` と `ontology/infra.yaml` を確認すること。
-  新しく躓いて解決したらエントリを追記する（運用ルールは `ontology/README.md`）。
+- **`ontology/`** — 過去セッションで躓いた知見の集約（症状から引ける YAML）。
+  デバッグや作り込みを始める前に必ず確認すること。新しく躓いて解決したらエントリを追記する
+  （運用ルールは `ontology/README.md`）。
+  - `ontology/textalive.yaml` — TextAlive App API / Songle（楽曲・歌詞・音源）
+  - `ontology/infra.yaml` — GitHub Pages / Actions / sandbox・ブラウザ実装の落とし穴
+  - `ontology/rhythm-game.yaml` — リズムゲームの判定・入力・体感
+    （判定窓が失敗音の遅れを決める、打ち逃しが次の入力を吸う、効果音の重ねすぎ 等）
 
 ## リポジトリ構成
 
