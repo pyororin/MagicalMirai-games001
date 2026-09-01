@@ -28,6 +28,8 @@ import { STYLES, CHORUS_STYLES, DIFFICULTY, gradeOf, targetAngle, targetLen as s
          mikuScore, rankOf, clamp01 } from "./score.js";
 
 export const MAIN_SCALE = 1.75, GROUND_Y = 452;
+// 決めポーズの輪は「ミク度」の表示とお題に重ならないよう、床の帯の上に置く
+const KIME_Y = 528;
 const GRADE = { PERFECT: { s: 100, col: "#ffe66d" }, GOOD: { s: 60, col: "#7fe8e0" },
                 OK: { s: 25, col: "#9fb6bd" }, MISS: { s: 0, col: "#ff7a8a" } };
 const rnd01 = n => { const h = Math.sin(n * 12.9898) * 43758.5453; return h - Math.floor(h); };
@@ -166,7 +168,7 @@ export function createGame(canvas, song, opts = {}) {
         A.kime(Math.max(A.ac.currentTime + 0.005, song.atAudio(kime.t)), tonesAt(kime.t));
         combo++; maxCombo = Math.max(maxCombo, combo);
         score += 300;
-        pop("キメ！", "#ffe66d", W / 2, 210);
+        pop("キメ！", "#ffe66d", W / 2, KIME_Y);
         return;
       }
     }
@@ -271,7 +273,7 @@ export function createGame(canvas, song, opts = {}) {
 
   /* ---- 観賞モード（お題どおりに伸ばす）--------------------------------- */
   function autoTick(t) {
-    if (kime && !kime.hit && t >= kime.t && t < kime.t + kime.dur * 0.25) { onDown(W / 2, 210); return; }
+    if (kime && !kime.hit && t >= kime.t && t < kime.t + kime.dur * 0.25) { onDown(W / 2, KIME_Y); return; }
     if (!slide) {
       const nb = song.barIndexAt(t);
       for (const a of [nb - 1, nb, nb + 1]) {
@@ -433,9 +435,9 @@ export function createGame(canvas, song, opts = {}) {
         g.save();
         g.globalAlpha = kime.hit ? 0 : 0.35 + 0.65 * e;
         g.strokeStyle = "#ffe66d"; g.lineWidth = 4 + 3 * e;
-        g.beginPath(); g.arc(W / 2, 210, 26 + Math.abs(left) * 90, 0, 7); g.stroke();
+        g.beginPath(); g.arc(W / 2, KIME_Y, 26 + Math.abs(left) * 90, 0, 7); g.stroke();
         g.fillStyle = "#ffe66d"; g.font = "bold 20px sans-serif"; g.textAlign = "center";
-        g.fillText("キメ！", W / 2, 217);
+        g.fillText("キメ！", W / 2, KIME_Y + 7);
         g.restore();
       }
     }
