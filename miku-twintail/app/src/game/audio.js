@@ -1,20 +1,51 @@
 /* =============================================================================
  * 音まわり。拍の音（beat）・効果音（sfx）・擬似曲パート（song）を分けて出す。
- *   beat 1.0 / sfx 0.95 / song 0.8 ── 実曲を鳴らすときも拍の音を埋もれさせない
+ * 拍と効果音が楽曲に埋もれないことが最優先なので、この 3 系統は別々に絞れる。
+ *
+ * 音量は 0〜100 の「つまみの値」で持つ。50 が既定値で、そのとき
+ *   song 0.50 / beat 1.00 / sfx 0.95
+ * になる。**実曲の楽曲だけは WebAudio を通らない**（TextAlive の mediaElement が
+ * 直接鳴らす）ので、song のつまみは player.volume 側へも渡す必要がある
+ * ── その配線はエントリ（main.js）が持つ。
  * ========================================================================== */
 
 export let ac = null, master = null, songGain = null, beatGain = null, sfxGain = null;
 export const MASTER_GAIN = 0.9;
+export const VOL_DEFAULT = { song: 50, beat: 50 };
+const BEAT_BASE = 1.0, SFX_BASE = 0.95;
 let NOISE = null;
+// つまみは音を出す前にも動かせるので、値を覚えておいて初期化時に反映する
+const vol = { ...VOL_DEFAULT };
+
+const songGainOf = pct => pct / 100;                 // 50 → 0.50
+const beatGainOf = pct => BEAT_BASE * pct / 50;      // 50 → 1.00、100 で 2 倍まで
+const sfxGainOf = pct => SFX_BASE * pct / 50;
+
+function ramp(node, value) {
+  if (!node) return;
+  node.gain.setTargetAtTime(Math.max(0.0001, value), ac.currentTime, 0.02);
+}
+/** 楽曲（擬似曲の伴奏）の音量つまみ。0〜100 */
+export function setSongVolume(pct) {
+  vol.song = Math.max(0, Math.min(100, pct));
+  if (ac) ramp(songGain, songGainOf(vol.song));
+  return vol.song;
+}
+/** 拍の音と効果音の音量つまみ。0〜100（50 が既定） */
+export function setBeatVolume(pct) {
+  vol.beat = Math.max(0, Math.min(100, pct));
+  if (ac) { ramp(beatGain, beatGainOf(vol.beat)); ramp(sfxGain, sfxGainOf(vol.beat)); }
+  return vol.beat;
+}
+export const getVolumes = () => ({ ...vol });
 
 export function initAudio() {
   if (ac) return ac;
   ac = new (window.AudioContext || window.webkitAudioContext)();
   master = ac.createGain(); master.gain.value = MASTER_GAIN; master.connect(ac.destination);
-  // 拍の音が埋もれないよう、伴奏は拍より一段低く敷く（実曲は player.volume 側で下げる）
-  songGain = ac.createGain(); songGain.gain.value = 0.42; songGain.connect(master);
-  beatGain = ac.createGain(); beatGain.gain.value = 1.0; beatGain.connect(master);
-  sfxGain = ac.createGain(); sfxGain.gain.value = 0.95; sfxGain.connect(master);
+  songGain = ac.createGain(); songGain.gain.value = songGainOf(vol.song); songGain.connect(master);
+  beatGain = ac.createGain(); beatGain.gain.value = beatGainOf(vol.beat); beatGain.connect(master);
+  sfxGain = ac.createGain(); sfxGain.gain.value = sfxGainOf(vol.beat); sfxGain.connect(master);
   const b = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate), d = b.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   NOISE = b;
