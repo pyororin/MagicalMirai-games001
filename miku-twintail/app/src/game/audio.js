@@ -4,13 +4,15 @@
  * ========================================================================== */
 
 export let ac = null, master = null, songGain = null, beatGain = null, sfxGain = null;
+export const MASTER_GAIN = 0.9;
 let NOISE = null;
 
 export function initAudio() {
   if (ac) return ac;
   ac = new (window.AudioContext || window.webkitAudioContext)();
-  master = ac.createGain(); master.gain.value = 0.9; master.connect(ac.destination);
-  songGain = ac.createGain(); songGain.gain.value = 0.8; songGain.connect(master);
+  master = ac.createGain(); master.gain.value = MASTER_GAIN; master.connect(ac.destination);
+  // 拍の音が埋もれないよう、伴奏は拍より一段低く敷く（実曲は player.volume 側で下げる）
+  songGain = ac.createGain(); songGain.gain.value = 0.42; songGain.connect(master);
   beatGain = ac.createGain(); beatGain.gain.value = 1.0; beatGain.connect(master);
   sfxGain = ac.createGain(); sfxGain.gain.value = 0.95; sfxGain.connect(master);
   const b = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate), d = b.getChannelData(0);
