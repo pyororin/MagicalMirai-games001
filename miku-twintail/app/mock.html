@@ -15,6 +15,12 @@
   <b>〜 髪</b>＝その拍でタップするだけ。
 </div>
 <canvas id="stage" width="960" height="600"></canvas>
+<div id="volume">
+  <label for="volSong">楽曲 <output id="volSongOut">50</output>
+    <input type="range" id="volSong" min="0" max="100" step="1"></label>
+  <label for="volBeat">拍・効果音 <output id="volBeatOut">50</output>
+    <input type="range" id="volBeat" min="0" max="100" step="1"></label>
+</div>
 <div id="pausemenu" hidden>
   <button id="resume">▶ 再開</button>
   <button id="tomenu" class="sub">≡ メニューへ戻る</button>
