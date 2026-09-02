@@ -55,6 +55,7 @@ npm run build   # dist/ に index.html と mock.html を出力
 | `MIKU_GAME.galleryDump()` | 完成した全ミクとミク度の内訳 |
 | `MIKU_GAME.results()` | リザルト |
 | `MIKU_SONG` | ソングアダプタ本体（`rebuild()` / `bar(i)` / `hotSections()` など） |
+| `MIKU_VOL()` | 音量つまみの値と、実際のゲイン（song / beat / sfx） |
 | `textAlivePlayer` | TextAlive の Player（実曲版のみ） |
 
 ## トークンについて

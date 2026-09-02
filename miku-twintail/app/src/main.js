@@ -11,10 +11,10 @@ import { Player } from "textalive-app-api";
 import { createGame } from "./game/core.js";
 import { createTextAliveSong } from "./song/textalive.js";
 import { unlockAudio, audioState } from "./game/audio.js";
+import * as A from "./game/audio.js";
+import { initVolumeUI } from "./ui/volume.js";
 
-export const BUILD = 10;
-// 実曲の音量[0-100]。拍の音・効果音が埋もれないところまで下げる
-const SONG_VOLUME = 55;
+export const BUILD = 11;
 const TOKEN = "VQRxHB1a0q8fVvnm";
 
 // 選曲リスト: マジカルミライ 2025 楽曲コンテスト受賞 6 曲。
@@ -111,8 +111,8 @@ player.addListener({
   },
   onTimerReady() {
     song.rebuild();
-    // 楽曲は拍の音を邪魔しない音量に下げる（実曲はここ、擬似曲は songGain 側）
-    try { player.volume = SONG_VOLUME; } catch (e) { /* 音量非対応なら諦める */ }
+    // player ができてから音量つまみを効かせ直す（楽曲は player.volume 側）
+    volumeUI.reapply();
     for (const b of document.querySelectorAll("#control button")) b.disabled = false;
     $("hold").disabled = true;
     setBuild();
@@ -156,6 +156,21 @@ function onGameState(st) {
   $("hold").disabled = st !== "playing";
 }
 
+
+// 音量つまみ（楽曲 / 拍・効果音）。値は localStorage に残る
+const volumeUI = initVolumeUI({
+  song: $("volSong"), beat: $("volBeat"),
+  songOut: $("volSongOut"), beatOut: $("volBeatOut"),
+  // 実曲の楽曲は WebAudio を通らないので、つまみは player.volume へ渡す
+  onSong: pct => { try { player.volume = pct; } catch (e) { /* 未対応なら無視 */ } },
+});
+
+
+// デバッグ・自動テスト用: つまみの値と実際のゲイン
+window.MIKU_VOL = () => ({ ...A.getVolumes(),
+  songGain: A.songGain && +A.songGain.gain.value.toFixed(3),
+  beatGain: A.beatGain && +A.beatGain.gain.value.toFixed(3),
+  sfxGain: A.sfxGain && +A.sfxGain.gain.value.toFixed(3) });
 $("diff").value = q.get("diff") || "normal";
 $("diff").onchange = e => game.setDifficulty(e.target.value);
 $("guide").onchange = e => game.setGuide(e.target.checked);
