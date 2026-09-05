@@ -195,10 +195,13 @@
     },
 
     /** 拍に合わせた跳ね(0〜1程度)。呼び出し側でドット単位に換算する。
-        小節の頭(position===1)だけ跳ねるので、3拍子なら3回に1回になる。 */
+        1 拍おき(奇数拍)に跳ねる。小節頭だけだと落ち着きすぎて見えたため、
+        build 42 で頻度を倍にした。3拍子なら 1,3 拍 → 次の小節は 2 拍目、と
+        小節をまたいで表裏が入れ替わるので、単調にならない。
+        揺れ(idle)も跳ねに合わせて倍の速さにする。 */
     bounce:function(beatPulse, beatPosition, calm){
-      var idle = calm ? 0.5 : (Math.sin(performance.now()/620)+1)/2;
-      var hop = (beatPosition==null || beatPosition===1) ? (beatPulse||0) : 0;
+      var idle = calm ? 0.5 : (Math.sin(performance.now()/310)+1)/2;
+      var hop = (beatPosition==null || beatPosition%2===1) ? (beatPulse||0) : 0;
       return hop + idle*0.3;
     },
 
