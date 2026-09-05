@@ -221,3 +221,23 @@ pitfalls:
       README に書き、更新時は README も同じコミットで直す運用にする。
     verified: 2026-09-01 (typing-game build 40)
     refs: [typing-game/prototype/miku/README.md, typing-game/prototype/miku/miku.js]
+
+  - id: playfield-under-thumb
+    symptom: >
+      スマホを片手で持ってプレイすると、盤面の下側（判定リングの下辺や
+      下方向ノーツの湧き口）が指と手のひらで隠れて見えない。右手・左手を
+      入れ替えても隠れる。
+    cause: >
+      盤面を画面の上下中央に置いた。縦長端末では下端の両隅から半径 250px 前後が
+      親指の可動域で、画面の下 3 割前後は「触る場所」であって
+      「見る場所」ではない。左右反転で直るのは横方向の偏りだけで、
+      下側の遮蔽は左右どちらでも起きる。
+    solution: >
+      盤面の中心を画面高の 40% 前後まで上げ、下 35〜40% は演出（客席など）だけの
+      領域にして情報を置かない。掲示板を複数枚に分けると筐体の枠だけで数十 px を
+      食って盤面が下がるので、1 枚にまとめて上部に集約する。
+    detection: >
+      実機サイズでスクリーンショットを撮り、下端の左右隅から半径 250px の円を
+      重ねて、リング下辺とノーツの湧き口がその外側にあるか確認する。
+    verified: 2026-09-05 (typing-game build 41)
+    refs: [typing-game/prototype/textalive.html]
