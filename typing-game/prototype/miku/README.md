@@ -46,7 +46,7 @@ var bounce = MikuActor.bounce(beatPulse, beatNow && beatNow.position, calmMotion
 | `playGesture(name?)` | 仕草を1つ再生(省略でランダム)。名前を返す |
 | `gestureNames()` | 仕草の名前一覧 |
 | `tick(now, opts)` | 毎フレーム呼ぶ。`opts={singing, playing, idle}` |
-| `bounce(pulse, position, calm)` | 拍の跳ね。**小節の頭(position===1)だけ跳ねる**ので3拍子なら3回に1回 |
+| `bounce(pulse, position, calm)` | 拍の跳ね。**1 拍おき(奇数拍)に跳ねる**(build 42 で頻度を倍にした。小節頭だけだと落ち着きすぎた)。揺れも同じ速さ |
 | `render()` | 見た目が変わったときだけ描き直す(自前で呼ぶ必要は普通ない) |
 | `peek()` | いまの表情・口・ポーズ・仕草(検証用) |
 | `reset()` | 通常状態に戻す(プレイ開始時に呼ぶ) |
