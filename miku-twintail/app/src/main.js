@@ -11,8 +11,10 @@ import { Player } from "textalive-app-api";
 import { createGame } from "./game/core.js";
 import { createTextAliveSong } from "./song/textalive.js";
 import { unlockAudio, audioState } from "./game/audio.js";
+import * as A from "./game/audio.js";
+import { initVolumeUI } from "./ui/volume.js";
 
-export const BUILD = 9;
+export const BUILD = 11;
 const TOKEN = "VQRxHB1a0q8fVvnm";
 
 // 選曲リスト: マジカルミライ 2025 楽曲コンテスト受賞 6 曲。
@@ -61,6 +63,7 @@ song.start = () => { try { player.requestPlay(); } catch (e) {} };
 
 const q = new URLSearchParams(location.search);
 const game = createGame($("stage"), song, {
+  onState: st => onGameState(st),
   difficulty: q.get("diff") || "normal",
   onFinishSong: r => setMeta(`おつかれさま！ ミク ${r.mikus} 体 / 平均ミク度 ${r.avg} / SCORE ${r.total}`),
 });
@@ -95,7 +98,7 @@ player.addListener({
       $("control").hidden = false;
       $("start").onclick = () => { unlockAudio(); setBuild(); game.start(); };
       $("auto").onclick = () => { unlockAudio(); game.toggleAuto(); };
-      $("pause").onclick = () => { try { player.requestPause(); } catch (e) {} game.stop(); };
+
       buildSongPicker();
     }
     // ホスト（App Debugger・審査環境）が曲を指定しているときは自動読み込みに任せる
@@ -108,13 +111,16 @@ player.addListener({
   },
   onTimerReady() {
     song.rebuild();
+    // player ができてから音量つまみを効かせ直す（楽曲は player.volume 側）
+    volumeUI.reapply();
     for (const b of document.querySelectorAll("#control button")) b.disabled = false;
+    $("hold").disabled = true;
     setBuild();
   },
   // ホストが再生を握っているとき（app.managed）は、その再生に合わせて進行する
-  onPlay() { if (!game.isRunning()) game.start(); },
-  onPause() { game.stop(); },
-  onStop() { game.stop(); },
+  onPlay() { if (game.state() === "paused") game.resume(); else if (!game.isRunning()) game.start(); },
+  onPause() { game.pause(); },
+  onStop() { game.pause(); },
   // ホストから曲を差し替えられたときも状態を作り直す
   onAppMediaChange() { game.reset(); setMeta("読み込み中……"); },
 });
@@ -139,6 +145,32 @@ function buildSongPicker() {
   sel.value = String(SONGS.indexOf(DEV_SONG));
   $("songwrap").hidden = false;
 }
+
+// 一時停止 → 再開 / メニューへ戻る
+const pauseMenu = $("pausemenu");
+$("hold").onclick = () => game.pause();
+$("resume").onclick = () => game.resume();
+$("tomenu").onclick = () => game.toMenu();
+function onGameState(st) {
+  pauseMenu.hidden = st !== "paused";
+  $("hold").disabled = st !== "playing";
+}
+
+
+// 音量つまみ（楽曲 / 拍・効果音）。値は localStorage に残る
+const volumeUI = initVolumeUI({
+  song: $("volSong"), beat: $("volBeat"),
+  songOut: $("volSongOut"), beatOut: $("volBeatOut"),
+  // 実曲の楽曲は WebAudio を通らないので、つまみは player.volume へ渡す
+  onSong: pct => { try { player.volume = pct; } catch (e) { /* 未対応なら無視 */ } },
+});
+
+
+// デバッグ・自動テスト用: つまみの値と実際のゲイン
+window.MIKU_VOL = () => ({ ...A.getVolumes(),
+  songGain: A.songGain && +A.songGain.gain.value.toFixed(3),
+  beatGain: A.beatGain && +A.beatGain.gain.value.toFixed(3),
+  sfxGain: A.sfxGain && +A.sfxGain.gain.value.toFixed(3) });
 $("diff").value = q.get("diff") || "normal";
 $("diff").onchange = e => game.setDifficulty(e.target.value);
 $("guide").onchange = e => game.setGuide(e.target.checked);

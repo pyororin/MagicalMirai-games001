@@ -79,9 +79,9 @@ export function createTextAliveSong(player) {
     bars = bars.map((beats, i) => {
       const t = beats.map(b => b.startTime / 1000);
       const dur = beats.reduce((a, b) => a + b.duration / 1000, 0) / beats.length;
-      const tapIdx = Math.max(0, t.length - 3);      // 確定の 2 拍前が髪留め
+      const tieIdx = Math.max(0, t.length - 2);      // 確定の 1 拍前が髪留め
       return { i, beats: beats.map((b, j) => ({ t: t[j], pos: b.position })),
-               tapIdx, tap: t[tapIdx], done: t[t.length - 1], dur };
+               tieIdx, tap: t[tieIdx], done: t[t.length - 1], dur };
     });
     bars.forEach(bar => bar.beats.forEach((b, j) => flat.push({
       k: flat.length, t: b.t, pos: b.pos, bar: bar.i, dur: bar.dur,
@@ -131,6 +131,8 @@ export function createTextAliveSong(player) {
       return ans;
     },
     onBeat() { /* 実曲では伴奏を合成しない。拍の音だけを重ねる */ },
+    pause() { try { player.requestPause(); } catch (e) { /* 未再生なら何もしない */ } },
+    resume() { try { player.requestPlay(); } catch (e) { /* 同上 */ } },
     /** いま鳴っているコード。効果音の音程合わせに使う（findChord） */
     chordAt(sec) {
       try {
