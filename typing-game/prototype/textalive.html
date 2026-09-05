@@ -219,7 +219,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 40</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 41</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが上から降ってきます。<b>横位置がそのまま入力方向</b>(左から ← ↑ ● → ↓)なので、
@@ -332,13 +332,13 @@
 </div>
 
 <!-- CDN 依存を避けるため検証済みバージョンを同梱(広告ブロッカー等による欠落も防ぐ) -->
-<script src="./miku/miku.js?v=40"></script>
+<script src="./miku/miku.js?v=41"></script>
 <script src="./vendor/axios.min.js"></script>
 <script src="./vendor/textalive-app-api-0.5.2.js"></script>
 <script>
 (function(){
   "use strict";
-  var BUILD = 40;
+  var BUILD = 41;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -1027,10 +1027,13 @@
   function ring(){
     var fw=fieldW(), x0=fieldX0();
     var cx=Math.round((x0+fw/2)/G)*G;
-    /* ミクはほぼ画面中央。歌詞板を置く上側(照明エリア)を少しだけ広く取るため、
-       中心をわずかに下げる(そのぶん客席が狭くなる)。 */
-    var cy=Math.round((ch*0.53)/G)*G;
+    /* 盤面は画面の上寄り。実機(390x844)では画面下 250px ほどが親指と手のひらで
+       隠れるので、リング下辺も下方向のノーツの湧き口も、そこへ入れてはいけない。
+       中心を 53% → 41% に上げ、余った下側はまるごと客席(手の置き場)にする。 */
     var R =Math.round(Math.min(fw*0.17, ch*0.09)/G)*G;
+    /* 上へ寄せても助走(travel)を痩せさせないよう、掲示板の最低高ぶんだけ空けた
+       いちばん上を下限にする。 */
+    var cy=Math.round(Math.max(ch*0.41, R+G*46)/G)*G;
     /* 4方向の助走は同じ長さ。上下に取れる幅も画面中心からの距離で決まるので、
        上(照明・電光掲示板)と下(客席)が自然に同じ広さになる。 */
     var travel=Math.round(Math.max(G*20, Math.min(fw/2-G*6-R, cy-R-G*24))/G)*G;
@@ -1627,24 +1630,32 @@
     dot(0,fy,cw,G,PAL.rail);
   }
 
-  /* ステージ奥、照明の下に吊るした電光掲示板。曲名とスコアはここで読ませる。
-     盤面の隅に小さく置くより、ライブの掲示板として画に馴染む。 */
-  function scoreboardBox(g){
-    var bw=Math.round(Math.min(fieldW()-G*6, G*100)/G)*G;
-    return {x:Math.round((cw-bw)/2/G)*G, y:G*15, w:bw,
-            h:Math.round(Math.max(G*14, Math.min(G*20, (g.floorTop-G*15)*0.34))/G)*G};
+  /* ステージ奥、照明の下に吊るした電光掲示板。曲名・スコアと歌詞を一枚にまとめる。
+     板を2枚に分けると筐体の枠だけで 30px 近く食い、そのぶん盤面が下がって
+     指の下に入ってしまう。1枚にして上半分=スコア、下半分=歌詞とする。 */
+  function boardBox(g){
+    var bw=Math.round(Math.min(fieldW()-G*4, G*116)/G)*G;
+    var by=G*12;
+    /* 板の下辺は上方向ノーツの湧き口(g.floorTop)より上。ノーツは板より後に描くので、
+       詰めすぎるとノーツが板に重なる。ノーツ半径ぶんの逃げを取る。 */
+    var bh=Math.round(Math.max(G*26, Math.min(G*48, g.floorTop-by-G*9))/G)*G;
+    return {x:Math.round((cw-bw)/2/G)*G, y:by, w:bw, h:bh,
+            sh:Math.round(bh*0.46/G)*G};             // sh = スコア段の高さ
   }
+  function scoreboardBox(g){ return boardBox(g); }   // 互換
+  /* 筐体とスコア段。歌詞段は drawLyricBoard が同じ板の下半分に描く。 */
   function drawScoreboard(g){
-    var box=scoreboardBox(g);
-    var bw=box.w, bx=box.x, by=box.y, bh=box.h;
-    if(bh<G*12 || bw<G*30) return;
+    var box=boardBox(g);
+    var bw=box.w, bx=box.x, by=box.y, bh=box.h, sh=box.sh;
+    if(bh<G*20 || bw<G*30) return;
     dot(bx-G*2, by-G*2, bw+G*4, bh+G*4, "oklch(30% 0.02 270)");     // 筐体
     dot(bx-G, by-G, bw+G*2, bh+G*2, "oklch(18% 0.02 268)");
     dot(bx, by, bw, bh, "oklch(9% 0.02 268)");                      // 表示面
-    dot(bx+bw/2-G, by-G*4, G*2, G*3, PAL.grid);                     // 吊り金具
-    /* 3段組み。高さから行位置を決めて、板が縮んでも重ならないようにする */
+    dot(bx+G*6, by-G*4, G*2, G*3, PAL.grid);                        // 吊り金具
+    dot(bx+bw-G*8, by-G*4, G*2, G*3, PAL.grid);
+    /* 3段組み。スコア段の高さから行位置を決めて、板が縮んでも重ならないようにする */
     var u=Math.max(2, Math.round(G*0.9));
-    var rTitle=by+bh*0.17, rLabel=by+bh*0.48, rNum=by+bh*0.76;
+    var rTitle=by+sh*0.20, rLabel=by+sh*0.58, rNum=by+sh*0.85;
     ctx.save();
     ctx.textAlign="center"; ctx.textBaseline="middle";
     ctx.font=Math.round(u*3.6)+"px "+PIXEL_FONT;      // 1段目:曲名(電球色)
@@ -1670,39 +1681,28 @@
       ctx.fillText(String(state.combo), bx+bw-G*3, rNum);
     }
     ctx.restore();
-    // LED の目地(1ドットおきに暗い線を重ねて電光掲示板らしくする)
-    ctx.save(); ctx.globalAlpha=0.5;
-    for(var yy=by; yy<by+bh; yy+=G*2) dot(bx, yy, bw, G, "oklch(9% 0.02 268)");
-    ctx.restore();
-    // 進捗(掲示板の下辺)
-    var pw=Math.max(G, (bw-G*4)*Math.max(0,Math.min(1,(state&&state.progress)||0)));
-    dot(bx+G*2, by+bh-G*1.5, bw-G*4, G, PAL.grid);
-    dot(bx+G*2, by+bh-G*1.5, pw, G, DIR_COL.u.lit);
+    dot(bx+G*2, by+sh, bw-G*4, G, "oklch(24% 0.02 268)");           // スコア段と歌詞段の仕切り
   }
 
-  /* 歌詞の掲示板。曲名・スコアの掲示板の下に、もう一枚吊るす。
-     客席側に置くと視線が判定リングから遠く離れるので、
-     ノーツ・ミク・歌詞がすべて画面の上半分に収まるようにする。 */
+  /* 歌詞は同じ掲示板の下半分。ノーツ・ミク・歌詞をすべて画面の上寄りにまとめ、
+     視線移動と、指で隠れる下端の両方を避ける。 */
   function lyricBoardBox(g){
-    var bw=Math.round(Math.min(fieldW()-G*4, G*116)/G)*G;
-    var bx=Math.round((cw-bw)/2/G)*G;
-    var by=scoreboardBox(g).y + scoreboardBox(g).h + G*5;
-    var bh=Math.round(Math.max(G*14, Math.min(G*30, g.floorTop-by-G*4))/G)*G;
-    return {x:bx, y:by, w:bw, h:bh};
+    var b=boardBox(g);
+    return {x:b.x, y:b.y+b.sh, w:b.w, h:b.h-b.sh};
   }
   function drawLyricBoard(t, g){
-    var b=lyricBoardBox(g);
-    if(b.h<G*12 || b.w<G*30) return;
-    dot(b.x-G*2, b.y-G*2, b.w+G*4, b.h+G*4, "oklch(30% 0.02 270)");   // 筐体
-    dot(b.x-G, b.y-G, b.w+G*2, b.h+G*2, "oklch(18% 0.02 268)");
-    dot(b.x, b.y, b.w, b.h, "oklch(9% 0.02 268)");                    // 表示面
-    dot(b.x+G*6, b.y-G*4, G*2, G*3, PAL.grid);                        // 吊り金具
-    dot(b.x+b.w-G*8, b.y-G*4, G*2, G*3, PAL.grid);
-    var size=Math.max(13, Math.min(Math.round(b.w/16), 26));
+    var box=boardBox(g), b=lyricBoardBox(g);
+    if(box.h<G*20 || b.w<G*30) return;
+    var avail=b.h-G*3;
+    var size=Math.max(12, Math.min(Math.round(b.w/16), Math.round(avail/3.2)));
     drawLyrics(t, b.y+G*2+size, {x:b.x, w:b.w, pad:G*2, size:size, lh:1.55, maxLines:2});
-    ctx.save(); ctx.globalAlpha=0.5;                                  // LED の目地
-    for(var yy=b.y; yy<b.y+b.h; yy+=G*2) dot(b.x, yy, b.w, G, "oklch(9% 0.02 268)");
+    ctx.save(); ctx.globalAlpha=0.5;                  // LED の目地(板全体に掛ける)
+    for(var yy=box.y; yy<box.y+box.h; yy+=G*2) dot(box.x, yy, box.w, G, "oklch(9% 0.02 268)");
     ctx.restore();
+    // 進捗(掲示板の下辺)
+    var pw=Math.max(G, (box.w-G*4)*Math.max(0,Math.min(1,(state&&state.progress)||0)));
+    dot(box.x+G*2, box.y+box.h-G*1.5, box.w-G*4, G, PAL.grid);
+    dot(box.x+G*2, box.y+box.h-G*1.5, pw, G, DIR_COL.u.lit);
   }
 
   function drawReflectField(t){
