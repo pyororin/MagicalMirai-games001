@@ -218,7 +218,7 @@
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 43</span></p>
+    <p class="eyebrow">Phase 0 spike / TextAlive App API <span id="build" style="color:var(--dim);opacity:.7">build 44</span></p>
     <h1>打鍵ミライ</h1>
     <p class="lede">
       歌詞のかなが<b>四方から中心のリングへ集まってきます</b>。<b>湧いてくる辺がそのまま入力方向</b>
@@ -324,13 +324,13 @@
 </div>
 
 <!-- CDN 依存を避けるため検証済みバージョンを同梱(広告ブロッカー等による欠落も防ぐ) -->
-<script src="./miku/miku.js?v=43"></script>
+<script src="./miku/miku.js?v=44"></script>
 <script src="./vendor/axios.min.js"></script>
 <script src="./vendor/textalive-app-api-0.5.2.js"></script>
 <script>
 (function(){
   "use strict";
-  var BUILD = 43;
+  var BUILD = 44;
 
   /* ============================================================
      かな → 入力方向。方向は母音の段だけで決まる(ナナメ入力なし)。
@@ -418,9 +418,13 @@
     return {grade:"MISS",delta:d};
   }
   function comboMult(c){ return Math.min(1+Math.floor(c/10)*0.1,2); }
-  var SUSTAIN={EASY:2.0,NORMAL:4.0,HARD:8.0};        // 1かな=1操作なので「操作/秒」
-  // HARD でも 8操作/秒(125ms間隔)が上限。実測で最小48msの箇所があり、
-  // それは指が物理的に追いつかないため落とす(理論値挑戦であって不可能ではない、に寄せる)
+  /* 難易度。ops = 1かな=1操作なので「操作/秒」の上限。
+     HARD でも 8操作/秒(125ms間隔)が上限。実測で最小48msの箇所があり、
+     それは指が物理的に追いつかないため落とす。
+     grade = 残す拍の細かさ。3=拍の上だけ / 2=拍と8分 / 1=どこでも。
+     単純な間引き(前から詰めるだけ)だと、残ったかなが拍とも歌詞とも
+     無関係な位置に来て「目押しするしかない」譜面になる。 */
+  var DIFF={ EASY:{ops:2.0, grade:3}, NORMAL:{ops:4.0, grade:2}, HARD:{ops:8.0, grade:1} };
 
   /* ============ 読みデータ(事前生成、data/readings/) ============ */
   function toHira(s){
@@ -720,13 +724,48 @@
   applyMult(); applyOffset();               // 保存された設定をボタンに反映
 
   /* ============ 譜面(全ノートを1本の時間軸で持つ) ============ */
+  /* その時刻が拍のどこに乗っているか。3=拍の上 / 2=8分の裏 / 1=それ以外。
+     楽曲が無い(チュートリアル)ときは判断材料が無いので、全部 3 として扱う。 */
+  function beatGrade(t){
+    var b=null;
+    try{ if(player && player.findBeat) b=player.findBeat(t); }catch(e){}
+    if(!b || !b.duration) return {grade:3, head:false};
+    var ph=((t-b.startTime)/b.duration)%1;
+    if(ph<0) ph+=1;
+    var near=Math.min(ph, 1-ph);
+    if(near<=0.18) return {grade:3, head:b.position===1};
+    if(Math.abs(ph-0.5)<=0.16) return {grade:2, head:false};
+    return {grade:1, head:false};
+  }
+  /* 難易度による間引き。「前から詰める」のではなく、残す価値の高い順に取る。
+       ・フレーズの1音目 … 歌い出しは必ず打たせる(入り方が分かる)
+       ・文字の1音目   … 歌詞の1文字目と対応するので、歌詞から打鍵を想像できる
+       ・拍の上 / 8分の裏 … リズムに乗って予測できる
+     そのうえで難易度ごとの最小間隔(1000/ops)を守る。結果として、
+     残るかなが「拍」か「歌詞の文字頭」のどちらかになり、目押し一辺倒にならない。 */
   function selectIdx(notes,diff){
-    var ops=SUSTAIN[diff];
-    var gap=1000/ops, out=[], last=-Infinity;
-    notes.forEach(function(n,i){
-      if(i===0 || n.time-last>=gap){ out.push(i); last=n.time; }
+    var cfg=DIFF[diff]||DIFF.NORMAL, gap=1000/cfg.ops;
+    var cand=notes.map(function(n,i){
+      var bg=beatGrade(n.time);
+      var charHead = (i===0) || notes[i-1].charIdx!==n.charIdx;
+      var prio=0;
+      if(i===0) prio+=100;                       // フレーズの1音目は最優先
+      if(bg.head) prio+=8;                       // 小節の頭
+      prio+=bg.grade*4;                          // 拍の上 > 8分の裏 > その他
+      if(charHead) prio+=6;                      // 歌詞の文字と1対1で対応する音
+      return {i:i, time:n.time, prio:prio, grade:bg.grade, charHead:charHead};
     });
-    return out;
+    // 難易度で「そもそも候補に入れる細かさ」を絞る(フレーズ頭だけは常に残す)
+    var pool=cand.filter(function(c){ return c.i===0 || c.grade>=cfg.grade || (cfg.grade<=2 && c.charHead); });
+    if(!pool.length) pool=cand.slice(0,1);
+    pool.sort(function(a,b){ return b.prio-a.prio || a.time-b.time; });
+    var taken=[];
+    pool.forEach(function(c){
+      for(var k=0;k<taken.length;k++) if(Math.abs(taken[k].time-c.time)<gap) return;
+      taken.push(c);
+    });
+    taken.sort(function(a,b){ return a.time-b.time; });
+    return taken.map(function(c){ return c.i; });
   }
   /* 歌詞の文字ごとの発声区間を一列に並べ、隣り合うものは繋げる。
      口パクはこれをなぞる(ノーツは難易度で間引かれるので使えない)。 */
@@ -868,6 +907,18 @@
     calmMotion=mq.matches;
     mq.addEventListener("change",function(e){ calmMotion=e.matches; });
   }catch(e){}
+  /* 拍のたびに斜め方向へ広がっていく波。テンポを「ミクの動き以外」でも見せる。
+     ノーツの通り道(上下左右)には出さないので、ノーツと見間違えない。 */
+  var beatWaves=[], lastBeatKey="";
+  function pushBeatWave(b){
+    var key=b.startTime+"/"+b.position;
+    if(key===lastBeatKey) return;
+    lastBeatKey=key;
+    if(calmMotion) return;
+    beatWaves.push({at:performance.now(), dur:Math.max(260,Math.min(900,(b.duration||500)*1.5)),
+                    strong:b.position===1});
+    if(beatWaves.length>5) beatWaves.shift();
+  }
   function updateMusic(t){
     try{
       if(player.findBeat){
@@ -876,6 +927,7 @@
           beatNow=b;
           var prog=(t-b.startTime)/(b.duration||500);
           beatPulse=calmMotion ? 0 : Math.max(0, 1-Math.min(1,prog)*1.6);   // 拍頭で1、すぐ減衰
+          pushBeatWave(b);
         }
       }
       if(player.findChorus){
@@ -907,21 +959,20 @@
       dot(X-G, Y-G, s+G*2, G, PAL.ink); dot(X-G, Y+s, s+G*2, G, PAL.ink);
       dot(X-G, Y, G, s, PAL.ink); dot(X+s, Y, G, s, PAL.ink);
     }
-    /* 上 6 割がかな、下 4 割が方向記号。台座がかなに掛かると読めなくなるので、
-       それぞれの領域を分けて置く。 */
-    var as=Math.max(3,Math.round(s*0.075));
-    var ax=X+half, ay=Y+s-as*2.8;
-    /* 方向記号。色違いの矢印を同系色の上に置くと明度差が出ず読めないので、
-       暗い台座を敷いて白抜きで描く(どの方向色でもコントラストが同じ)。 */
-    dot(ax-as*2.5-G, ay-as*2.5-G/2, as*5+G*2, as*5+G, PAL.night);
+    /* かなが主役。方向は「どの辺から来たか」と色でも分かるので、記号は
+       下辺の小さなチップに逃がし、タイルのほぼ全部をかなに使う。
+       (build 43 まではかな 0.44s + 大きな矢印で、遠いノーツのかなが読めなかった) */
+    var as=Math.max(2,Math.round(s*0.052));
+    var ax=X+half, ay=Y+s-as*2.2;
+    dot(ax-as*2.2-G, ay-as*2.2, as*4.4+G*2, as*4.4, PAL.night);   // 記号の台座(暗く敷く)
     spriteCentered(ARROW[n.dir], ax, ay, as, PAL.ink);
-    // かな(矢印より上に、影を敷いて確実に読ませる)
-    ctx.font=Math.round(s*0.44)+'px '+PIXEL_FONT;
+    // かな(タイル中央やや上。影を敷いて確実に読ませる)
+    ctx.font=Math.round(s*0.62)+'px '+PIXEL_FONT;
     ctx.textAlign="center"; ctx.textBaseline="middle";
     ctx.fillStyle=PAL.shade;
-    ctx.fillText(n.kana, X+half+G, Y+half-s*0.17+G);
+    ctx.fillText(n.kana, X+half+G, Y+half-s*0.09+G);
     ctx.fillStyle=PAL.ink;
-    ctx.fillText(n.kana, X+half, Y+half-s*0.17);
+    ctx.fillText(n.kana, X+half, Y+half-s*0.09);
     // 歌詞=声、を示す吹き出しの尻尾
     dot(X+half-G, Y+s, G*2, G, col.dark);
     dot(X+half, Y+s+G, G, G, col.dark);
@@ -966,9 +1017,11 @@
   function noteRadius(dir, dt, g){
     return g.R + g.travel*progressOf(dt);
   }
-  /** 奥から手前へ来るように、遠いほど小さく見せる(一点透視の見え方に合わせる) */
+  /** 奥から手前へ来るように、遠いほど小さく見せる(一点透視の見え方に合わせる)。
+      ただし縮めすぎると「読むべきいちばん早い時点」でかなが読めない。
+      奥行き感が出る最小限(0.82)に留める。 */
   function noteScale(dir, dt){
-    return 0.62 + 0.38*(1-Math.max(0,Math.min(1,progressOf(dt))));
+    return 0.82 + 0.18*(1-Math.max(0,Math.min(1,progressOf(dt))));
   }
   /** ノーツ(または判定成立点)の画面座標。効果の位置もここで決める */
   function notePos(dir, dt, g){
@@ -1107,15 +1160,34 @@
      ノーツから離れるので、常に 1 行。板の幅に収まるまで文字サイズを下げ、
      それでも溢れるフレーズだけ、いま歌っている文字が中央に来るよう横へ流す。
      ひらがなの色はノーツと同じ方向色。「次に打つ色」が歌詞から先に読める。 */
-  function kanaColor(k){
-    var d=dirOf(k) || (BASE_OF[k] ? dirOf(BASE_OF[k]) : null);
-    return d ? DIR_COL[d] : null;
-  }
   /* フレーズ 1 行分の割り付け。板の幅が変わらない限り使い回す(毎フレーム測らない) */
+  /* このフレーズで実際にノーツになるかなだけを立てたフラグ。
+     難易度で間引かれたかなまで方向色にすると「打つ場所」を読み違えるので、
+     打つかなだけ色を付け、打たないかなは無彩色で流す。 */
+  function noteFlags(P){
+    var flags=P.chars.map(function(d){
+      var kana=(d.reading || toHira(d.text));
+      return { kana:kana, on:new Array(kana.length), dir:new Array(kana.length) };
+    });
+    if(!state || P.first==null) return flags;
+    var byChar={};
+    for(var j=P.first;j<=P.last && j<state.notes.length;j++){
+      var n=state.notes[j];
+      (byChar[n.charIdx]=byChar[n.charIdx]||[]).push(n);
+    }
+    flags.forEach(function(f, ci){
+      var list=byChar[ci]||[], k=0;
+      for(var q=0;q<f.kana.length && k<list.length;q++){
+        if(f.kana[q]===list[k].kana){ f.on[q]=true; f.dir[q]=list[k].dir; k++; }
+      }
+    });
+    return flags;
+  }
   function lyricFit(P, maxW, maxSize){
     if(P._fit && P._fit.maxW===maxW && P._fit.maxSize===maxSize) return P._fit;
-    var units=P.chars.map(function(d){
-      return {d:d, kana:(d.reading || toHira(d.text)), text:d.text};
+    var flags=noteFlags(P);
+    var units=P.chars.map(function(d, ci){
+      return {d:d, kana:(d.reading || toHira(d.text)), text:d.text, f:flags[ci]};
     });
     /* 収めるために小さくするのは途中まで。長いフレーズは、読める大きさを保って
        横に流したほうが目で追える(小さすぎる全表示より、大きい部分表示)。 */
@@ -1175,15 +1247,21 @@
       var kx=x+(c.w-c.kw)/2;
       ctx.font=f.size+"px "+PIXEL_FONT;
       for(var j=0;j<c.u.kana.length;j++){
-        var k=c.u.kana[j], kc=kanaColor(k);
-        var col = kc ? (sung?kc.base:kc.lit) : PAL.ink;   // 黒地なので lit のほうが読める
+        var k=c.u.kana[j];
+        /* 打つかな = ノーツと同じ方向色。打たないかな = 無彩色で薄く。
+           歌詞を見た時点で「次にどっちへフリックするか」が読める。 */
+        var hit=c.u.f && c.u.f.on[j];
+        var kc=hit ? DIR_COL[c.u.f.dir[j]] : null;
+        var col = kc ? (sung?kc.base:kc.lit) : "oklch(62% 0.02 268)";
+        var ka = hit ? a : a*0.55;
         if(d.warnAt && np-d.warnAt<450) col=DIR_COL.r.lit;    // 方向違い(一時的)
         if(d.missed) col=PAL.miss;                            // 打ち逃した(残る)
         var kw1=ctx.measureText(k).width;
-        ctx.globalAlpha=a*0.55; ctx.fillStyle=PAL.shade;      // 影を敷いて背景から浮かせる
+        ctx.globalAlpha=ka*0.55; ctx.fillStyle=PAL.shade;     // 影を敷いて背景から浮かせる
         ctx.fillText(k, kx+G, yK+G);
-        ctx.globalAlpha=a; ctx.fillStyle=col;
+        ctx.globalAlpha=ka; ctx.fillStyle=col;
         ctx.fillText(k, kx, yK);
+        if(hit && !sung) dot(kx, yK+G*2.2, Math.max(G,kw1-G), G, kc.dark);  // 打つ位置の下線
         kx+=kw1;
       }
       // 下段: 実際の歌詞(やや小さく、色は付けない)
@@ -1261,7 +1339,7 @@
       if(dir==="c") drawTapRingAt(n, r, g, size, false);
       else {
         var v=AXIS[dir];
-        drawNote(n, g.cx+v[0]*r, g.cy+v[1]*r, size*(0.62+0.38*(1-p)), false);
+        drawNote(n, g.cx+v[0]*r, g.cy+v[1]*r, size*(0.82+0.18*(1-p)), false);
       }
     }
   }
@@ -1275,7 +1353,8 @@
     }
     var t=performance.now()-attractT0;
     beatPulse=Math.max(0,1-((t%600)/600)*1.6);
-    beatNow={startTime:0,duration:600,position:1+Math.floor(t/600)%4,length:4};
+    beatNow={startTime:Math.floor(t/600)*600,duration:600,position:1+Math.floor(t/600)%4,length:4};
+    pushBeatWave(beatNow);
     ctx.clearRect(0,0,cw,ch);
     drawAttractStage(t);
     var logoY=ring().front+G*10;
@@ -1327,7 +1406,7 @@
     drawFlash();                       // 色かぶせは揺れの影響を受けない位置で
   }
 
-  function noteSize(){ return Math.min(fieldW()*0.16, ch*0.10, 56); }
+  function noteSize(){ return Math.min(fieldW()*0.185, ch*0.115, 64); }
 
   /* ---- 盤面(四方から中心へ集まるのを打ち返す) ---- */
   /* ステージとして組み立てる: 奥(地平線と背面のトラス)、左右(袖のスピーカー)、
@@ -1403,10 +1482,76 @@
       }
     });
 
+    /* ---- 斜め45°: ノーツが通らない空き地。ここでリズムを見せる ----
+       上下左右はノーツの通り道なので何も置けない。空いている斜めに
+       スピーカースタックを立て、拍で伸びるレベルメーターと、拍のたびに
+       外へ広がる波を出す。ミクの動き以外にもビートの手掛かりを作る。 */
+    drawBeatWaves(g);
+    drawCornerStacks(g);
+
     /* ---- 手前: ステージの前端と客席 ---- */
     dot(0,front,cw,G*2,PAL.ink);                   // 前端(エッジ)
     for(var fx2=G*2; fx2<cw; fx2+=G*9) dot(fx2, front+G*2, G*3, G, DIR_COL.c.dark);  // フットライト
     dot(0,front+G*3,cw,ch-front-G*3,"oklch(11% 0.025 268)");                          // 客席
+  }
+
+  /* 斜め4方向に広がる拍の波。上下左右(±22°)は avoid してノーツと混ざらないようにする。
+     内側から外へ = タップノーツ(外から内へ縮む)と動きが逆なので、形でも区別できる。 */
+  function drawBeatWaves(g){
+    var np=performance.now();
+    beatWaves=beatWaves.filter(function(w){ return np-w.at < w.dur; });
+    ctx.save();
+    beatWaves.forEach(function(w){
+      var age=(np-w.at)/w.dur;
+      var r=g.R+G*2+(g.travel+G*14)*age;
+      var al=(1-age)*(w.strong?0.85:0.45);
+      if(al<=0.02) return;
+      ctx.globalAlpha=al;
+      /* 方向色はノーツの意味を持つので使わない。無彩色に近い色で「拍」だけを表す */
+      var col=w.strong ? "oklch(74% 0.035 268)" : "oklch(46% 0.02 268)";
+      var d=w.strong ? G*2 : G;
+      var seg=Math.max(40, Math.round(2*Math.PI*r/(G*3)));
+      for(var i=0;i<seg;i++){
+        var a=i/seg*Math.PI*2;
+        /* 0=軸の上, 0.5=斜めの真ん中。斜めの ±23° だけに出す
+           (上下左右はノーツの通り道なので、絶対に置かない) */
+        var ph=((a%(Math.PI/2))+Math.PI/2)%(Math.PI/2)/(Math.PI/2);
+        if(Math.abs(ph-0.5)>0.26) continue;
+        dot(g.cx+Math.cos(a)*r, g.cy+Math.sin(a)*r, d, d, col);
+      }
+    });
+    ctx.restore();
+  }
+  /* 斜めのスピーカースタック。拍で伸びるレベルメーターを付けて、
+     ミクを見ていなくても視界の端でテンポが分かるようにする。 */
+  function drawCornerStacks(g){
+    var rb=g.R+g.travel*0.55;
+    var lvl=Math.max(beatPulse, chorusNow?0.4:0.18);
+    var DIRS=["l","u","r","d"];
+    [3,1,5,7].forEach(function(k, ci){                 // 左上→右上→右下→左下
+      var a=k*Math.PI/4;
+      var bx=Math.round((g.cx+Math.cos(a)*rb)/G)*G, by=Math.round((g.cy+Math.sin(a)*rb)/G)*G;
+      var w=G*11, h=G*16, x0=bx-w/2, y0=by-h/2;
+      if(x0<G || x0+w>cw-G) return;
+      var col=DIR_COL[DIRS[ci%4]];
+      dot(x0+G, y0+G, w, h, PAL.shade);                        // 影
+      dot(x0, y0, w, h, "oklch(20% 0.025 272)");               // 筐体
+      dot(x0, y0, w, G, PAL.rail);
+      dot(x0, y0+h-G, w, G, "oklch(13% 0.02 268)");
+      // ウーファー(拍で膨らむ)
+      var rw=Math.round(w*0.62/G)*G, rh=rw, rx=bx-rw/2, ry=y0+G*3;
+      dot(rx, ry, rw, rh, "oklch(12% 0.02 268)");
+      var cone=Math.max(G, Math.round(rw*(0.25+lvl*0.28)/G)*G);
+      dot(bx-cone/2, ry+rh/2-cone/2, cone, cone, lvl>0.5?col.base:"oklch(24% 0.03 270)");
+      // レベルメーター(下段)。目盛りは常に見せ、拍で下から伸びる
+      var bars=5, mw=G, mh=G*5, my=y0+h-G*2-mh, mx=bx-Math.round(bars*G*1.6/2/G)*G;
+      for(var q=0;q<bars;q++){
+        var lx=mx+q*G*1.6;
+        dot(lx, my, mw, mh, "oklch(14% 0.02 268)");
+        var on=Math.round(mh*Math.max(0, lvl-(q*0.12))/G)*G;
+        if(on>0) dot(lx, my+mh-on, mw, on, q>=bars-2?DIR_COL.c.lit:col.lit);
+      }
+    });
   }
 
   /* ステージ奥、照明の下に吊るした電光掲示板。曲名・スコアと歌詞を一枚にまとめる。
@@ -1486,7 +1631,6 @@
     var g=ring(), size=noteSize(), k, i;
     drawStage(g);
     var mk=drawMikuCenter();                       // ミクはリングの内側(背面)
-    drawScoreboard(g);                             // 照明の下の電光掲示板
     drawLights();                                  // 客席の灯り(打ち返した記録)
     drawFlyers();                                  // 打ち返したかな→ペンライトの変身
 
@@ -1501,8 +1645,6 @@
       }
       ctx.restore();
     });
-
-    drawLyricBoard(t, g);                          // 歌詞は照明エリアの掲示板に出す
 
     // 判定リング
     var pulse=Math.round(beatPulse*G*1.5);
@@ -1536,17 +1678,29 @@
       }
     }
 
-    // ノーツ
+    /* ノーツ。奥のノーツが手前のノーツに重なると、いま打つ 1 個が読めなくなる。
+       いったん集めてから遠い順に描き、いちばん手前(次に打つもの)を最後に描く。 */
+    var draws=[];
     for(k=state.idx; k<state.notes.length; k++){
       var n=state.notes[k], dt=n.time-t;
       if(dt>leadMs) break;
       if(dt < -WIN.late) continue;
-      if(n.dir==="c") drawTapRing(n, dt, g, size, k===state.idx);
+      draws.push({n:n, dt:dt, next:k===state.idx});
+    }
+    for(k=draws.length-1;k>=0;k--){
+      var dr=draws[k];
+      if(dr.n.dir==="c") drawTapRing(dr.n, dr.dt, g, size, dr.next);
       else {
-        var p=notePos(n.dir, dt, g);
-        drawNote(n, p.x, p.y, size*noteScale(n.dir, dt), k===state.idx);
+        var pp=notePos(dr.n.dir, dr.dt, g);
+        drawNote(dr.n, pp.x, pp.y, size*noteScale(dr.n.dir, dr.dt), dr.next);
       }
     }
+
+    /* 電光掲示板はノーツより後に描く = 上に乗る。ノーツが大きくなって
+       湧き口が板の下辺に掛かるようになったので、板の裏から出てくる形にする
+       (板を小さくして歌詞を読みにくくするより、隠したほうが良い)。 */
+    drawScoreboard(g);                             // 照明の下の電光掲示板
+    drawLyricBoard(t, g);                          // 歌詞は同じ板の下半分
     return mk;
   }
 
