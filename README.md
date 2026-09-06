@@ -12,6 +12,7 @@
 | --- | --- | --- | --- |
 | [miku-twintail/](miku-twintail/) | ミクの本体はツインテールである | 日常の物(ホイール・炊飯器など)に歌声由来のツインテールを生やして「ミク度」を競う、福笑い×リズムのゲーム。歌詞の文字が髪になり、コード進行の合いの手が鳴り、サビで自動採点 | [アプリ](https://pyororin.github.io/MagicalMirai-games001/miku-twintail/) ・ [検証モック](https://pyororin.github.io/MagicalMirai-games001/miku-twintail/prototype/) |
 | [typing-game/](typing-game/) | 打鍵ミライ(リズムタイピング) | 歌詞を、メロディに乗せて打つ。判定単位を「かな確定」に置きローマ字複数打鍵問題を解消。表記ゆれ全受理・先行入力・難易度別密度制御。スマホは1タッチゾーン式フリック(1かな=1ジェスチャ) | [実楽曲版](https://pyororin.github.io/MagicalMirai-games001/typing-game/prototype/textalive.html) ・ [合成音版](https://pyororin.github.io/MagicalMirai-games001/typing-game/prototype/demo.html) |
+| [miku-butter-paradox/](miku-butter-paradox/) | バター猫のパラドックス × ねこみみミク | 背中にバター面上のトーストを固定した猫ミクが着地できずに体軸まわりで回り続けるループ GIF/APNG（Pillow で手続き生成・透過版あり） | [透過GIF](miku-butter-paradox/output/buttercat_miku_alpha.gif) |
 
 ## 各企画の中身
 
