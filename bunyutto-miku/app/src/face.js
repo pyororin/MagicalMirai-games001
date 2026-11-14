@@ -156,40 +156,59 @@ class Raster {
 
 /* ------------------------------------------------------------------ */
 /* 表情テーブル。ここに1行足すと表情が増える。                            */
-/* fw/fh=顔の幅・高さの倍率  browY/browTilt=眉  blush=ほっぺの赤み        */
-/* eye=目の型  mouth.type=口の型                                         */
+/* すべて連続値。指の動かした量に応じて、母音ごとの値が重みで混ざる。      */
+/*   fw/fh=顔の幅・高さ  pull=ほっぺ  browY/browTilt=眉  blush=頬紅       */
+/*   eye: open=ひらき(1=まるい目,0=閉じた線) size=大きさ                  */
+/*        bow=閉じた線の反り(+で上に凸=にっこり、-でたれ目) yoff=線の高さ  */
+/*        chev=「＞ ＜」への変形量                                        */
+/*   mouth: w/h=大きさ y=中心の高さ p=上辺の平らさ(0=楕円,1=上が平ら)     */
+/*        n=角の立ち(2=丸,3=四角寄り) pad=くちびるの太さ                  */
+/*        tg=舌(dy,rx,ry は口の大きさに対する比)                          */
 /* ------------------------------------------------------------------ */
 export const EXPR = {
   // あ: さわっただけ。にこにこで、小さく口をあけている
-  a: { fw: 1.0, fh: 1.0, pull: 0.0, browY: 0, browTilt: 0.0, blush: 0.6, eye: "open", mouth: { type: "oval", w: 6, h: 5 } },
+  a: { fw: 1.0, fh: 1.0, pull: 0.0, browY: 0, browTilt: 0.0, blush: 0.6,
+       eye: { open: 1, size: 1, bow: 0, yoff: 0, chev: 0 },
+       mouth: { w: 6, h: 5, y: 54, p: 0, n: 2, pad: 0.8, tg: { dy: 0.25, rx: 0.8, ry: 0.25 } } },
   // い: ほっぺを横にのばされて、むにーっと笑顔。目はにっこり弧
-  i: { fw: 1.14, fh: 0.95, pull: 1.0, browY: -1, browTilt: 0.0, blush: 1.0, eye: "happy", mouth: { type: "smile", w: 17, h: 8 } },
+  i: { fw: 1.14, fh: 0.95, pull: 1.0, browY: -1, browTilt: 0.0, blush: 1.0,
+       eye: { open: 0, size: 1, bow: 4, yoff: 1.5, chev: 0 },
+       mouth: { w: 17, h: 8, y: 54, p: 1, n: 2, pad: 0.8, tg: { dy: 0.42, rx: 0.5, ry: 0.3 } } },
   // う: 両側から押さえられて、ほっぺがぷくっ。口はちゅっと小さな丸
-  u: { fw: 0.9, fh: 1.03, pull: -1.0, browY: 0, browTilt: -0.4, blush: 1.0, eye: "wide", mouth: { type: "pucker", w: 4, h: 4 } },
+  u: { fw: 0.9, fh: 1.03, pull: -1.0, browY: 0, browTilt: -0.4, blush: 1.0,
+       eye: { open: 1, size: 1.12, bow: 0, yoff: 0, chev: 0 },
+       mouth: { w: 4, h: 4, y: 54, p: 0, n: 2, pad: 1.3, tg: { dy: 0.2, rx: 0.2, ry: 0.15 } } },
   // え: たてに押しつぶされて、むぎゅっ。口は横にきゅっと開く
-  e: { fw: 1.1, fh: 0.88, pull: 0.5, browY: 1, browTilt: -0.3, blush: 0.8, eye: "flat", mouth: { type: "flat", w: 13, h: 4 } },
+  e: { fw: 1.1, fh: 0.88, pull: 0.5, browY: 1, browTilt: -0.3, blush: 0.8,
+       eye: { open: 0, size: 1, bow: -0.9, yoff: 1.1, chev: 0 },
+       mouth: { w: 13, h: 4, y: 54, p: 0, n: 3, pad: 0.8, tg: { dy: 0.25, rx: 0.8, ry: 0.35 } } },
   // お: たてにのばされ、Oの口で元気に歌う。目はぎゅっと閉じた「＞ ＜」
-  o: { fw: 0.94, fh: 1.12, pull: 0.0, browY: -2, browTilt: 0.0, blush: 0.7, eye: "shout", mouth: { type: "oval", w: 10, h: 12 } },
+  o: { fw: 0.94, fh: 1.12, pull: 0.0, browY: -2, browTilt: 0.0, blush: 0.7,
+       eye: { open: 0, size: 1, bow: 0, yoff: 0, chev: 1 },
+       mouth: { w: 10, h: 12, y: 55, p: 0, n: 2, pad: 0.8, tg: { dy: 0.25, rx: 0.8, ry: 0.25 } } },
 };
 const VOWEL_KEYS = ["a", "i", "u", "e", "o"];
 
-/** 重み w(合計1)から、連続パラメータを混ぜ、型は最大の重みのものを選ぶ */
+/** 重み w(合計1)で、すべてのパラメータを連続的に混ぜる(型の切り替えは無い) */
 export function mixExpr(w) {
-  let best = "a";
-  let bw = -1;
-  const m = { fw: 0, fh: 0, pull: 0, browY: 0, browTilt: 0, blush: 0, mw: 0, mh: 0 };
+  const m = {
+    fw: 0, fh: 0, pull: 0, browY: 0, browTilt: 0, blush: 0,
+    eye: { open: 0, size: 0, bow: 0, yoff: 0, chev: 0 },
+    mouth: { w: 0, h: 0, y: 0, p: 0, n: 0, pad: 0, tg: { dy: 0, rx: 0, ry: 0 } },
+    w: {},
+  };
+  let sum = 0;
+  for (const k of VOWEL_KEYS) sum += w[k] || 0;
   for (const k of VOWEL_KEYS) {
-    const wk = w[k] || 0;
-    if (wk > bw) { bw = wk; best = k; }
+    const wk = (w[k] || 0) / (sum || 1);
+    m.w[k] = wk;
     const e = EXPR[k];
     m.fw += e.fw * wk; m.fh += e.fh * wk; m.pull += e.pull * wk;
     m.browY += e.browY * wk; m.browTilt += e.browTilt * wk; m.blush += e.blush * wk;
-    m.mw += e.mouth.w * wk; m.mh += e.mouth.h * wk;
+    for (const q of Object.keys(m.eye)) m.eye[q] += e.eye[q] * wk;
+    for (const q of ["w", "h", "y", "p", "n", "pad"]) m.mouth[q] += e.mouth[q] * wk;
+    for (const q of ["dy", "rx", "ry"]) m.mouth.tg[q] += e.mouth.tg[q] * wk;
   }
-  m.eye = EXPR[best].eye;
-  m.mouthType = EXPR[best].mouth.type;
-  m.dom = best;
-  m.domW = bw;
   return m;
 }
 
@@ -229,8 +248,8 @@ export class MikuFace {
     const sway = Math.round((Math.sin((s.t || 0) * 2.1) * 0.7 + (s.beat || 0)) * 6) / 6;
     // 見た目が変わらないフレームは描き直さない(高解像度なので重い)
     const key = [
-      ...VOWEL_KEYS.map((k) => Math.round((w[k] || 0) * 30)),
-      s.blink > 0.5 ? 1 : 0,
+      ...VOWEL_KEYS.map((k) => Math.round((w[k] || 0) * 48)),
+      Math.round((s.blink || 0) * 8),
       Math.round((s.beat || 0) * 12),
       sway,
       s.singing ? 1 : 0,
@@ -381,65 +400,71 @@ export class MikuFace {
     }
   }
 
-  /* ---- 目: まるくて大きい ---- */
+  /* ---- 目: まるい目 → にっこり弧 / 線 / 「＞ ＜」へ、形そのものが連続して変わる ---- */
   drawEyes(r, m, fx, fy, blink) {
-    let type = m.eye;
-    if (blink > 0.5 && (type === "open" || type === "wide")) type = "closed";
+    const e = { ...m.eye };
+    // まばたき: 閉じた線(ふせたまつ毛の弧)へ滑らかに
+    const bl = Math.max(0, Math.min(1, blink)) * e.open;
+    e.open *= 1 - blink;
+    e.bow = e.bow * (1 - bl) + -2.2 * bl;
+    e.yoff = e.yoff * (1 - bl) + -0.2 * bl;
     for (const side of [-1, 1]) {
-      this.drawEye(r, type, fx(40 + side * 11.2), fy(43.5), side);
+      this.drawEye(r, e, fx(40 + side * 11.2), fy(43.5), side);
     }
   }
 
-  drawEye(r, type, ex, ey, side) {
-    if (type === "open" || type === "wide") {
-      const big = type === "wide";
-      const rx = big ? 6 : 5.4;
-      const ry = big ? 7.2 : 6.6;
-      r.ellipse(ex, ey, rx + 0.7, ry + 0.7, C.ink);
-      // 虹彩: 上が濃く、下が明るいなめらかなグラデーション
-      r.ellipse(ex, ey, rx, ry, (x, y) => {
-        const t = (y - ey) / ry;
+  drawEye(r, e, ex, ey, side) {
+    const rx = 5.4 * e.size;
+    const ry = 6.6 * e.size;
+    const open = Math.max(0, Math.min(1, e.open));
+    const closed = 1 - open;
+    const N = 16;
+    // まぶたの線: ひらいているときは目の上の縁、閉じるにつれて「反った線」へ
+    const bowY = (u) => e.yoff - e.bow * (1 - u * u);
+    const lidY = (u) => ey - ry * open * Math.sqrt(Math.max(0, 1 - u * u)) - 0.5 * open + closed * bowY(u);
+    const lid = [];
+    for (let k = 0; k <= N; k++) {
+      const u = (k / N) * 2 - 1;
+      lid.push([ex + u * (rx + 0.2 * open), lidY(u)]);
+    }
+    // 「＞ ＜」への変形(左目が ＞、右目が ＜)。線の両端が上下の先端、中央が頂点になる
+    const sx = side;
+    const chev = Math.max(0, Math.min(1, e.chev));
+    const cp = [[ex + sx * 3.8, ey - 3.4], [ex - sx * 3.6, ey], [ex + sx * 3.8, ey + 3.4]];
+    const chevAt = (t) => (t < 0.5
+      ? [cp[0][0] + (cp[1][0] - cp[0][0]) * (t * 2), cp[0][1] + (cp[1][1] - cp[0][1]) * (t * 2)]
+      : [cp[1][0] + (cp[2][0] - cp[1][0]) * (t * 2 - 1), cp[1][1] + (cp[2][1] - cp[1][1]) * (t * 2 - 1)]);
+    // 目玉(虹彩)は、ひらき具合に応じて縦に縮む。ほぼ閉じたら出さない
+    if (open > 0.04) {
+      const top = lidY(0);
+      const bottom = ey + ry * (0.1 + 0.9 * open) * (1 - chev);
+      const H = Math.max(0.1, bottom - top);
+      const cy2 = top + H / 2;
+      const ry2 = H / 2;
+      const rx2 = rx * (0.55 + 0.45 * Math.sqrt(open));
+      r.ellipse(ex, cy2, rx2 + 0.7, ry2 + 0.7, C.ink);
+      r.ellipse(ex, cy2, rx2, ry2, (x, y) => {
+        const t = (y - cy2) / ry2;
         return t < 0.1 ? lerpC(C.irisD, C.irisM, smooth(-1, 0.1, t)) : lerpC(C.irisM, C.irisL, smooth(0.1, 0.95, t));
       });
-      r.ellipse(ex, ey + 0.4, rx * 0.46, ry * 0.5, C.pupil);
-      // 大きなハイライトと小さなハイライト
-      r.ellipse(ex - side * 1.9 + 0.3, ey - 2.4, 1.7, 1.8, C.spark);
-      r.ellipse(ex + side * 2.4, ey + 3.0, 0.7, 0.7, C.spark);
-      r.ellipse(ex + side * 3.3, ey + 1.8, 0.45, 0.45, C.spark);
-      // 上まぶたのライン(まつ毛は描かない)
-      const pts = [];
-      for (let k = -8; k <= 8; k++) {
-        const u = k / 8;
-        pts.push([ex + u * (rx + 0.2), ey - ry * Math.sqrt(1 - u * u) - 0.5]);
+      const pk = smooth(0.15, 0.6, open);
+      r.ellipse(ex, cy2 + ry2 * 0.06, rx2 * 0.46 * pk, ry2 * 0.5 * pk, C.pupil);
+      // ハイライトも、ひらきに合わせて少しずつ現れる
+      const hk = smooth(0.35, 0.9, open);
+      if (hk > 0.02) {
+        r.ellipse(ex - side * 1.9 * e.size + 0.3, cy2 - ry2 * 0.36, 1.7 * hk, 1.8 * hk, C.spark);
+        r.ellipse(ex + side * 2.4, cy2 + ry2 * 0.45, 0.7 * hk, 0.7 * hk, C.spark);
+        r.ellipse(ex + side * 3.3, cy2 + ry2 * 0.27, 0.45 * hk, 0.45 * hk, C.spark);
       }
-      r.polyline(pts, C.ink, 1.3);
-    } else if (type === "happy") {
-      const pts = [];
-      for (let k = -8; k <= 8; k++) {
-        const u = k / 8;
-        pts.push([ex + u * 5.6, ey + 1.5 - 4 * (1 - u * u)]);
-      }
-      r.polyline(pts, C.ink, 1.5);
-    } else if (type === "flat") {
-      const pts = [];
-      for (let k = -8; k <= 8; k++) {
-        const u = k / 8;
-        pts.push([ex + u * 5.4, ey + 0.2 + 0.9 * u * u]);
-      }
-      r.polyline(pts, C.ink, 1.7);
-      r.ellipse(ex, ey + 2.1, 1.7, 0.7, C.irisM);
-    } else if (type === "shout") {
-      // 「＞ ＜」(左目が ＞、右目が ＜)
-      const sx = -side;
-      r.polyline([[ex + sx * 3.8, ey - 3.4], [ex - sx * 3.6, ey], [ex + sx * 3.8, ey + 3.4]], C.ink, 1.5);
-    } else if (type === "closed") {
-      const pts = [];
-      for (let k = -8; k <= 8; k++) {
-        const u = k / 8;
-        pts.push([ex + u * 5.4, ey + 2 - 2.2 * u * u]);
-      }
-      r.polyline(pts, C.ink, 1.5);
     }
+    // 線(まぶた/にっこり弧/＞＜)。太さも連続して変わる
+    const wLine = 1.3 + 0.3 * closed + 0.2 * chev;
+    const pts = lid.map((p, k) => {
+      if (chev <= 0) return p;
+      const c = chevAt(k / N);
+      return [p[0] + (c[0] - p[0]) * chev, p[1] + (c[1] - p[1]) * chev];
+    });
+    r.polyline(pts, C.ink, wLine);
   }
 
   /* ---- まゆ: ちいさく。怒り顔にならない角度だけ ---- */
@@ -454,49 +479,39 @@ export class MikuFace {
     }
   }
 
-  /* ---- 口: ちいさく、まるく ---- */
+  /* ---- 口: 楕円 → 上が平らな笑顔 → 四角い口 → 小さなすぼめ口、まで連続して変わる ---- */
   drawMouth(r, m, fx, fy, singing) {
+    const g = m.mouth;
     const mx = fx(40);
-    const type = m.mouthType;
-    const w = Math.max(3, m.mw);
-    const h = Math.max(2, m.mh);
-    const my = fy(type === "oval" && h > 8 ? 52 + h / 2 - 3 : 54);
-    if (type === "oval") {
-      const rx = w / 2;
-      const ry = h / 2;
-      r.ellipse(mx, my, rx + 0.8, ry + 0.8, C.lipD);
-      r.ellipse(mx, my, rx, ry, (x, y) => lerpC(C.mouthIn, C.mouthIn, 0));
-      if (h >= 4) r.ellipse(mx, my + ry * 0.5, rx * 0.8, ry * 0.5, C.tongue);
-    } else if (type === "smile") {
-      // 大きく笑った口(上は平ら、下がまるい)。歯は描かない
-      const half = w / 2;
-      const top = my - h / 2;
-      const shape = (pad) => (yc) => {
-        const t = (yc - top) / h;
-        if (yc < top - pad || t > 1 + pad / h) return null;
-        const hw = t <= 0 ? half : half * Math.sqrt(Math.max(0, 1 - t * t));
-        return [mx - hw - pad, mx + hw + pad];
-      };
-      r.rows(top - 0.8, my + h / 2 + 0.8, shape(0.8), C.lipD);
-      r.rows(top, my + h / 2, shape(0), C.mouthIn);
-      r.ellipse(mx, my + h * 0.55, half * 0.55, h * 0.32, C.tongue);
-    } else if (type === "flat") {
-      const half = w / 2;
-      const sup = (pad) => (yc) => {
-        const t = Math.abs((yc - my) / (h / 2 + pad));
-        if (t > 1) return null;
-        const hw = (half + pad) * Math.pow(1 - Math.pow(t, 3), 1 / 3);
-        return [mx - hw, mx + hw];
-      };
-      r.rows(my - h / 2 - 0.8, my + h / 2 + 0.8, sup(0.8), C.lipD);
-      r.rows(my - h / 2, my + h / 2, sup(0), (x, y) => (y > my + h * 0.1 ? C.tongue : C.mouthIn));
-    } else if (type === "pucker") {
-      const rr = Math.max(2, w / 2);
-      r.ellipse(mx, my, rr + 1.3, rr + 1.3, C.lip);
-      r.ellipse(mx, my, rr - 0.3, rr - 0.3, C.mouthIn);
-      r.ellipse(mx, my + 0.6, 0.8, 0.6, C.tongue);
+    const w = Math.max(3, g.w);
+    const h = Math.max(2, g.h);
+    const half = w / 2;
+    const my = fy(g.y);
+    const top = my - h / 2;
+    // 縦位置 v(0..1) での半幅。p=1 で上辺が平ら(上が広い)、n が大きいほど角ばる
+    const hwAt = (yc, pad) => {
+      const v = (yc - top) / h;
+      if (v < -pad / h || v > 1 + pad / h) return null;
+      const vv = Math.max(0, Math.min(1, v));
+      const round = Math.pow(Math.max(0, 1 - Math.pow(Math.abs(2 * vv - 1), g.n)), 1 / g.n);
+      const half2 = Math.sqrt(Math.max(0, 1 - vv * vv)); // 上が平らな(半楕円)
+      const f = round + (half2 - round) * g.p;
+      return half * f + pad;
+    };
+    const shape = (pad) => (yc) => {
+      const hw = hwAt(yc, pad);
+      return hw == null ? null : [mx - hw, mx + hw];
+    };
+    // くちびる: すぼめるほど太く明るい色に
+    const ring = lerpC(C.lipD, C.lip, Math.min(1, (g.pad - 0.8) / 0.5));
+    r.rows(top - g.pad, my + h / 2 + g.pad, shape(g.pad), ring);
+    r.rows(top, my + h / 2, shape(0), C.mouthIn);
+    // 舌: 口の大きさに応じて、小さい口ではしぼむ
+    const tk = smooth(2.5, 5, h) * smooth(2.5, 5, w);
+    if (tk > 0.02) {
+      r.ellipse(mx, my + h * (g.tg.dy - 0.0), half * g.tg.rx * tk, h * g.tg.ry * tk, C.tongue);
     }
-    if (singing) r.ellipse(mx + w / 2 + 3, my - 3, 0.6, 0.6, C.spark);
+    if (singing) r.ellipse(mx + half + 3, my - 3, 0.6, 0.6, C.spark);
   }
 
   /* ---- 前髪: ぱっつんにまるい毛先 ---- */
@@ -552,32 +567,40 @@ export class MikuFace {
     r.polyline(ring.slice(5, 14), C.hairLL, 0.5);
   }
 
-  /* ---- 効果(マンガ記号) ---- */
+  /* ---- 効果(マンガ記号): 母音の重みに応じて大きさが連続して変わる ---- */
   drawFx(r, m, fx, fy) {
-    const d = m.dom;
-    if (m.domW < 0.6) return;
     const col = C.spark;
-    if (d === "i") {
+    const wi = smooth(0.2, 0.85, m.w.i);
+    if (wi > 0.04) {
       const sp = (x, y) => {
-        r.line(x - 1.6, y, x + 1.6, y, col, 0.5);
-        r.line(x, y - 1.6, x, y + 1.6, col, 0.5);
-        r.ellipse(x, y, 0.5, 0.5, col);
+        const k = 1.6 * wi;
+        r.line(x - k, y, x + k, y, col, 0.5);
+        r.line(x, y - k, x, y + k, col, 0.5);
+        r.ellipse(x, y, 0.5 * wi, 0.5 * wi, col);
       };
       sp(fx(40 - 28), fy(30));
       sp(fx(40 + 28), fy(34));
-    } else if (d === "u") {
+    }
+    const wu = smooth(0.2, 0.85, m.w.u);
+    if (wu > 0.04) {
       for (const side of [-1, 1]) {
         const x = fx(40 + side * 26) + side * 3;
-        r.polyline([[x, fy(46)], [x - side * 2, fy(49)], [x, fy(52)]], col, 0.6);
+        const k = wu;
+        r.polyline([[x, fy(49 - 3 * k)], [x - side * 2 * k, fy(49)], [x, fy(49 + 3 * k)]], col, 0.6);
       }
-    } else if (d === "e") {
-      r.ellipse(fx(40 - 24), fy(32.4), 1.4, 2.0, C.sweat);
-      r.poly([[fx(40 - 24), fy(28.6)], [fx(40 - 24) - 1.1, fy(31)], [fx(40 - 24) + 1.1, fy(31)]], C.sweat);
-    } else if (d === "o") {
+    }
+    const we = smooth(0.2, 0.85, m.w.e);
+    if (we > 0.04) {
+      const x = fx(40 - 24);
+      r.ellipse(x, fy(32.4), 1.4 * we, 2.0 * we, C.sweat);
+      r.poly([[x, fy(32.4 - 3.8 * we)], [x - 1.1 * we, fy(31)], [x + 1.1 * we, fy(31)]], C.sweat);
+    }
+    const wo = smooth(0.2, 0.85, m.w.o);
+    if (wo > 0.04) {
       for (const side of [-1, 1]) {
         const x = 40 + side * 31;
-        r.line(x, fy(32), x + side * 3, fy(29), col, 0.6);
-        r.line(x + side, fy(38), x + side * 5, fy(38), col, 0.6);
+        r.line(x, fy(32), x + side * 3 * wo, fy(32 - 3 * wo), col, 0.6);
+        r.line(x + side, fy(38), x + side * (1 + 4 * wo), fy(38), col, 0.6);
       }
     }
   }

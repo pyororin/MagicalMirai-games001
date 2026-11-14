@@ -728,7 +728,9 @@ function drawLyrics() {
 
 function drawFace(now, bi) {
   const f = L.face;
-  const blink = G.vowel === "a" && now % 3600 < 120 ? 1 : 0;
+  // まばたきも一瞬でパチッと切り替えず、閉じて開く動きにする(口の形を作っているあいだはしない)
+  const bp = now % 3600;
+  const blink = bp < 170 ? Math.sin((Math.PI * bp) / 170) * G.weights.a : 0;
   face.render({ w: G.weights, blink, beat: G.mode === "playing" ? bi.pulse : 0, t: now / 1000, singing: voice.on });
   // 320×320 の細かいドット絵を滑らかに縮小して描く(ドットが一見わからない細かさ)
   ctx.imageSmoothingEnabled = true;

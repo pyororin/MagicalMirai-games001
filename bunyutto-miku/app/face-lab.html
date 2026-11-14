@@ -33,4 +33,19 @@ function draw(){
 document.getElementById("amt").addEventListener("input",draw);
 draw();
 window.__draw=draw;
+// コマ送り: あ → 各母音へ、指の動かした量(0〜100%)を 12.5% 刻みで並べる。形が連続して変わることの確認用
+const strip=document.createElement("div");
+strip.innerHTML="<h1 style='margin-top:14px'>コマ送り(あ → い/う/え/お、0〜100%を12.5%刻み)</h1>";
+strip.style.cssText="margin-top:8px";
+for(const v of ["i","u","e","o"]){
+  const row=document.createElement("div"); row.style.cssText="display:flex;gap:4px;margin-bottom:4px;flex-wrap:wrap";
+  for(let k=0;k<=8;k++){
+    const c=document.createElement("canvas"); c.style.cssText="width:104px;height:104px";
+    const mf=new MikuFace(); mf.attach(c);
+    const w={a:1-k/8,i:0,u:0,e:0,o:0}; w[v]+=k/8;
+    mf.render({w,blink:0,beat:0,t:0}); row.appendChild(c);
+  }
+  strip.appendChild(row);
+}
+document.body.appendChild(strip);
 </script></body></html>

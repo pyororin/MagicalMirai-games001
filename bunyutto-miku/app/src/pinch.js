@@ -7,9 +7,9 @@
 import { vowelOfGesture } from "./vowel.js";
 
 export const PINCH = {
-  dead: 0.1, // 基準の±10%は「動かしていない」とみなす
-  outFull: 1.45, // ratio がここで amount=1
-  inFull: 0.6,
+  dead: 0.07, // 基準の±7%は「動かしていない」とみなす
+  outFull: 1.9, // ratio がここで amount=1(広めにとり、指の動きの全域で連続的に変わるように)
+  inFull: 0.42,
   toV: 56, // 横→縦に切り替わる角度(度)。ヒステリシスでちらつきを防ぐ
   toH: 34,
   minBase: 28, // 基準距離の下限(px)。指が近すぎる置き方でも暴れない
