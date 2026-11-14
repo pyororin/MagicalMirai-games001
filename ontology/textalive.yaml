@@ -510,8 +510,8 @@ pitfalls:
       カードの characters の1要素)と順番に突き合わせられる(課題曲6曲すべて個数一致を確認)。
       固定データ化しておけば、デモモードと単体テストが実データだけで動く。
       実行時の Player のデータ(getBeats / getChords)とも同一の譜面が生成されることを確認済み。
-    verified: 2026-11-14 (otama-game。tools/build-songs.mjs)
-    refs: [otama-game/tools/build-songs.mjs, otama-game/app/data/songs/]
+    verified: 2026-11-14 (bunyutto-miku。tools/build-songs.mjs)
+    refs: [bunyutto-miku/tools/build-songs.mjs, bunyutto-miku/app/data/songs/]
 
   - id: start-after-timer-ready
     symptom: >
@@ -521,6 +521,6 @@ pitfalls:
     solution: >
       開始ボタンは「曲データが来た」かつ「onTimerReady 済み」の両方が揃ってから有効にする。
       曲を切り替えたら両方とも落とし直す。
-    verified: 2026-11-14 (otama-game)
-    refs: [otama-game/app/src/game.js]
+    verified: 2026-11-14 (bunyutto-miku)
+    refs: [bunyutto-miku/app/src/game.js]
 

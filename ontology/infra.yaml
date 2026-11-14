@@ -311,10 +311,10 @@ pitfalls:
       ビルド番号付きクエリ(?v=)は、import の連鎖(相対 import)には引き継がれない。
       モジュールはファイルごとに別々にキャッシュされる。
     solution: >
-      index.html のインライン定数(window.OTAMA_BUILD)と、モジュール側の定数(BUILD)を
+      index.html のインライン定数(window.BUNYU_BUILD)と、モジュール側の定数(BUILD)を
       同時に上げ、食い違ったらバッジを赤くして「キャッシュ混在」と表示する。
       ビルド不要で済ませたいときの最小の検出手段。確実に避けたいなら1ファイルにバンドルする。
     detection: 画面左下のバッジ(build N (index M ≠ キャッシュ混在?))。
-    verified: 2026-11-14 (otama-game)
-    refs: [otama-game/README.md, otama-game/app/src/game.js]
+    verified: 2026-11-14 (bunyutto-miku)
+    refs: [bunyutto-miku/README.md, bunyutto-miku/app/src/game.js]
 

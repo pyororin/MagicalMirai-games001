@@ -1,21 +1,21 @@
-name: Deploy otama-game to GitHub Pages
+name: Deploy bunyutto-miku to GitHub Pages
 
 # gh-pages ブランチ配信。他企画を消さないよう destination_dir 方式
 # (ontology/infra.yaml の gh-pages-mutual-wipe を参照)。
-# 公開物は otama-game/app/ の中身だけ。譜面生成・判定・ピンチ検出のテストが通らなければ公開しない。
+# 公開物は bunyutto-miku/app/ の中身だけ。譜面生成・判定・ピンチ検出のテストが通らなければ公開しない。
 on:
   push:
     branches: [main]
     paths:
-      - "otama-game/**"
-      - ".github/workflows/pages-otama-game.yml"
+      - "bunyutto-miku/**"
+      - ".github/workflows/pages-bunyutto-miku.yml"
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: pages-otama-game
+  group: pages-bunyutto-miku
   cancel-in-progress: false
 
 jobs:
@@ -27,14 +27,14 @@ jobs:
         with:
           node-version: 22
       - name: Unit tests (chart / judge / pinch)
-        run: node --test otama-game/test/*.test.mjs
+        run: node --test bunyutto-miku/test/*.test.mjs
       - name: Collect static files
         run: |
           mkdir -p _site
-          rsync -a otama-game/app/ _site/
-      - name: Deploy otama-game
+          rsync -a bunyutto-miku/app/ _site/
+      - name: Deploy bunyutto-miku
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./_site
-          destination_dir: otama-game
+          destination_dir: bunyutto-miku

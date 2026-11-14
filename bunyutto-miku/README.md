@@ -1,9 +1,9 @@
-# ほっぺミライ
+# ぶにゅっとミク
 
-オタマトーン風の音ゲー。片手で盤面(スティック)をタップして音の高さ、片手でミクの顔をピンチして口の形(あいうえお)。
+ピンチで歌わせる音ゲー。片手で盤面(スティック)をタップして音の高さ、片手でミクの顔をピンチして口の形(あいうえお)。
 ノーツは歌詞の1音で、「その母音の顔」を作って「その段」を鳴らす。マジカルミライ 2025 課題曲6曲。
 
-- 公開 URL: https://pyororin.github.io/MagicalMirai-games001/otama-game/
+- 公開 URL: https://pyororin.github.io/MagicalMirai-games001/bunyutto-miku/
 - デモ(TextAlive 無し・合成伴奏): 末尾に `?demo=1`
 - 設計: [docs/DESIGN.md](docs/DESIGN.md)
 
@@ -25,13 +25,13 @@
 ## 実行
 
 ```sh
-node --test otama-game/test/*.test.mjs        # 単体テスト(依存なし)
-cd otama-game/app && python3 -m http.server   # → http://localhost:8000/?demo=1
+node --test bunyutto-miku/test/*.test.mjs        # 単体テスト(依存なし)
+cd bunyutto-miku/app && python3 -m http.server   # → http://localhost:8000/?demo=1
 ```
 
 PC では A S D F G H が段(低→高)、←→↑↓ が顔(う/い/お/え)。
 
 ## ビルド番号
 
-`app/index.html` の `window.OTAMA_BUILD` と `app/src/game.js` の `BUILD` を**同時に**上げる。
+`app/index.html` の `window.BUNYU_BUILD` と `app/src/game.js` の `BUILD` を**同時に**上げる。
 食い違うと画面左下のバッジが赤くなる(ES Module はファイルごとにキャッシュされるため、新旧混在の検出用)。

@@ -354,8 +354,8 @@ pitfalls:
       譜面どおりに弾くボット(合成 PointerEvent)を作り、全 PERFECT / 顔違いのみ / 段違いのみ / 放置 の
       4通りで counts を見る。ボット自身の状態管理の誤り(フラグを立て忘れて離さない等)で
       「顔違いが多発」と誤診しやすいので、まずボットの入力履歴を疑う。
-    verified: 2026-11-14 (otama-game)
-    refs: [otama-game/app/src/judge.js, otama-game/test/judge.test.mjs]
+    verified: 2026-11-14 (bunyutto-miku)
+    refs: [bunyutto-miku/app/src/judge.js, bunyutto-miku/test/judge.test.mjs]
 
   - id: pixel-character-cute-first
     symptom: >
@@ -365,7 +365,7 @@ pitfalls:
       怒り方向の眉、濃い輪郭線)が、小さいドットでは表情の読み取りを硬くし不気味さになる。
       「ドットの細かさ」と「可愛さ」は別軸で、細かく描くほど怖くなることがある。
     solution: >
-      モチーフ(例: オタマトーンのミク)を参照し、丸い輪郭・大きく丸い目(ハイライト2つ)・小さな口・
+      モチーフ(デフォルメされた公式風のちびキャラ等)を参照し、丸い輪郭・大きく丸い目(ハイライト2つ)・小さな口・
       まるいスカラップの前髪・うすい肌色の輪郭線に寄せる。歯は描かない。眉は怒り方向にしない。
       表情の変形(頬を伸ばす等)も、尖らせず「おもち」のように丸く膨らませる。
       「可愛い」は絶対条件として、最初のレビュー観点に置く。
@@ -377,6 +377,6 @@ pitfalls:
     detection: >
       5表情を並べた確認ページ(face-lab.html)を作り、実際のサイズで見て、
       「初見で怖くないか」を最優先に確認する。
-    verified: 2026-11-14 (otama-game。初版を作り直した)
-    refs: [otama-game/app/src/face.js, otama-game/app/face-lab.html]
+    verified: 2026-11-14 (bunyutto-miku。初版を作り直した)
+    refs: [bunyutto-miku/app/src/face.js, bunyutto-miku/app/face-lab.html]
 

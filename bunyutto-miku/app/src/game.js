@@ -1,4 +1,4 @@
-// ほっぺミライ — ゲーム本体(描画・入力・進行)。
+// ぶにゅっとミク — ゲーム本体(描画・入力・進行)。
 //
 //   片手: スティック(盤面の段)をタップ/なぞる → 音の高さ
 //   片手: ミクの顔をピンチ → 口の形(あいうえお)= 音色と表情
@@ -29,11 +29,11 @@ const DEMO = params.get("demo") === "1";
 /* ---------------- 設定の保存(失敗しても動く) ---------------- */
 const prefs = { diff: "NORMAL", song: 0, offset: 0, speed: 1, songVol: 0.7, voiceVol: 0.9 };
 try {
-  Object.assign(prefs, JSON.parse(localStorage.getItem("otama.prefs") || "{}"));
+  Object.assign(prefs, JSON.parse(localStorage.getItem("bunyu.prefs") || "{}"));
 } catch (e) {}
 function savePrefs() {
   try {
-    localStorage.setItem("otama.prefs", JSON.stringify(prefs));
+    localStorage.setItem("bunyu.prefs", JSON.stringify(prefs));
   } catch (e) {}
 }
 
@@ -895,9 +895,9 @@ function showError(msg) {
 }
 function updateBadge() {
   const b = $("build");
-  const mismatch = window.OTAMA_BUILD && window.OTAMA_BUILD !== BUILD;
+  const mismatch = window.BUNYU_BUILD && window.BUNYU_BUILD !== BUILD;
   b.textContent =
-    "build " + BUILD + (mismatch ? " (index " + window.OTAMA_BUILD + " ≠ キャッシュ混在?)" : "") + " / snd:" + voice.state +
+    "build " + BUILD + (mismatch ? " (index " + window.BUNYU_BUILD + " ≠ キャッシュ混在?)" : "") + " / snd:" + voice.state +
     (voice.ctx ? " lat:" + voice.outputLatencyMs + "ms" : "") + (DEMO ? " / DEMO" : "");
   b.style.color = mismatch ? "#FF9BAA" : "";
 }
@@ -1065,7 +1065,7 @@ function boot() {
   buildHowTo();
   buildControls();
   requestAnimationFrame(frame);
-  window.OTAMA = {
+  window.BUNYU = {
     BUILD,
     G,
     prefs,
