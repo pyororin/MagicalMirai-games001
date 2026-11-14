@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ミク ドット顔ラボ</title>
+<style>
+  body{margin:0;background:#0B1026;color:#E8ECFF;font-family:system-ui,sans-serif;padding:12px}
+  h1{font-size:15px;margin:0 0 8px}
+  .row{display:flex;flex-wrap:wrap;gap:10px}
+  figure{margin:0;text-align:center;font-size:12px}
+  canvas{image-rendering:pixelated;width:240px;height:240px;background:#17204A;border-radius:6px;display:block}
+  label{font-size:12px}
+</style></head><body>
+<h1>ミクの顔(80×80 ドット)の表情確認。amount: <input id="amt" type="range" min="0" max="100" value="100"></h1>
+<div class="row" id="row"></div>
+<script type="module">
+import { MikuFace } from "./src/face.js";
+const names={a:"あ",i:"い",u:"う",e:"え",o:"お"};
+const row=document.getElementById("row");
+const faces=[];
+for(const k of Object.keys(names)){
+  const f=document.createElement("figure"), c=document.createElement("canvas");
+  f.appendChild(c); f.appendChild(document.createTextNode(names[k]));
+  row.appendChild(f);
+  const mf=new MikuFace(); mf.attach(c); faces.push([k,mf]);
+}
+function draw(){
+  const amt=document.getElementById("amt").value/100;
+  for(const [k,mf] of faces){
+    const w={a:1-amt,i:0,u:0,e:0,o:0}; w[k]+=amt;
+    mf.render({w,blink:0,beat:0,t:0,singing:false});
+  }
+}
+document.getElementById("amt").addEventListener("input",draw);
+draw();
+window.__draw=draw;
+</script></body></html>

@@ -303,3 +303,18 @@ pitfalls:
     verified: 2026-08-31 (typing-game build 22)
     refs: [typing-game/prototype/textalive.html]
 
+  - id: es-module-partial-stale-cache
+    symptom: >
+      ES Modules を分割して Pages に置くと、更新後に「一部のファイルだけ古い」状態が起きうる
+      (HTML は新しいのに import 先が古いキャッシュ、など)。挙動が噛み合わず原因が分かりにくい。
+    cause: >
+      ビルド番号付きクエリ(?v=)は、import の連鎖(相対 import)には引き継がれない。
+      モジュールはファイルごとに別々にキャッシュされる。
+    solution: >
+      index.html のインライン定数(window.OTAMA_BUILD)と、モジュール側の定数(BUILD)を
+      同時に上げ、食い違ったらバッジを赤くして「キャッシュ混在」と表示する。
+      ビルド不要で済ませたいときの最小の検出手段。確実に避けたいなら1ファイルにバンドルする。
+    detection: 画面左下のバッジ(build N (index M ≠ キャッシュ混在?))。
+    verified: 2026-11-14 (otama-game)
+    refs: [otama-game/README.md, otama-game/app/src/game.js]
+

@@ -495,3 +495,32 @@ pitfalls:
       形が変わるかを確認する。
     verified: 2026-08-31 (typing-game build 30)
     refs: [typing-game/prototype/textalive.html]
+
+  - id: card-json-offline-fixtures
+    symptom: >
+      ネットワークが無い/不安定な環境(CI・単体テスト・ヘッドレス)で、実楽曲の拍・コード・歌詞時刻を
+      使った検証がしたいが、Player を動かせない。
+    cause: >
+      Player は songle.jp 等への通信が前提。一方、カード JSON は読み取りだけなら素の HTTP で取れる。
+    solution: |
+      curl -H "x-ta-app-token: <トークン>" https://api.textalive.jp/cards/<カードID>
+      で analysis(beats / chords / segments)・lyrics(phrases > words > characters の時刻)・
+      vocalAmplitude・valenceArousal が1回で取れる(sandbox からも到達できた)。
+      歌詞の「文字」は入っていないが、typing-game の読みデータ(text の空白以外の1文字 =
+      カードの characters の1要素)と順番に突き合わせられる(課題曲6曲すべて個数一致を確認)。
+      固定データ化しておけば、デモモードと単体テストが実データだけで動く。
+      実行時の Player のデータ(getBeats / getChords)とも同一の譜面が生成されることを確認済み。
+    verified: 2026-11-14 (otama-game。tools/build-songs.mjs)
+    refs: [otama-game/tools/build-songs.mjs, otama-game/app/data/songs/]
+
+  - id: start-after-timer-ready
+    symptom: >
+      onVideoReady で開始ボタンを有効にすると、押した直後に再生が始まらない/シークが効かない。
+    cause: >
+      video の準備と、再生できる状態(onTimerReady)は別のタイミングで来る。
+    solution: >
+      開始ボタンは「曲データが来た」かつ「onTimerReady 済み」の両方が揃ってから有効にする。
+      曲を切り替えたら両方とも落とし直す。
+    verified: 2026-11-14 (otama-game)
+    refs: [otama-game/app/src/game.js]
+
