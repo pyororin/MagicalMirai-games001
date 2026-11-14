@@ -730,13 +730,10 @@ function drawFace(now, bi) {
   const f = L.face;
   const blink = G.vowel === "a" && now % 3600 < 120 ? 1 : 0;
   face.render({ w: G.weights, blink, beat: G.mode === "playing" ? bi.pulse : 0, t: now / 1000, singing: voice.on });
-  const sDev = Math.max(80, Math.floor((f.s * dpr) / 80) * 80);
-  const s = sDev / dpr;
-  const x = f.x + (f.s - s) / 2;
-  const y = f.y + (f.s - s) / 2;
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(faceCanvas, x, y, s, s);
+  // 320×320 の細かいドット絵を滑らかに縮小して描く(ドットが一見わからない細かさ)
   ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(faceCanvas, f.x, f.y, f.s, f.s);
   // 口の形に合わせたガイド枠(ピンチ可能な範囲)
   ctx.save();
   ctx.setLineDash([6, 7]);
