@@ -14,7 +14,7 @@ import { SONGS, dataUrl } from "./songs.js";
 import { DemoSource } from "./demo.js";
 import { TextAliveSource } from "./textalive.js";
 
-export const BUILD = 5;
+export const BUILD = 6;
 
 /* 母音ごとの色。ノーツ・ガイド・結果で共通 */
 const VCOL = { a: "#FF7EB6", i: "#FFC93C", u: "#9B7BFF", e: "#38D6CB", o: "#FF6F5E" };

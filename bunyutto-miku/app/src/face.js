@@ -33,7 +33,7 @@ function hex(c) {
 const PALETTE_KEYS = [
   "hair", "hairD", "hairDD", "hairL", "hairLL", "skin", "skinS", "skinSS", "outline", "blush", "blush2",
   "ink", "white", "irisD", "irisM", "irisL", "pupil", "mouthIn", "tongue", "teeth", "lip", "lipD", "lipHi",
-  "shirt", "shirtS", "sleeve", "sleeveL", "tie", "tieD", "gear", "gearL", "gearT", "spark", "sweat", "handLine", "handShade",
+  "shirt", "shirtS", "sleeve", "sleeveL", "tie", "tieD", "gear", "gearL", "gearT", "spark", "sweat",
 ];
 const SECTIONS = ["palette", "head", "eyes", "brows", "blush", "mouth", "hair", "headphones", "body", "fx", "motion", "expressions"];
 const EXPR_FIELDS = ["fw", "fh", "pull", "browY", "browTilt", "blush"];
@@ -77,15 +77,6 @@ export function validateDesign(d) {
   }
   if (!Array.isArray(d.hair.tails && d.hair.tails.points) || d.hair.tails.points.length < 3) errs.push("hair.tails.points は3点以上の [x,y,揺れ係数] にしてください");
   if (!d.hair.fringe || !d.hair.back) errs.push("hair.back / hair.fringe がありません");
-  const hd = d.fx && d.fx.hands;
-  if (!hd) errs.push("fx.hands がありません");
-  else {
-    for (const k of ["y", "inset", "slide", "tilt", "outline"]) num(hd[k], "fx.hands." + k);
-    for (const [g, ks] of Object.entries({ palm: ["len", "w"], finger: ["n", "w", "len", "spacing", "fan"], thumb: ["w", "len", "dy", "dxIn"], arm: ["w", "toX", "toY"] })) {
-      for (const k of ks) num(hd[g] && hd[g][k], "fx.hands." + g + "." + k);
-    }
-    if (!Array.isArray(hd.ramp) || hd.ramp.length !== 2) errs.push("fx.hands.ramp は [始め, 満量] にしてください");
-  }
   const pf = d.head.cheek && d.head.cheek.puff;
   if (!pf) errs.push("head.cheek.puff がありません");
   else for (const k of ["dy", "height", "amount"]) num(pf[k], "head.cheek.puff." + k);
@@ -329,7 +320,6 @@ export class MikuFace {
     this.drawBrows(r, m, fx, fy);
     this.drawHeadphones(r, cx, cy);
     this.drawFx(r, m, fx, fy);
-    this.drawHands(r, m, cx, fy);
 
     if (this.ctx) {
       new Uint32Array(this.imageData.data.buffer).set(r.px);
@@ -656,54 +646,6 @@ export class MikuFace {
     }
     r.polyline(ring, C.hairL, Rg.width);
     r.polyline(ring.slice(Rg.hiFrom, Rg.hiTo), C.hairLL, Rg.hiWidth);
-  }
-
-  /* ---- 手: う(横からおさえる)のとき、両手でほっぺを押さえる。重みに応じて近づく ---- */
-  drawHands(r, m, cx, fy) {
-    const Hh = D.fx.hands;
-    const wu = m.w.u;
-    const k = smooth(Hh.ramp[0], Hh.ramp[1], wu);
-    if (k < 0.04) return;
-    const hy = fy(Hh.y);
-    const ow = Hh.outline;
-    for (const side of [-1, 1]) {
-      const edge = this.headHW(hy);
-      // 頬の縁に食い込む位置。弱いうちは外側から近づいてくる
-      const hx = cx + side * ((edge < 0 ? 20 : edge) + Hh.inset + (1 - k) * Hh.slide);
-      const ang = (side * Hh.tilt * Math.PI) / 180;
-      const ux = Math.sin(ang), uy = -Math.cos(ang); // 指の向き(上。外側へ少し傾ける)
-      const px = -uy, py = ux;
-      const pl = Hh.palm.len, pw = Hh.palm.w;
-      const c = [hx, hy];
-      const top = [c[0] + ux * pl / 2, c[1] + uy * pl / 2];
-      const bot = [c[0] - ux * pl / 2, c[1] - uy * pl / 2];
-      const F = Hh.finger;
-      const parts = []; // [x0,y0,x1,y1,width]
-      parts.push([bot[0], bot[1], top[0], top[1], pw]); // てのひら
-      for (let j = 0; j < F.n; j++) {
-        const o = (j - (F.n - 1) / 2) * F.spacing;
-        const bx = top[0] + px * o, by = top[1] + py * o;
-        const dx = ux + px * o * F.fan * 0.5, dy = uy + py * o * F.fan * 0.5;
-        const dl = Math.hypot(dx, dy);
-        const len = F.len * (1 - 0.12 * Math.abs(j - (F.n - 1) / 2));
-        parts.push([bx, by, bx + (dx / dl) * len, by + (dy / dl) * len, F.w]);
-      }
-      const T = Hh.thumb;
-      const tb = [c[0] - side * (pw * 0.35), c[1] + T.dy];
-      parts.push([tb[0], tb[1], tb[0] - side * T.dxIn * T.len, tb[1] + T.len * 0.55, T.w]);
-      const A = Hh.arm;
-      const arm = [bot[0], bot[1], cx + side * A.toX, A.toY, A.w];
-      // 外側の線 → 肌の順に塗って、まるい輪郭にする
-      r.line(arm[0], arm[1], arm[2], arm[3], C.handLine, arm[4] + ow * 2);
-      for (const q of parts) r.line(q[0], q[1], q[2], q[3], C.handLine, q[4] + ow * 2);
-      r.line(arm[0], arm[1], arm[2], arm[3], C.skin, arm[4]);
-      for (const q of parts) r.line(q[0], q[1], q[2], q[3], C.skin, q[4]);
-      // てのひらの影(頬に当たる側)と、爪のような小さなハイライト
-      // てのひらの影(頬に当たる側)
-      r.line(c[0] - side * pw * 0.22, c[1] - pl * 0.1, c[0] - side * pw * 0.22, c[1] + pl * 0.4, C.handShade, 1.6);
-      // 腕のつけ根の影
-      r.line(bot[0], bot[1] + 0.6, bot[0] + side * 4, bot[1] + 7, C.handShade, 1.4);
-    }
   }
 
   /* ---- 効果(マンガ記号): 母音の重みに応じて大きさが連続して変わる ---- */
