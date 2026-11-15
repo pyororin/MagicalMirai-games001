@@ -15,7 +15,7 @@ import { SONGS, dataUrl } from "./songs.js";
 import { DemoSource } from "./demo.js";
 import { TextAliveSource } from "./textalive.js";
 
-export const BUILD = 10;
+export const BUILD = 11;
 
 /* 母音ごとの色。ノーツ・ガイド・結果で共通 */
 const VCOL = { a: "#FF7EB6", i: "#FFC93C", u: "#9B7BFF", e: "#38D6CB", o: "#FF6F5E" };
@@ -977,6 +977,16 @@ function showError(msg) {
   e.textContent = String(msg) + "\n[build " + BUILD + "]" + (d.length ? "\n--- 失敗した通信 ---\n" + d.join("\n") : "");
   $("overlay").style.display = "grid";
 }
+/** 失敗ではなく「まだ待っている」ときの表示(診断は添える。届けば READY に自動で変わる) */
+function showWait(msg) {
+  $("ovTitle").textContent = "LOADING…";
+  $("ovText").textContent = msg;
+  const d = source && source.diag ? source.diag : [];
+  const e = $("ovErr");
+  e.hidden = !d.length;
+  e.textContent = "[build " + BUILD + "]\n" + d.join("\n");
+  $("overlay").style.display = "grid";
+}
 function updateBadge() {
   const b = $("build");
   const mismatch = window.BUNYU_BUILD && window.BUNYU_BUILD !== BUILD;
@@ -1139,10 +1149,12 @@ async function loadSelected() {
   $("ovText").textContent = "楽曲を読み込んでいます: " + def.url;
   $("chartInfo").textContent = "";
   $("ovErr").hidden = true;
+  G.loadFailed = false;
   try {
     if (source.kind === "demo") onSongReady(await source.loadSong(def));
     else await source.loadSong(def); // 完了は onVideoReady → ready イベント
   } catch (e) {
+    G.loadFailed = true; // 15秒の見張りがこのエラー表示を上書きしないように
     showError("楽曲の読み込みに失敗: " + e);
   }
 }
@@ -1212,6 +1224,7 @@ async function boot() {
     G.songReady = false;
     G.timerReady = false;
     G.mode = "loading";
+    updateStartEnabled(); // 状態を落としたら、ボタンも無効に戻す(有効のまま残ると準備前に押せてしまう)
   });
   source.on("ready", (song) => {
     onSongReady(song);
@@ -1232,10 +1245,19 @@ async function boot() {
     if (G.mode === "playing" && !source.managed) finish();
   });
   source.init();
-  // 15秒たっても読み込みが進まなければ、通信の失敗を表示して原因を切り分けられるようにする
+  // 読み込みの見張り。モバイル回線では 15 秒を超えることがあるため、まず「時間がかかっています」と
+  // 経過を見せ(失敗扱いにしない。あとで届けば自動で READY に変わる)、45 秒たったら失敗として表示する。
   setTimeout(() => {
-    if (G.mode === "loading") showError("楽曲の読み込みが進みません(15秒)。ネットワーク/トークン/曲URLを確認してください。");
+    if (G.loadFailed) return;
+    if (G.mode === "loading") showWait("読み込みに時間がかかっています(回線が遅いと30秒ほどかかります)。このまま待ってください。");
+    else if (G.songReady && !G.timerReady)
+      showWait("曲データは届いています。音源の準備待ちです(iPhone/iPad では少し時間がかかることがあります)。");
   }, 15000);
+  setTimeout(() => {
+    if (G.loadFailed) return;
+    if (G.mode === "loading") showError("楽曲の読み込みが進みません(45秒)。ネットワーク/トークン/曲URLを確認してください。");
+    else if (G.songReady && !G.timerReady) showError("音源の準備が終わりません(45秒)。画面を一度タップして待つか、ページを開き直してください。");
+  }, 45000);
 }
 
 boot().catch((e) => showError("起動に失敗: " + (e && e.stack ? e.stack.split("\n").slice(0, 3).join("\n") : e)));
