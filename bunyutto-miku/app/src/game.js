@@ -14,7 +14,7 @@ import { SONGS } from "./songs.js";
 import { DemoSource } from "./demo.js";
 import { TextAliveSource } from "./textalive.js";
 
-export const BUILD = 2;
+export const BUILD = 3;
 
 /* 母音ごとの色。ノーツ・ガイド・結果で共通 */
 const VCOL = { a: "#FF7EB6", i: "#FFC93C", u: "#9B7BFF", e: "#38D6CB", o: "#FF6F5E" };
@@ -27,7 +27,7 @@ const params = new URLSearchParams(location.search);
 const DEMO = params.get("demo") === "1";
 
 /* ---------------- 設定の保存(失敗しても動く) ---------------- */
-const prefs = { diff: "NORMAL", song: 0, offset: 0, speed: 1, songVol: 0.7, voiceVol: 0.9 };
+const prefs = { diff: "NORMAL", song: 0, offset: 0, speed: 1, songVol: 0.7, voiceVol: 1.0 };
 try {
   Object.assign(prefs, JSON.parse(localStorage.getItem("bunyu.prefs") || "{}"));
 } catch (e) {}
@@ -366,7 +366,40 @@ function finish() {
   showResult();
 }
 
+/** ノーツも採点も無しで、曲に合わせて自由に鳴らす。音階は曲の調なので、どこを鳴らしても曲に合う */
+async function startFree() {
+  if (!G.song) return;
+  voice.unlock();
+  if (source.kind === "demo") source.bindAudio(voice.ctx);
+  applyVolumes();
+  setChart();
+  hideOverlay();
+  G.mode = "free";
+  G.seekPending = false;
+  G.freeLoopAt = 0;
+  pinch.reset();
+  for (const id of [...G.taps.keys()]) tapUp(id);
+  owners.clear();
+  applyMouth();
+  try {
+    await source.seek(G.skipTo);
+    await source.play();
+  } catch (e) {
+    showError("再生の開始に失敗: " + e);
+  }
+}
+function exitFree() {
+  G.mode = "ready";
+  try {
+    source.pause();
+  } catch (e) {}
+  voice.noteOff();
+  showOverlay("READY", "曲と難易度を選んでスタート。", "スタート");
+  $("startBtn").onclick = startPlay;
+}
+
 function pauseGame() {
+  if (G.mode === "free") return exitFree();
   if (G.mode !== "playing" || source.managed) return;
   G.mode = "paused";
   try {
@@ -433,6 +466,14 @@ function update(now) {
     }
   } else {
     G.pos = pos;
+    // 自由演奏は、曲の終わりまで行ったら頭(歌い出しの手前)から繰り返す
+    if (G.mode === "free" && G.chart && G.chart.notes.length) {
+      const last = G.chart.notes[G.chart.notes.length - 1];
+      if (pos > last.t + last.dur + 3000 && now - G.freeLoopAt > 3000) {
+        G.freeLoopAt = now;
+        Promise.resolve(source.seek(G.skipTo)).catch(() => {});
+      }
+    }
   }
   G.popups = G.popups.filter((p) => now - p.t0 < p.life);
   G.bursts = G.bursts.filter((b) => now - b.t0 < 520);
@@ -828,7 +869,11 @@ function drawHud() {
   ctx.textAlign = "right";
   ctx.font = `800 24px ${FONT}`;
   ctx.fillStyle = "#fff";
-  ctx.fillText(String(j ? j.score : 0).padStart(7, "0"), L.W - 12, y);
+  if (G.mode === "free") {
+    ctx.font = `800 17px ${FONT}`;
+    ctx.fillStyle = "#7CE3D8";
+    ctx.fillText("FREE PLAY", L.W - 12, y);
+  } else ctx.fillText(String(j ? j.score : 0).padStart(7, "0"), L.W - 12, y);
   ctx.textAlign = "left";
   ctx.font = `700 12px ${FONT}`;
   ctx.fillStyle = "rgba(232,236,255,0.7)";
@@ -838,7 +883,11 @@ function drawHud() {
     while (ctx.measureText(ttl).width > maxW && ttl.length > 6) ttl = ttl.slice(0, -2);
     ctx.fillText(ttl, 54, 17);
   }
-  if (j && j.combo > 1) {
+  if (G.mode === "free") {
+    ctx.font = `600 11px ${FONT}`;
+    ctx.fillStyle = "rgba(232,236,255,0.6)";
+    ctx.fillText("ノーツなし。曲に合わせて自由に(Ⅱでもどる)", 54, 36);
+  } else if (j && j.combo > 1) {
     ctx.font = `800 15px ${FONT}`;
     ctx.fillStyle = "#FFE066";
     ctx.fillText(j.combo + " COMBO", 54, 36);
@@ -868,7 +917,7 @@ function drawPopups(now) {
 
 /** はじめての操作ガイド */
 function drawHint() {
-  if (G.mode !== "playing" && G.mode !== "ready") return;
+  if (G.mode !== "playing" && G.mode !== "ready" && G.mode !== "free") return;
   if (G.firstSound) return;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -1036,6 +1085,7 @@ function buildControls() {
     $("startBtn").onclick = startPlay;
   };
   $("pauseBtn").addEventListener("click", pauseGame);
+  $("freeBtn").addEventListener("click", startFree);
   $("startBtn").onclick = startPlay;
 }
 
@@ -1067,7 +1117,9 @@ function onSongReady(song) {
 
 /** TextAlive は onTimerReady(再生できる状態)まで待つ。デモは曲データが来ればよい */
 function updateStartEnabled() {
-  $("startBtn").disabled = !(G.songReady && (source.kind === "demo" || G.timerReady));
+  const ok = !!(G.songReady && (source.kind === "demo" || G.timerReady));
+  $("startBtn").disabled = !ok;
+  $("freeBtn").disabled = !ok;
 }
 
 async function loadSelected() {

@@ -33,6 +33,7 @@
 - **main へマージしたら、毎回デプロイ先の URL を提示する**(利用者は実機で確認するため)。
   実楽曲版: https://pyororin.github.io/MagicalMirai-games001/typing-game/prototype/textalive.html
   ぶにゅっとミク: https://pyororin.github.io/MagicalMirai-games001/bunyutto-miku/ (デモ: 末尾に `?demo=1`)
+- **返信のたびに Pages の URL を添える**(マージ前でも。公開済みの版のビルド番号と、未マージの変更があるかも一緒に伝える)。
 - sandbox から `pyororin.github.io` へは到達できない(プロキシが 403)。反映確認は
   curl のポーリングではなく Actions のワークフロー実行結果で行う
   (詳細: `ontology/infra.yaml` の pages-unreachable-from-sandbox)。

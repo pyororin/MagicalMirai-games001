@@ -28,6 +28,8 @@ const LEVEL = { a: 1.0, i: 0.98, u: 0.9, e: 1.03, o: 1.17 }; // 392Hz/659Hz で�
 // 高域(F4,F5)の明るさ。い・えは明るく、う・おは暗く(母音らしさの大きな手がかり)
 const BRIGHT = { a: 0.8, i: 1.3, u: 0.2, e: 1.0, o: 0.35 };
 const HARMONICS = 40;
+// 出力の持ち上げ。リミッター後のピークが 0.6 前後なので、1.55 倍しても 1.0 を超えない(音量つまみ最大でも割れない)
+const MASTER = 1.55;
 
 export class Voice {
   constructor() {
@@ -80,10 +82,13 @@ export class Voice {
       return x;
     };
     this.master = n(ctx.createGain());
-    this.master.gain.value = 0.85;
+    this.master.gain.value = MASTER * 0.9;
     this.comp = n(ctx.createDynamicsCompressor());
-    this.comp.threshold.value = -16;
-    this.comp.ratio.value = 4;
+    this.comp.threshold.value = -20;
+    this.comp.knee.value = 8;
+    this.comp.ratio.value = 12;
+    this.comp.attack.value = 0.003;
+    this.comp.release.value = 0.12;
     this.master.connect(this.comp);
     this.comp.connect(ctx.destination);
 
@@ -100,11 +105,17 @@ export class Voice {
     this.o2.detune.value = 7;
     this.o1G = n(ctx.createGain());
     this.o2G = n(ctx.createGain());
-    this.o1G.gain.value = 0.62;
-    this.o2G.gain.value = 0.38;
+    this.o3 = n(ctx.createOscillator());
+    this.o3.setPeriodicWave(wave);
+    this.o3.detune.value = -9;
+    this.o3G = n(ctx.createGain());
+    this.o1G.gain.value = 0.5;
+    this.o2G.gain.value = 0.32;
+    this.o3G.gain.value = 0.32;
     this.src = n(ctx.createGain());
     this.o1.connect(this.o1G).connect(this.src);
     this.o2.connect(this.o2G).connect(this.src);
+    this.o3.connect(this.o3G).connect(this.src);
 
     // 息(ささやき成分): 常に少し、立ち上がりに少し多く
     const len = Math.floor(ctx.sampleRate * 1.0);
@@ -122,7 +133,7 @@ export class Voice {
     this.fl = [];
     this.fg = [];
     const Q = [5, 6, 7, 8, 9];
-    const G = [1.0, 1.1, 0.8, 0.4, 0.2];
+    const G = [1.25, 1.2, 0.9, 0.45, 0.22];
     this.G = G;
     this.mix = n(ctx.createGain());
     this.mix.gain.value = 1;
@@ -151,7 +162,15 @@ export class Voice {
     this.lp.frequency.value = 6500;
     this.env = n(ctx.createGain());
     this.env.gain.value = 0;
-    this.mix.connect(this.pk).connect(this.lp).connect(this.env).connect(this.master);
+    this.mix.connect(this.pk).connect(this.lp).connect(this.env);
+    this.env.connect(this.master); // 直接音
+    // 響き: ホールの残響(合成したインパルス応答)。声を止めたあとも余韻が残る
+    this.conv = n(ctx.createConvolver());
+    this.conv.buffer = this._impulse(1.8);
+    this.wet = n(ctx.createGain());
+    this.wet.gain.value = 0.5;
+    this.comp.connect(this.conv); // リミッター後の音に響きをかける(音量差・割れを残響に持ち込まない)
+    this.conv.connect(this.wet).connect(ctx.destination); // 残響はリミッターを通さない(止めた後に持ち上がらないように)
 
     // ビブラート(押し続けると深くなる)
     this.lfo = n(ctx.createOscillator());
@@ -161,12 +180,14 @@ export class Voice {
     this.lfo.connect(this.lfoG);
     this.lfoG.connect(this.o1.detune);
     this.lfoG.connect(this.o2.detune);
+    this.lfoG.connect(this.o3.detune);
 
     const t = ctx.currentTime;
     this.o1.frequency.value = 440;
     this.o2.frequency.value = 440;
     this.o1.start(t);
     this.o2.start(t);
+    this.o3.start(t);
     this.lfo.start(t);
     this.noise.start(t);
     // 無音1サンプルで出力経路を開ける
@@ -177,6 +198,29 @@ export class Voice {
       s.connect(this.master);
       s.start(0);
     } catch (e) {}
+  }
+
+  /** 合成インパルス応答(ステレオ): 初期反射+指数減衰するノイズ。高域ほど早く消えて、まるい響きにする */
+  _impulse(sec) {
+    const ctx = this.ctx;
+    const len = Math.floor(ctx.sampleRate * sec);
+    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch);
+      let lp = 0;
+      for (let i = 0; i < len; i++) {
+        const u = i / len;
+        const k = 0.55 - 0.45 * u; // 時間とともに高域を落とす(ローパスを強める)
+        lp += (Math.random() * 2 - 1 - lp) * k;
+        d[i] = lp * Math.pow(1 - u, 3.2) * (i < 600 ? i / 600 : 1);
+      }
+      // 初期反射(数発)
+      for (const [ms, g] of [[11, 0.5], [19, 0.38], [31, 0.3], [47, 0.22]]) {
+        const j = Math.floor((ms + ch * 3) * ctx.sampleRate / 1000);
+        if (j < len) d[j] += g * (ch ? -1 : 1);
+      }
+    }
+    return buf;
   }
 
   get state() {
@@ -226,7 +270,7 @@ export class Voice {
     this.log.noteOn++;
     this.freq = freq;
     this._applyFormants(1);
-    for (const o of [this.o1, this.o2]) {
+    for (const o of [this.o1, this.o2, this.o3]) {
       o.frequency.cancelScheduledValues(t);
       if (this.on && glide > 0) o.frequency.setTargetAtTime(freq, t, glide);
       else {
@@ -236,7 +280,7 @@ export class Voice {
       }
     }
     this.env.gain.cancelScheduledValues(t);
-    this.env.gain.setTargetAtTime(0.9, t, 0.008); // 立ち上がり 8ms(遅れて聞こえない速さ)
+    this.env.gain.setTargetAtTime(1.0, t, 0.008); // 立ち上がり 8ms(遅れて聞こえない速さ)
     // 息: 立ち上がりに少し多く、あとは薄く残す
     this.breathG.gain.cancelScheduledValues(t);
     this.breathG.gain.setValueAtTime(0.16, t);
@@ -254,7 +298,7 @@ export class Voice {
     if (!this.ctx || !this.on) return;
     const t = this.ctx.currentTime;
     this.freq = freq;
-    for (const o of [this.o1, this.o2]) {
+    for (const o of [this.o1, this.o2, this.o3]) {
       o.frequency.cancelScheduledValues(t);
       o.frequency.setTargetAtTime(freq, t, tc);
     }
@@ -265,7 +309,7 @@ export class Voice {
     if (!this.ctx || !this.on) return;
     const t = this.ctx.currentTime;
     this.env.gain.cancelScheduledValues(t);
-    this.env.gain.setTargetAtTime(0, t, 0.045);
+    this.env.gain.setTargetAtTime(0, t, 0.07);
     this.breathG.gain.cancelScheduledValues(t);
     this.breathG.gain.setTargetAtTime(0, t, 0.03);
     this.lfoG.gain.cancelScheduledValues(t);
@@ -274,6 +318,6 @@ export class Voice {
   }
 
   setVolume(v) {
-    if (this.master) this.master.gain.setTargetAtTime(v, this.ctx.currentTime, 0.02);
+    if (this.master) this.master.gain.setTargetAtTime(v * MASTER, this.ctx.currentTime, 0.02);
   }
 }
