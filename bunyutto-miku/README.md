@@ -15,10 +15,13 @@
 | `app/src/chart.js` | 譜面生成(歌詞→モーラ→間引き→母音・音高) |
 | `app/src/key.js` / `vowel.js` | コード解析・調推定 / 読み→母音 |
 | `app/src/judge.js` / `pinch.js` | 判定 / ピンチ検出 |
-| `app/src/voice.js` / `face.js` | フォルマント合成ボイス / ドット絵の顔 |
+| `app/src/voice.js` / `face.js` | 歌声の合成ボイス / ドット絵の顔(デザインデータを読んで描く) |
 | `app/src/game.js` | 描画・入力・進行 |
 | `app/src/textalive.js` / `demo.js` | TextAlive ソース / 合成伴奏のデモソース |
-| `app/face-lab.html` | 表情の確認ページ |
+| `app/face-lab.html` | デザインラボ(顔のデザイン JSON を編集してプレビュー、コマ送り) |
+| `app/data/design/miku-face.json` | **顔・表情のデザインデータ**(色・形・5表情・髪・動き。本編はこれを読んで描く) |
+| `design/` | デザインの説明([README](design/README.md))とデザインシート(PNG) |
+| `tools/render-design-sheet.mjs` | デザインデータからデザインシート(PNG)を生成 |
 | `tools/build-songs.mjs` | カード JSON+読みデータ → `app/data/songs/*.json` |
 | `test/` | 単体テスト |
 

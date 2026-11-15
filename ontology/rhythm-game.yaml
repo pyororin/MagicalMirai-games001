@@ -444,3 +444,21 @@ pitfalls:
     verified: 2026-11-15 (bunyutto-miku 初回デプロイ)
     refs: [.github/workflows/pages-bunyutto-miku.yml, .github/workflows/pages-typing-game.yml]
 
+  - id: character-design-as-data
+    symptom: >
+      キャラクターの見た目(色・形・表情)をコードに埋め込むと、デザイン調整のたびにコードを触ることになり、
+      調整のたびに別の部分が壊れる。デザインを提案・確認・差し替えする人(コードを書かない人)が関われない。
+    cause: >
+      デザインの値(色、顔の大きさ、眉の傾き、表情ごとの口の形、髪の曲線)が描画コードの中の数値リテラルになっていた。
+    solution: >
+      デザインをデータファイル(JSON)に切り出し、描画コードはそれを読んで描くだけにする。
+      コードは検証(必須項目・色・数値、場所つきのエラー)を持ち、壊れたデータは起動時に止めて理由を画面に出す。
+      ?design=URL で別案を試せるようにし、JSON を編集してその場でプレビューできるラボ(face-lab.html)と、
+      項目の意味を書いた README を同じ場所に置く。リファクタは「全表情×まばたき等のピクセルのハッシュが前後で一致する」
+      ことで見た目不変を保証する。デザインシート(PNG)も生成してリポジトリに残す。
+    detection: >
+      デザイン変更の PR で、コードの差分が出ていない(JSON とシートだけ)ことを確認する。
+      単体テストで「データを変えると絵が変わる」「髪はピンチで動かない」を固定する。
+    verified: 2026-11-15 (bunyutto-miku。16パターンのハッシュ一致を確認して移行)
+    refs: [bunyutto-miku/app/data/design/miku-face.json, bunyutto-miku/design/README.md, bunyutto-miku/test/design.test.mjs]
+

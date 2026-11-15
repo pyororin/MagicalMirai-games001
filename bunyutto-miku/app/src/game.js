@@ -3,18 +3,18 @@
 //   片手: スティック(盤面の段)をタップ/なぞる → 音の高さ
 //   片手: ミクの顔をピンチ → 口の形(あいうえお)= 音色と表情
 // ノーツは「歌詞の1音」。流れてくる段・母音のとおりに、タイミングよく鳴らす。
-import { MikuFace } from "./face.js";
+import { MikuFace, loadDesign, getDesign } from "./face.js";
 import { Voice } from "./voice.js";
 import { PinchTracker } from "./pinch.js";
 import { Judge, rankOf } from "./judge.js";
 import { buildChart, DIFFS } from "./chart.js";
 import { rowMidi, midiToHz, ROW_COUNT, ROW_SOLFEGE, NOTE_NAMES } from "./key.js";
 import { VOWELS, VOWEL_KANA, GESTURE } from "./vowel.js";
-import { SONGS } from "./songs.js";
+import { SONGS, dataUrl } from "./songs.js";
 import { DemoSource } from "./demo.js";
 import { TextAliveSource } from "./textalive.js";
 
-export const BUILD = 3;
+export const BUILD = 4;
 
 /* 母音ごとの色。ノーツ・ガイド・結果で共通 */
 const VCOL = { a: "#FF7EB6", i: "#FFC93C", u: "#9B7BFF", e: "#38D6CB", o: "#FF6F5E" };
@@ -432,7 +432,7 @@ function update(now) {
   lastFrame = now;
   // 顔の重みをなめらかに追従
   const tgt = G.target || { a: 1, i: 0, u: 0, e: 0, o: 0 };
-  const k = 1 - Math.exp(-dt / 0.05);
+  const k = 1 - Math.exp(-dt / getDesign().motion.weightSmoothSec); // 顔が指に追いつく速さはデザインデータ
   let sum = 0;
   for (const v of VOWELS) {
     G.weights[v] += (tgt[v] - G.weights[v]) * k;
@@ -801,8 +801,9 @@ function drawLyrics() {
 function drawFace(now, bi) {
   const f = L.face;
   // まばたきも一瞬でパチッと切り替えず、閉じて開く動きにする(口の形を作っているあいだはしない)
-  const bp = now % 3600;
-  const blink = bp < 170 ? Math.sin((Math.PI * bp) / 170) * G.weights.a : 0;
+  const bk = getDesign().motion.blink;
+  const bp = now % bk.periodMs;
+  const blink = bp < bk.durationMs ? Math.sin((Math.PI * bp) / bk.durationMs) * G.weights.a : 0;
   face.render({ w: G.weights, blink, beat: G.mode === "playing" ? bi.pulse : 0, t: now / 1000, singing: voice.on });
   // 320×320 の細かいドット絵を滑らかに縮小して描く(ドットが一見わからない細かさ)
   ctx.imageSmoothingEnabled = true;
@@ -1141,8 +1142,17 @@ async function loadSelected() {
   }
 }
 
-function boot() {
+/** 顔のデザインデータ。?design=URL で別案を試せる(デザイン案の確認用) */
+const DESIGN_URL = params.get("design") || dataUrl("data/design/miku-face.json", BUILD);
+
+async function boot() {
   resize();
+  try {
+    await loadDesign(DESIGN_URL);
+  } catch (e) {
+    showError("顔のデザインデータを読み込めません: " + (e.message || e));
+    return;
+  }
   buildHowTo();
   buildControls();
   requestAnimationFrame(frame);
@@ -1223,4 +1233,4 @@ function boot() {
   }, 15000);
 }
 
-boot();
+boot().catch((e) => showError("起動に失敗: " + (e && e.stack ? e.stack.split("\n").slice(0, 3).join("\n") : e)));
