@@ -32,7 +32,7 @@ function hex(c) {
 /* ------------------------------------------------------------------ */
 const PALETTE_KEYS = [
   "hair", "hairD", "hairDD", "hairL", "hairLL", "skin", "skinS", "skinSS", "outline", "blush", "blush2",
-  "ink", "mouthIn", "tongue", "lip", "lipD", "lipHi", "markPinch", "markPress",
+  "ink", "mouthIn", "tongue", "lip", "lipD", "lipHi", "markPinch", "markPress", "hatch",
   "shirt", "shirtS", "sleeve", "sleeveL", "tie", "tieD", "gear", "gearL", "gearT", "spark", "sweat",
 ];
 const SECTIONS = ["palette", "head", "eyes", "brows", "blush", "mouth", "hair", "headphones", "body", "fx", "motion", "expressions", "cheekMarks"];
@@ -60,6 +60,7 @@ export function validateDesign(d) {
     for (const f of EYE_FIELDS) num(e.eye && e.eye[f], "expressions." + k + ".eye." + f);
     for (const f of MOUTH_FIELDS) num(e.mouth && e.mouth[f], "expressions." + k + ".mouth." + f);
     for (const f of TG_FIELDS) num(e.mouth && e.mouth.tg && e.mouth.tg[f], "expressions." + k + ".mouth.tg." + f);
+    if (e.fx) for (const [q, v] of Object.entries(e.fx)) num(v, "expressions." + k + ".fx." + q);
   }
   // 数値は、使う場所で必ず参照されるものを一通り確かめる(欠けると NaN で絵が壊れるため)
   const need = {
@@ -85,6 +86,11 @@ export function validateDesign(d) {
   }
   for (const k of ["count", "fromInset", "len", "spread", "width"]) num(d.cheekMarks.pinch && d.cheekMarks.pinch.lines && d.cheekMarks.pinch.lines[k], "cheekMarks.pinch.lines." + k);
   for (const k of ["len", "width", "gap"]) num(d.cheekMarks.press && d.cheekMarks.press.creases && d.cheekMarks.press.creases[k], "cheekMarks.press.creases." + k);
+  const mo = d.motion.spring;
+  if (mo) for (const k of ["hz", "damping"]) num(mo[k], "motion.spring." + k);
+  for (const [g, ks] of Object.entries({ tears: ["startDx", "startDy", "r0", "r1"], hatch: ["x", "y", "count", "len", "spacing", "slant", "width"], waves: ["span", "width"] })) {
+    if (d.fx[g]) for (const k of ks) num(d.fx[g][k], "fx." + g + "." + k);
+  }
   const pf = d.head.cheek && d.head.cheek.puff;
   if (!pf) errs.push("head.cheek.puff がありません");
   else for (const k of ["dy", "height", "amount"]) num(pf[k], "head.cheek.puff." + k);
@@ -242,6 +248,7 @@ export function mixExpr(w) {
     fw: 0, fh: 0, pull: 0, browY: 0, browTilt: 0, blush: 0,
     eye: { size: 0, chev: 0 },
     mouth: { w: 0, h: 0, y: 0, p: 0, n: 0, pad: 0, wrinkle: 0, shine: 0, tg: { dy: 0, rx: 0, ry: 0 } },
+    fx: { sparkle: 0, squeeze: 0, sweat: 0, shout: 0, tears: 0, hatch: 0, waves: 0 },
     w: {},
   };
   let sum = 0;
@@ -255,6 +262,9 @@ export function mixExpr(w) {
     for (const q of Object.keys(m.eye)) m.eye[q] += e.eye[q] * wk;
     for (const q of ["w", "h", "y", "p", "n", "pad", "wrinkle", "shine"]) m.mouth[q] += e.mouth[q] * wk;
     for (const q of ["dy", "rx", "ry"]) m.mouth.tg[q] += e.mouth.tg[q] * wk;
+    // 表情ごとの演出(マンガ記号)の強さ。無い表情は、母音に対応する従来の演出
+    const fxv = e.fx || { sparkle: k === "i" ? 1 : 0, squeeze: k === "u" ? 1 : 0, sweat: k === "e" ? 1 : 0, shout: k === "o" ? 1 : 0 };
+    for (const q of Object.keys(m.fx)) m.fx[q] += (fxv[q] || 0) * wk;
   }
   return m;
 }
@@ -692,24 +702,58 @@ export class MikuFace {
     r.polyline(ring.slice(Rg.hiFrom, Rg.hiTo), C.hairLL, Rg.hiWidth);
   }
 
-  /* ---- 効果(マンガ記号): 母音の重みに応じて大きさが連続して変わる ---- */
+  /* ---- 効果(マンガ記号): 表情の fx の重みに応じて、大きさが連続して変わる ---- */
   drawFx(r, m, fx, fy) {
     const X = D.fx;
+    const F = m.fx;
     const col = C.spark;
     const cx0 = D.head.cx;
-    const ramp = (k) => smooth(X.ramp[0], X.ramp[1], m.w[k]);
-    const wi = ramp("i");
+    const ramp = (kind) => {
+      const rg = (X[kind] && X[kind].ramp) || X.ramp;
+      return smooth(rg[0], rg[1], F[kind]);
+    };
+    // 赤面の斜線(まんがの照れ・のぼせ): 頬紅の上に短い斜線を並べる
+    const wh = X.hatch ? ramp("hatch") : 0;
+    if (wh > 0.04) {
+      const Hh = X.hatch;
+      for (const side of [-1, 1]) {
+        const bx = fx(cx0 + side * Hh.x), by = fy(Hh.y);
+        for (let j = 0; j < Hh.count; j++) {
+          const ox = (j - (Hh.count - 1) / 2) * Hh.spacing;
+          const L = Hh.len * wh;
+          r.line(bx + ox - side * Hh.slant * L * 0.5 * -1, by - L / 2, bx + ox + side * Hh.slant * L * 0.5 * -1 - side * Hh.slant * L, by + L / 2, C.hatch, Hh.width);
+        }
+      }
+    }
+    // 涙: 目の外側から、勢いよく流れ出す(くの字の苦しげな目のとき)
+    const wt = X.tears ? ramp("tears") : 0;
+    if (wt > 0.04) {
+      const T = X.tears;
+      for (const side of [-1, 1]) {
+        const ex = fx(cx0 + side * D.eyes.dx), ey = fy(D.eyes.y);
+        const pts = (T.curve || [[4.5, 2], [9, 3.5], [12.5, 9]]).map((p) => [ex + side * (T.startDx + (p[0] - T.startDx) * wt), ey + T.startDy + (p[1] - T.startDy) * wt]);
+        pts.unshift([ex + side * T.startDx, ey + T.startDy]);
+        r.stroke(pts, T.r0, T.r1 * (0.6 + 0.4 * wt), C.sweat);
+        for (const dp of T.drops || []) r.ellipse(ex + side * (T.startDx + (dp[0] - T.startDx) * wt), ey + T.startDy + (dp[1] - T.startDy) * wt, dp[2] * wt, dp[2] * wt * 1.25, C.sweat);
+      }
+    }
+    const wi = ramp("sparkle");
     if (wi > 0.04) {
       const Sp = X.sparkle;
-      const sp = (x, y) => {
-        const k = Sp.size * wi;
+      const sp = (x, y, sz) => {
+        const k = Sp.size * wi * sz;
         r.line(x - k, y, x + k, y, col, Sp.width);
         r.line(x, y - k, x, y + k, col, Sp.width);
+        if (Sp.diagonal) {
+          const q = k * 0.55;
+          r.line(x - q, y - q, x + q, y + q, col, Sp.width * 0.8);
+          r.line(x - q, y + q, x + q, y - q, col, Sp.width * 0.8);
+        }
         r.ellipse(x, y, Sp.dot * wi, Sp.dot * wi, col);
       };
-      for (const p of Sp.pos) sp(fx(cx0 + p[0]), fy(p[1]));
+      for (const p of Sp.pos) sp(fx(cx0 + p[0]), fy(p[1]), p[2] || 1);
     }
-    const wu = ramp("u");
+    const wu = ramp("squeeze");
     if (wu > 0.04) {
       const Q = X.squeeze;
       for (const side of [-1, 1]) {
@@ -718,20 +762,40 @@ export class MikuFace {
         r.polyline([[x, fy(Q.y - Q.len * k)], [x - side * Q.back * k, fy(Q.y)], [x, fy(Q.y + Q.len * k)]], col, Q.width);
       }
     }
-    const we = ramp("e");
+    const we = ramp("sweat");
     if (we > 0.04) {
       const W = X.sweat;
       const x = fx(cx0 + W.x);
       r.ellipse(x, fy(W.y), W.rx * we, W.ry * we, C.sweat);
       r.poly([[x, fy(W.y - W.tipLen * we)], [x - W.tipHalf * we, fy(W.tipY)], [x + W.tipHalf * we, fy(W.tipY)]], C.sweat);
+      // 飛び散る小さなしずく
+      for (const dp of W.drops || []) r.ellipse(x + dp[0] * we, fy(W.y) + dp[1] * we, dp[2] * we, dp[2] * we * 1.3, C.sweat);
     }
-    const wo = ramp("o");
+    const wo = ramp("shout");
     if (wo > 0.04) {
       const Sh = X.shout;
       for (const side of [-1, 1]) {
         const x = cx0 + side * Sh.x;
         r.line(x, fy(Sh.y1), x + side * Sh.len1 * wo, fy(Sh.y1 - Sh.len1 * wo), col, Sh.width);
         r.line(x + side, fy(Sh.y2), x + side * (1 + Sh.len2 * wo), fy(Sh.y2), col, Sh.width);
+        if (Sh.y3 != null) r.line(x, fy(Sh.y3), x + side * Sh.len1 * wo, fy(Sh.y3 + Sh.len1 * wo), col, Sh.width);
+      }
+    }
+    // 声の衝撃波: 口を中心にひろがる「)))」「(((」
+    const ww = X.waves ? ramp("waves") : 0;
+    if (ww > 0.04) {
+      const Wv = X.waves;
+      const mcx = fx(cx0), mcy = fy(m.mouth.y);
+      for (const side of [-1, 1]) {
+        Wv.radii.forEach((rad, idx) => {
+          const pts = [];
+          const sp = Wv.span * (0.6 + 0.4 * ww);
+          for (let k = 0; k <= 8; k++) {
+            const a = (k / 8) * 2 * sp - sp;
+            pts.push([mcx + side * Math.cos(a) * rad * ww * (D.head.rx / 24.5), mcy + Math.sin(a) * rad * ww]);
+          }
+          r.polyline(pts, col, Wv.width * (1 - idx * 0.12));
+        });
       }
     }
   }

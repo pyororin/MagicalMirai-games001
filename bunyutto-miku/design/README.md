@@ -6,13 +6,19 @@
 | ファイル | 役割 |
 |---|---|
 | [`../app/data/design/miku-face.json`](../app/data/design/miku-face.json) | **デザインの元データ**(色・形・5つの表情・髪・動き)。これを編集する |
+| [`../app/data/design/miku-face-classic.json`](../app/data/design/miku-face-classic.json) | 前案(おだやか版)。`?design=data/design/miku-face-classic.json` で本編に読み込める |
+| [`../app/data/design/miku-face-comic.json`](../app/data/design/miku-face-comic.json) | コミカル案(現在の本編と同じ内容。案としての控え) |
 | [`miku-face-sheet.png`](miku-face-sheet.png) | 現在のデザインシート(5表情+コマ送り)。`render-design-sheet.mjs` で生成 |
+| [`miku-face-comic-sheet.png`](miku-face-comic-sheet.png) | コミカル案を提示したときのシート |
 | [`../app/face-lab.html`](../app/face-lab.html) | デザインラボ。JSON を貼って/編集して、その場でプレビュー |
 | [`../app/src/face.js`](../app/src/face.js) | データを読んで描く描画コード(デザインは持たない) |
 | [`../tools/render-design-sheet.mjs`](../tools/render-design-sheet.mjs) | デザインシート(PNG)の生成 |
 | [`../test/design.test.mjs`](../test/design.test.mjs) | データの検証・本編に反映されることのテスト |
 
 ## 変更の流れ
+
+**デザイン案の進め方**: 案を別ファイル(`data/design/miku-face-◯◯.json`)で作る → `render-design-sheet.mjs 案.json シート.png` でシートを作って提示 →
+了承されたら `miku-face.json` に反映して本編に組み込む(前案は `-classic` 等で残す)。
 
 1. `app/face-lab.html` を開く(公開版なら `…/bunyutto-miku/face-lab.html`)。JSON を編集して「プレビュー」。
    別案は `?design=案のURL` を付けて開くと、その案を読み込む(ゲーム本体も `?design=` で同じように試せる)。
@@ -65,10 +71,11 @@
 
 ### `headphones` `body` `fx`
 ヘッドホン(大きさ・位置)、首・肩・ネクタイ(点列。`sleeve` は左側で、右は反転)、マンガ記号 `fx`(`sparkle` きらきら=い、`squeeze` 内向きの線=う、
-`sweat` 汗=え、`shout` 声の線=お。`ramp` は現れ始める/満量になる重み)。
+`sweat` 汗(飛び散るしずく付き)、`shout` 声の放射線、**`tears` 涙(目の外側から流れる)**、**`hatch` 赤面の斜線(まんがの照れ)**、**`waves` 声の衝撃波(口まわりの弧)**。
+各表情の `fx` に 0〜1 の強さを書くと、その演出が出る(指の量に比例して連続して大きくなる)。`ramp` は現れ始める/満量になる重み。
 
 ### `motion` — 動き
-`weightSmoothSec` 指の動きに顔が追いつく速さ(小さいほど機敏) / `beatBounce` `bounceFollow` 拍の弾み /
+`spring.{hz,damping}` 顔がバネで「ぷるん」と少し行き過ぎて戻る動き(hz=速さ、damping<1 で揺れる。無ければ `weightSmoothSec` のなめらか追従) / `weightSmoothSec` 指の動きに顔が追いつく速さ(小さいほど機敏) / `beatBounce` `bounceFollow` 拍の弾み /
 `sway` ツインテールの揺れ。
 
 ### `expressions` — 5つの表情(あ・い・う・え・お)
@@ -80,6 +87,7 @@
 | `pull` | ほっぺ(+: 外へふくらむ/のばす、−: へこむ/押さえる) |
 | `browY` `browTilt` | 眉の上下 / 傾き(+: 内側が下、−: 内側が上=困り眉) |
 | `blush` | 頬紅の強さ(0〜1) |
+| `fx` | 演出の強さ(0〜1): `sparkle` `squeeze` `sweat` `shout` `tears` `hatch` `waves`。書かなければ従来どおり(い=きらきら、う=押される線、え=汗、お=放射線) |
 | `eye.size` | 目の大きさ(`eyes.size` に掛かる倍率) |
 | `eye.chev` | 目の種類(0 = 喜ぶ目、1 = くの字の苦しげな目。途中は連続) |
 | `mouth.w` `mouth.h` `mouth.y` | 口の幅・高さ・中心の高さ |

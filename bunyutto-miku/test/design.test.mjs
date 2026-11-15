@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { MikuFace, setDesign, validateDesign, mixExpr, VOWEL_KEYS, FACE_W, FACE_H } from "../app/src/face.js";
+import { readdirSync } from "node:fs";
 import { VOWELS } from "../app/src/vowel.js";
 
 const file = join(dirname(fileURLToPath(import.meta.url)), "../app/data/design/miku-face.json");
@@ -143,6 +144,57 @@ test("頬の跡: のばされた(い)=つままれた跡、押された(う)=押
   // 跡の濃さ(跡あり/なしの色の差の合計)が、い が強いほど大きい
   const tone = (w) => { const a = render(d, w), b = render(pin, w); let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) for (const sh of [0, 8, 16]) n += Math.abs(((a[i] >>> sh) & 255) - ((b[i] >>> sh) & 255)); return n; };
   assert.ok(tone({ a: 0.8, i: 0.2 }) < tone({ a: 0.5, i: 0.5 }) && tone({ a: 0.5, i: 0.5 }) < tone({ i: 1 }), "い が強いほど跡が濃い");
+});
+
+test("デザインデータはすべて検証を通り、描画できる(本編・前案・コミカル案)", () => {
+  const dir = dirname(file);
+  const files = readdirSync(dir).filter((f) => f.endsWith(".json"));
+  assert.ok(files.includes("miku-face.json") && files.includes("miku-face-classic.json") && files.includes("miku-face-comic.json"), files.join());
+  for (const f of files) {
+    const d = JSON.parse(readFileSync(join(dir, f), "utf8"));
+    assert.doesNotThrow(() => validateDesign(d), f);
+    for (const v of VOWELS) assert.ok(render(d, { [v]: 1 }).some((p) => p !== 0), f + " " + v);
+  }
+});
+
+test("コミカル表現: 涙・汗・赤面の斜線・衝撃波・きらきらが、該当する表情にだけ出る", () => {
+  const d = load();
+  const off = (kind, patch) => { const c = clone(d); patch(c); return c; };
+  // 涙: う/え に出て、あ・い・お には出ない(涙のパラメータを変えても絵が変わらない)
+  const tears = off("tears", (c) => { c.fx.tears.r0 = 0.5; c.fx.tears.drops = []; });
+  for (const v of ["u", "e"]) assert.ok(!same(render(d, { [v]: 1 }), render(tears, { [v]: 1 })), v + " に涙");
+  for (const v of ["a", "i", "o"]) assert.ok(same(render(d, { [v]: 1 }), render(tears, { [v]: 1 })), v + " に涙は出ない");
+  // 衝撃波: お だけ
+  const waves = off("waves", (c) => { c.fx.waves.radii = [6]; });
+  assert.ok(!same(render(d, { o: 1 }), render(waves, { o: 1 })), "お に衝撃波");
+  for (const v of ["a", "i", "u", "e"]) assert.ok(same(render(d, { [v]: 1 }), render(waves, { [v]: 1 })), v + " に衝撃波は出ない");
+  // 赤面の斜線: あ・い・う・え(お には無い)
+  const hatch = off("hatch", (c) => { c.fx.hatch.count = 6; });
+  for (const v of ["a", "i", "u", "e"]) assert.ok(!same(render(d, { [v]: 1 }), render(hatch, { [v]: 1 })), v + " に赤面の斜線");
+  assert.ok(same(render(d, { o: 1 }), render(hatch, { o: 1 })), "お には無い");
+  // きらきら: い だけ
+  const sp = off("sparkle", (c) => { c.fx.sparkle.size = 1; });
+  assert.ok(!same(render(d, { i: 1 }), render(sp, { i: 1 })), "い にきらきら");
+  assert.ok(same(render(d, { u: 1 }), render(sp, { u: 1 })), "う には無い");
+});
+
+test("コミカル表現: 演出は表情の強さに比例して連続して現れる(0 → 満量)", () => {
+  const d = load();
+  const noTears = clone(d); noTears.fx.tears.r0 = 0.05; noTears.fx.tears.r1 = 0.05; noTears.fx.tears.drops = [];
+  const amount = (w) => { const a = render(d, w), b = render(noTears, w); let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++; return n; };
+  const xs = [0.1, 0.3, 0.5, 0.7, 1].map((k) => amount({ a: 1 - k, u: k }));
+  // 満量(重み0.7)まで増え続け、そこから先はほぼ一定(顔の形が変わる分の誤差は許容)
+  for (let i = 1; i <= 3; i++) assert.ok(xs[i] > xs[i - 1], "涙が増える " + xs.join(","));
+  assert.ok(xs[4] > xs[3] * 0.8, "満量以降は一定 " + xs.join(","));
+  assert.ok(xs[0] < xs[3] * 0.5, "弱いうちは小さい");
+});
+
+test("コミカル案は前案より顔の変形が大きい(大袈裟)", () => {
+  const classic = JSON.parse(readFileSync(join(dirname(file), "miku-face-classic.json"), "utf8"));
+  const comic = load();
+  const spread = (d, k) => Math.abs(d.expressions[k].fw - 1) + Math.abs(d.expressions[k].fh - 1);
+  for (const v of ["i", "u", "e", "o"]) assert.ok(spread(comic, v) > spread(classic, v), v + " の変形が大きい");
+  assert.ok(comic.motion.spring && comic.motion.spring.damping < 1, "ぷるんと揺れるバネ");
 });
 
 test("検証: 壊れたデザインは、場所つきのメッセージで拒否される", () => {

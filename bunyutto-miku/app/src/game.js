@@ -4,6 +4,7 @@
 //   片手: ミクの顔をピンチ → 口の形(あいうえお)= 音色と表情
 // ノーツは「歌詞の1音」。流れてくる段・母音のとおりに、タイミングよく鳴らす。
 import { MikuFace, loadDesign, getDesign } from "./face.js";
+import { stepSpring } from "./motion.js";
 import { Voice } from "./voice.js";
 import { PinchTracker } from "./pinch.js";
 import { Judge, rankOf } from "./judge.js";
@@ -14,7 +15,7 @@ import { SONGS, dataUrl } from "./songs.js";
 import { DemoSource } from "./demo.js";
 import { TextAliveSource } from "./textalive.js";
 
-export const BUILD = 7;
+export const BUILD = 8;
 
 /* 母音ごとの色。ノーツ・ガイド・結果で共通 */
 const VCOL = { a: "#FF7EB6", i: "#FFC93C", u: "#9B7BFF", e: "#38D6CB", o: "#FF6F5E" };
@@ -65,6 +66,7 @@ const G = {
   bursts: [],
   wrongFlash: [],
   weights: { a: 1, i: 0, u: 0, e: 0, o: 0 },
+  vel: { a: 0, i: 0, u: 0, e: 0, o: 0 },
   vowel: "a",
   amount: 0,
   taps: new Map(), // pointerId -> {row}
@@ -432,11 +434,18 @@ function update(now) {
   lastFrame = now;
   // 顔の重みをなめらかに追従
   const tgt = G.target || { a: 1, i: 0, u: 0, e: 0, o: 0 };
-  const k = 1 - Math.exp(-dt / getDesign().motion.weightSmoothSec); // 顔が指に追いつく速さはデザインデータ
+  const mo = getDesign().motion;
   let sum = 0;
-  for (const v of VOWELS) {
-    G.weights[v] += (tgt[v] - G.weights[v]) * k;
-    sum += G.weights[v];
+  if (mo.spring) {
+    // ぷるんと揺れるバネ(少しいきすぎて戻る)。コミカルな「ゴムっぽさ」
+    stepSpring(G.weights, G.vel, tgt, dt, mo.spring.hz, mo.spring.damping, VOWELS);
+    for (const v of VOWELS) sum += G.weights[v];
+  } else {
+    const k = 1 - Math.exp(-dt / mo.weightSmoothSec); // 顔が指に追いつく速さはデザインデータ
+    for (const v of VOWELS) {
+      G.weights[v] += (tgt[v] - G.weights[v]) * k;
+      sum += G.weights[v];
+    }
   }
   if (sum > 0) for (const v of VOWELS) G.weights[v] /= sum;
 
