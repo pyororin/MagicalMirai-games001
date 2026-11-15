@@ -4,8 +4,8 @@
 //   母音       … 歌詞の読みの母音。「歌詞どおりの口の形」をするのが操作そのもの
 //   音の高さ   … コード進行から推定した調のペンタトニック6段。和音の構成音に寄せ、
 //                フレーズごとに山なりになるよう選ぶ(聴こえ方が曲に馴染むように)
-import { splitMoras, fallbackVowel, kanaVowel, toHira } from "./vowel.js?v=10";
-import { detectKey, parseChord, chordAt, rowMidi, ROW_COUNT } from "./key.js?v=10";
+import { splitMoras, fallbackVowel, kanaVowel, toHira } from "./vowel.js?v=11";
+import { detectKey, parseChord, chordAt, rowMidi, ROW_COUNT } from "./key.js?v=11";
 
 /** 楽曲データ(JSON のコンパクト形式)を扱いやすい形に展開する。 */
 export function expandSong(raw) {

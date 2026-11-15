@@ -11,7 +11,7 @@
 // レイテンシ対策(ontology/rhythm-game.yaml の oscillator-per-hit-latency):
 // 打鍵のたびにノードを作らず、最初のユーザー操作でグラフを1本だけ作り、
 // 以降は AudioParam を動かすだけにする。
-import { VOWELS } from "./vowel.js?v=10";
+import { VOWELS } from "./vowel.js?v=11";
 
 // 日本語母音のフォルマント(Hz): F1, F2, F3(成人女性の目安をやや高めに)
 export const FORMANTS = {
