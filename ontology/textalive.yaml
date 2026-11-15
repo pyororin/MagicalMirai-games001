@@ -545,3 +545,18 @@ pitfalls:
       フォールバックが進むことを確認する(bunyutto-miku/test/textalive-load.test.mjs が経路の順序を固定)。
     verified: 2026-11-15 (bunyutto-miku build 11。実機での復旧は未確認)
     refs: [bunyutto-miku/app/src/textalive.js, bunyutto-miku/app/src/game.js]
+
+  - id: watchdog-marks-slow-load-as-error
+    symptom: >
+      モバイル回線で「楽曲の読み込みが進みません(15秒)」と ERROR が出る。放っておくと読み込めることもある。
+      また、状態を「読み込み中」に戻す処理(onAppMediaChange)でスタートボタンの有効/無効が更新されず、
+      ボタンが有効のまま ERROR が出る。
+    cause: >
+      見張りの 15 秒が短く、遅い回線の正常な読み込み(曲データ+音源で 8 秒以上かかる例を WebKit で確認)を
+      失敗扱いにしていた。状態を落とす箇所でボタン更新を呼んでいなかった。
+    solution: >
+      15 秒では「時間がかかっています」と経過(進捗: appReady → ready → timerReady の到達時刻)を出すだけにし、
+      失敗として表示するのは 45 秒後。状態を落とす箇所では必ず updateStartEnabled() を呼ぶ。
+      曲データは届いたが onTimerReady が来ない場合は「音源の準備待ち」と別に表示し、止まった段階が分かるようにする。
+    verified: 2026-11-15 (bunyutto-miku。カード応答を 20 秒遅らせた WebKit で、待ち表示→READY を確認)
+    refs: [bunyutto-miku/app/src/game.js, bunyutto-miku/app/src/textalive.js]

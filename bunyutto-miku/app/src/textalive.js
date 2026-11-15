@@ -20,6 +20,8 @@ export class TextAliveSource {
     this.managed = false;
     this.song = null;
     this.netDiag = [];
+    this.stages = []; // 進捗(appReady → ready → timerReady の到達時刻)。止まった場所を画面で分かるように
+    this.t0 = performance.now();
     this.loadLog = []; // 読み込み経路ごとの結果(失敗の原因を画面に出す)
     this.handlers = { ready: [], error: [], end: [], appReady: [], mediaChange: [], timerReady: [] };
     this.readingsPromise = null;
@@ -31,6 +33,7 @@ export class TextAliveSource {
     this.handlers[ev].push(fn);
   }
   _emit(ev, ...a) {
+    if (ev !== "end") this.stages.push(ev + " " + ((performance.now() - this.t0) / 1000).toFixed(1) + "s");
     for (const f of this.handlers[ev]) {
       try {
         f(...a);
@@ -70,7 +73,8 @@ export class TextAliveSource {
   }
 
   get diag() {
-    return this.loadLog.concat(this.netDiag.slice(-4));
+    const st = this.stages.length ? ["進捗: " + this.stages.join(" → ")] : [];
+    return this.loadLog.concat(st, this.netDiag.slice(-4));
   }
 
   init() {

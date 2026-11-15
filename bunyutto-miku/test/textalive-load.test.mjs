@@ -67,3 +67,11 @@ test("曲を読み直すと診断はリセットされる", async () => {
   await s.loadSong(DEF);
   assert.equal(s.loadLog.length, n);
 });
+
+test("進捗(どのイベントまで届いたか)が診断に載る(止まった場所を画面で分かるように)", () => {
+  const s = make({});
+  s._emit("appReady", {});
+  s._emit("timerReady");
+  const d = s.diag.join("\n");
+  assert.match(d, /進捗: appReady [\d.]+s → timerReady [\d.]+s/);
+});

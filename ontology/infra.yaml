@@ -328,3 +328,21 @@ pitfalls:
     verified: 2026-11-14 (bunyutto-miku)
     refs: [bunyutto-miku/README.md, bunyutto-miku/app/src/game.js]
 
+
+  - id: webkit-in-sandbox
+    symptom: >
+      iPhone/Safari でだけ動かない・失敗すると言われるが、sandbox には WebKit が無く再現も検証もできない。
+    cause: >
+      同梱の Playwright は Chromium のみ。WebKit は別ダウンロードで、さらに GTK などのシステムライブラリが要る
+      (最初の launch が "Host system is missing dependencies" で止まる)。
+    solution: |
+      既存の Chromium を壊さないよう、別ディレクトリに入れる:
+        PLAYWRIGHT_BROWSERS_PATH=<scratch>/pwwk playwright install webkit
+        PLAYWRIGHT_BROWSERS_PATH=<scratch>/pwwk playwright install-deps webkit   # apt でライブラリを入れる
+      起動は webkit.launch() に devices['iPhone 14'] を渡す。以後 PLAYWRIGHT_BROWSERS_PATH を付けて実行する
+      (付けないと Chromium 側が見つからず失敗する)。
+      注意: WebKit のヘッドレスは本物の iPhone ではない(マルチタッチ・メディアのジェスチャ制限・回線は再現できない)。
+      PointerEvent を dispatch して入力経路を、AudioContext の出力に Analyser をつないで発声の有無を検証できる。
+      sandbox 特有の "TLS handshake" エラーはログに出るが、読み込み自体は進む。
+    verified: 2026-11-15 (bunyutto-miku。実機 iPhone の失敗は再現できなかった)
+    refs: [bunyutto-miku/test/textalive-load.test.mjs]
