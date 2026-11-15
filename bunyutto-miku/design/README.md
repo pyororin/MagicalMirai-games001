@@ -36,12 +36,12 @@
 
 ### `palette` — 色(`#RRGGBB`)
 髪 `hair`(本体) `hairD`/`hairDD`(影) `hairL`/`hairLL`(つや)、肌 `skin`/`skinS`(あご下の影)/`skinSS`、`outline`(顔の輪郭線)、
-`blush`/`blush2`(頬紅の中心/ふち)、目 `ink`(線)/`irisD`/`irisM`/`irisL`(虹彩の上→下)/`pupil`、
+`blush`/`blush2`(頬紅の中心/ふち)、`lipHi`(唇のつや)、`handLine`/`handShade`(手の輪郭・影)、目 `ink`(線)/`irisD`/`irisM`/`irisL`(虹彩の上→下)/`pupil`、
 口 `mouthIn`/`tongue`/`lip`/`lipD`、服 `shirt`/`shirtS`/`sleeve`/`tie`/`tieD`、ヘッドホン `gear`/`gearL`/`gearT`、演出 `spark`/`sweat`。
 
 ### `head` — 顔
 `cx,cy` 中心 / `rx,ry` ふだんの半径 / `chinTaper` あごの細り / `cheek.{y,height,bulgeOut,bulgeIn}` ほっぺの位置・範囲と、
-引っ張る/押さえるときのふくらみ量 / `shade` あご下の影のかかり方 / `outlineWidth` 輪郭線の太さ。
+引っ張る/押さえるときのふくらみ量 / `cheek.puff` 押さえられたとき、押された所の上下がふくらむ量 / `shade` あご下の影のかかり方 / `outlineWidth` 輪郭線の太さ。
 
 ### `eyes` — 目
 `size` **全体の大きさ**(1.0=初版。小さくすると控えめに) / `dx` 左右の距離 / `y` 高さ / `rx,ry` 基準の半径 /
@@ -60,6 +60,7 @@
 ### `headphones` `body` `fx`
 ヘッドホン(大きさ・位置)、首・肩・ネクタイ(点列。`sleeve` は左側で、右は反転)、マンガ記号 `fx`(`sparkle` きらきら=い、`squeeze` 内向きの線=う、
 `sweat` 汗=え、`shout` 声の線=お。`ramp` は現れ始める/満量になる重み)。
+**`hands`**: う のとき**両手でほっぺを押さえる**(強さに応じて外側から近づく)。`palm`/`finger`/`thumb`/`arm` が手のかたち、`y` 高さ、`inset` 頬への食い込み、`slide` 現れ始めのずれ。
 
 ### `motion` — 動き
 `weightSmoothSec` 指の動きに顔が追いつく速さ(小さいほど機敏) / `blink.{periodMs,durationMs}` まばたき / `beatBounce` `bounceFollow` 拍の弾み /
@@ -83,6 +84,7 @@
 | `mouth.n` | 角の立ち(2 = 丸、3 = 四角寄り) |
 | `mouth.pad` | くちびるの太さ(大きいほど太く明るい色) |
 | `mouth.tg` | 舌の位置・大きさ(口の大きさに対する比 `dy` `rx` `ry`) |
+| `mouth.wrinkle` `mouth.shine` | 唇の縦じわ(すぼめ口)とつやの強さ(0〜1。形は上の `mouth` セクション) |
 
 表情を足すとき: 母音は 5 つ固定(ゲーム側の対応)なので、新しい「表情」は既存の母音の値を変えて作る。
 値は連続的に混ざるので、極端に違う形にすると途中の形が崩れる。必ずラボのコマ送りで途中を確認すること。

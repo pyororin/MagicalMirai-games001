@@ -77,6 +77,29 @@ test("表情の混ぜ合わせ: 重みの和が1でなくても正規化され�
   assert.ok(Math.abs(mid.fw - (load().expressions.a.fw + load().expressions.i.fw) / 2) < 1e-9);
 });
 
+test("う: 両手でほっぺを押さえる(手は う のときだけ出て、強さに応じて近づく)", () => {
+  const d = load();
+  const u = render(d, { u: 1 });
+  const hands = clone(d); hands.fx.hands.palm.w = 3;
+  assert.ok(!same(u, render(hands, { u: 1 })), "手の形を変えると う の絵が変わる");
+  // あ・い・え・お には手が出ない(手の設定を変えても絵は同じ)
+  for (const v of ["a", "i", "e", "o"]) assert.ok(same(render(d, { [v]: 1 }), render(hands, { [v]: 1 })), v + " に手が出ている");
+  // 弱いうちは手が外側にあり、強いほど顔に近づく(顔の中央寄りに肌色画素が増える)
+  const near = (px) => { let n = 0; const S = FACE_W / 80; for (let y = 46 * S; y < 58 * S; y++) for (let x = 8 * S; x < 20 * S; x++) if (px[y * FACE_W + x] !== 0) n++; return n; };
+  const weak = near(render(d, { a: 0.8, u: 0.2 })), strong = near(render(d, { u: 1 }));
+  assert.ok(strong > weak, "強いほど左頬のあたりに手が来る " + weak + " → " + strong);
+});
+
+test("う: 唇の縦じわとつやは う のときだけ。頬は押された所がへこみ、上下がふくらむ", () => {
+  const d = load();
+  const wr = clone(d); wr.mouth.wrinkle.count = 12;
+  assert.ok(!same(render(d, { u: 1 }), render(wr, { u: 1 })), "う は唇のしわが変わる");
+  assert.ok(same(render(d, { o: 1 }), render(wr, { o: 1 })), "お にはしわが無い");
+  const pf = clone(d); pf.head.cheek.puff.amount = 4;
+  assert.ok(!same(render(d, { u: 1 }), render(pf, { u: 1 })), "頬のふくらみ");
+  assert.ok(same(render(d, { i: 1 }), render(pf, { i: 1 })), "い には頬のへこみ/ふくらみは効かない");
+});
+
 test("検証: 壊れたデザインは、場所つきのメッセージで拒否される", () => {
   const miss = clone(load()); delete miss.expressions.u;
   assert.throws(() => validateDesign(miss), /expressions\.u/);
@@ -86,6 +109,8 @@ test("検証: 壊れたデザインは、場所つきのメッセージで拒否
   assert.throws(() => validateDesign(nan), /expressions\.e\.mouth\.w/);
   const sec = clone(load()); delete sec.hair;
   assert.throws(() => validateDesign(sec), /hair/);
+  const hnd = clone(load()); delete hnd.fx.hands;
+  assert.throws(() => validateDesign(hnd), /fx\.hands/);
   const eyes = clone(load()); delete eyes.eyes.size;
   assert.throws(() => validateDesign(eyes), /eyes\.size/);
   assert.throws(() => validateDesign(null));
