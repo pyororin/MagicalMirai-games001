@@ -32,6 +32,10 @@ jobs:
         run: |
           mkdir -p _site
           rsync -a bunyutto-miku/app/ _site/
+      - name: Stamp build number on module URLs (stale-cache guard)
+        # ES Module は 1 ファイルごとにブラウザへキャッシュされ、HTML と JS の新旧が混ざりうる。
+        # 全 import に ?v=<build> を付け、index.html と game.js の番号が食い違えばここで失敗させる。
+        run: node bunyutto-miku/tools/stamp-build.mjs _site
       - name: Deploy bunyutto-miku
         uses: peaceiris/actions-gh-pages@v4
         with:

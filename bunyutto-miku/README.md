@@ -34,7 +34,12 @@ cd bunyutto-miku/app && python3 -m http.server   # → http://localhost:8000/?de
 
 PC では A S D F G H が段(低→高)、←→↑↓ が顔(う/い/お/え)。
 
-## ビルド番号
+## ビルド番号とキャッシュ
 
 `app/index.html` の `window.BUNYU_BUILD` と `app/src/game.js` の `BUILD` を**同時に**上げる。
-食い違うと画面左下のバッジが赤くなる(ES Module はファイルごとにキャッシュされるため、新旧混在の検出用)。
+食い違うと画面左下のバッジが赤くなり、デプロイ時の `tools/stamp-build.mjs` が失敗する。
+
+デプロイ(Actions)では、公開物のコピーのすべてのモジュール読み込みに `?v=<build>` を付ける
+(ES Module はファイルごとにキャッシュされ、HTML と JS の新旧が混ざりうるため。ソースは書き換えない)。
+それでも `index.html` 自体は Pages のキャッシュで最大10分古いことがあるので、
+**最新を確実に見るには URL の末尾に `?v=<build>` を付ける**(例: `…/bunyutto-miku/?v=9`、デモは `?demo=1&v=9`)。

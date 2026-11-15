@@ -314,6 +314,16 @@ pitfalls:
       index.html のインライン定数(window.BUNYU_BUILD)と、モジュール側の定数(BUILD)を
       同時に上げ、食い違ったらバッジを赤くして「キャッシュ混在」と表示する。
       ビルド不要で済ませたいときの最小の検出手段。確実に避けたいなら1ファイルにバンドルする。
+    update: >
+      2026-11-15: 検出だけでなく予防も入れた。デプロイ時に公開物のコピーへ tools/stamp-build.mjs をかけ、
+      すべての import と module script に ?v=<build> を付ける(ソースは触らない)。index.html と game.js の
+      ビルド番号が食い違えばデプロイを失敗させる。ビルドが変われば全モジュールの URL が変わるので、新旧が混ざらない。
+      それでも index.html 自体は Pages のキャッシュ(max-age=600)で最大10分古いことがある。
+      利用者には URL に ?v=<build> を付けて開いてもらえば確実に最新を取得できる(別 URL 扱いになる)。
+    symptom_seen: >
+      サーバーは最新(gh-pages に build 9)なのに、利用者の画面は「build 1」のまま。
+      原因の切り分け: gh-pages ブランチの index.html / game.js のビルド番号と、Pages ビルドの成功を先に確認する
+      (git show origin/gh-pages:<path> | grep BUILD)。サーバー側が新しければ、ブラウザのキャッシュ。
     detection: 画面左下のバッジ(build N (index M ≠ キャッシュ混在?))。
     verified: 2026-11-14 (bunyutto-miku)
     refs: [bunyutto-miku/README.md, bunyutto-miku/app/src/game.js]
