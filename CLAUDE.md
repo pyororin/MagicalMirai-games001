@@ -33,8 +33,12 @@
   (詳細: `ontology/infra.yaml` の stale-cache-misdiagnosis)。
 - **main へマージしたら、毎回デプロイ先の URL を提示する**(利用者は実機で確認するため)。
   実楽曲版: https://pyororin.github.io/MagicalMirai-games001/typing-game/prototype/textalive.html
-  ぶにゅっとミク: https://pyororin.github.io/MagicalMirai-games001/bunyutto-miku/ (デモ: 末尾に `?demo=1`)
+  ぶにゅっとミク: https://pyororin.github.io/MagicalMirai-games001/bunyutto-miku/?v=<ビルド番号> (デモ: `?demo=1&v=<ビルド番号>`)
 - **返信のたびに Pages の URL を添える**(マージ前でも。公開済みの版のビルド番号と、未マージの変更があるかも一緒に伝える)。
+  **URL には必ず `?v=<ビルド番号>` を付けて出す**(Pages は10分キャッシュされ、利用者が古い版を見る事故が起きたため)。
+  例: ぶにゅっとミク build 9 → https://pyororin.github.io/MagicalMirai-games001/bunyutto-miku/?v=9 、
+  デモは https://pyororin.github.io/MagicalMirai-games001/bunyutto-miku/?demo=1&v=9 。
+  ビルド番号は `bunyutto-miku/app/index.html` の `BUNYU_BUILD`(マージ後に公開される番号)。
 - sandbox から `pyororin.github.io` へは到達できない(プロキシが 403)。反映確認は
   curl のポーリングではなく Actions のワークフロー実行結果で行う
   (詳細: `ontology/infra.yaml` の pages-unreachable-from-sandbox)。
