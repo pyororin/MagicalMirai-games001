@@ -1,0 +1,747 @@
+{
+ "format": "bunyutto-miku-face/1",
+ "title": "ぶにゅっとミク 顔・表情デザイン(コミカル案 v2: 押さえる表情は泣かせない)",
+ "doc": "コミカル案。前案(miku-face-classic.json)より顔の変形を大きくし、涙・汗・赤面の斜線・衝撃波・きらきらなどのマンガ表現を足した。動きはバネで『ぷるん』と少し行き過ぎて戻る。 v2: 押さえる表情(う・え)では泣かない(涙なし)。うは、ぷくっと膨らむほっぺ・赤面の斜線・ちゅっとした丸い唇で可愛く。",
+ "palette": {
+  "doc": "色。#RRGGBB。髪=hair*、肌=skin*、目=ink(線)、口=mouthIn/tongue/lip*、頬の跡=markPinch(つままれた跡)/markPress(押された跡)、服=shirt/sleeve/tie、ヘッドホン=gear*、演出=spark/sweat。",
+  "hair": "#33BDB2",
+  "hairD": "#1F8E8E",
+  "hairDD": "#176B73",
+  "hairL": "#7CE3D8",
+  "hairLL": "#BFF5EE",
+  "skin": "#FFEBDD",
+  "skinS": "#FFD6C6",
+  "skinSS": "#F2B3A8",
+  "outline": "#F0B0A4",
+  "blush": "#FF8FA8",
+  "blush2": "#FFBCCA",
+  "ink": "#16303C",
+  "mouthIn": "#8A2B45",
+  "tongue": "#FF8FA5",
+  "lip": "#E88A98",
+  "lipD": "#B9566A",
+  "shirt": "#B4BDC8",
+  "shirtS": "#8D97A5",
+  "sleeve": "#262A34",
+  "sleeveL": "#4A5060",
+  "tie": "#33BDB2",
+  "tieD": "#1F8E8E",
+  "gear": "#2C303B",
+  "gearL": "#565D6E",
+  "gearT": "#33BDB2",
+  "spark": "#FFFFFF",
+  "sweat": "#8FDCF5",
+  "lipHi": "#FFD3DB",
+  "markPinch": "#F58AA2",
+  "markPress": "#F7A3B4",
+  "hatch": "#FF6B93"
+ },
+ "head": {
+  "doc": "顔(肌)。丸い。cx,cy=中心 rx,ry=ふだんの半径 chinTaper=あごの細り。cheek=ほっぺ(引っ張る/押さえるときのふくらみ)。",
+  "cx": 40,
+  "cy": 42,
+  "rx": 24.5,
+  "ry": 21.5,
+  "chinTaper": 0.1,
+  "cheek": {
+   "y": 6,
+   "height": 9,
+   "bulgeOut": 6.0,
+   "bulgeIn": 3.5,
+   "puff": {
+    "dy": 6.5,
+    "height": 5.0,
+    "amount": 3.6,
+    "doc": "う(押さえる)のとき、手で押された頬の上下がふくらむ量。"
+   }
+  },
+  "shade": {
+   "from": 0.45,
+   "to": 1.0
+  },
+  "outlineWidth": 0.55
+ },
+ "eyes": {
+  "doc": "目は2種類だけ。喜ぶ目(＾＾の弧)と、くの字の少し苦しげな目(＞＜)。表情ごとに expressions の eye.chev(0=喜ぶ目、1=くの字)で選び、途中は連続して変形する。size=全体の大きさ dx=中心からの左右の距離 y=高さ。",
+  "size": 1.15,
+  "dx": 11.2,
+  "y": 43.5,
+  "rx": 4.7,
+  "arc": {
+   "bow": 5,
+   "yoff": 1.8
+  },
+  "chevron": {
+   "tipX": 3.8,
+   "tipY": 4.2,
+   "innerX": 4.0
+  },
+  "line": {
+   "width": 1.8,
+   "chevronExtra": 0.25,
+   "steps": 16
+  }
+ },
+ "brows": {
+  "doc": "まゆ。怒り顔にならない角度だけ使う。",
+  "x0": 8,
+  "x1": 14,
+  "y": 34.5,
+  "width": 1.3,
+  "tiltInner": -1.2,
+  "tiltOuter": 1.0
+ },
+ "blush": {
+  "doc": "頬紅。amount(表情の blush)に応じて大きくなる。",
+  "x": 14.5,
+  "y": 51.5,
+  "rx": 3.8,
+  "ry": 2.3,
+  "rxGain": 1.4,
+  "ryGain": 0.5,
+  "minAmount": 0.2,
+  "fade": [
+   0.2,
+   1
+  ]
+ },
+ "mouth": {
+  "doc": "口の共通設定。形そのものは expressions の mouth で決める。",
+  "minW": 3,
+  "minH": 2,
+  "ringBase": 0.8,
+  "ringRange": 0.5,
+  "tongueFade": [
+   2.5,
+   5
+  ],
+  "singingSpark": {
+   "dx": 3,
+   "dy": -3,
+   "r": 0.6
+  },
+  "wrinkle": {
+   "count": 6,
+   "inner": 0.35,
+   "outer": 0.85,
+   "width": 0.26,
+   "doc": "唇の縦じわ(すぼめた口の放射状の線)。くちびるの太さ(pad)の何割〜何割に引くか。"
+  },
+  "shine": {
+   "dx": -0.5,
+   "dy": -0.5,
+   "r": 1.2
+  },
+  "tongueMargin": 0.35
+ },
+ "hair": {
+  "doc": "髪(ピンチで変形しない)。back=後ろ髪 tails=ツインテール(points=[根元からの相対x,y,揺れの係数]) fringe=前髪。",
+  "back": {
+   "rx": 27.5,
+   "ry": 25,
+   "dy": -4
+  },
+  "tails": {
+   "points": [
+    [
+     24,
+     -8,
+     0
+    ],
+    [
+     31,
+     3,
+     0
+    ],
+    [
+     33,
+     15,
+     0.5
+    ],
+    [
+     29,
+     26,
+     1
+    ]
+   ],
+   "shadow": {
+    "dx": 1.1,
+    "r0": 8.6,
+    "r1": 4.6
+   },
+   "body": {
+    "r0": 7.8,
+    "r1": 3.8,
+    "shadeFrom": 0.55,
+    "shadeAmount": 0.55
+   },
+   "gloss": {
+    "dx": 2.4,
+    "dy": -0.8,
+    "r0": 2.2,
+    "r1": 1.0
+   },
+   "glossHi": {
+    "dx": 2.6,
+    "dy": -0.8,
+    "r0": 0.9,
+    "r1": 0.4
+   },
+   "streaks": {
+    "offsets": [
+     -1.2,
+     1.6
+    ],
+    "width": 0.35
+   },
+   "tie": {
+    "x": 25,
+    "y": -8,
+    "dx": 1,
+    "r": 3.6,
+    "hi": {
+     "dx": -0.6,
+     "dy": -0.8,
+     "r": 1.3
+    }
+   }
+  },
+  "fringe": {
+   "top": -27,
+   "R": 27.5,
+   "base": -11,
+   "domeDy": -4,
+   "domeRy": 25,
+   "wave": {
+    "amp": 5,
+    "period": 9,
+    "sweepDamp": 0.4
+   },
+   "part": {
+    "half": 2,
+    "depth": -3,
+    "slope": 1.2
+   },
+   "sweep": {
+    "radius": 22,
+    "drop": 6
+   },
+   "side": {
+    "in": 2.6,
+    "out": 3,
+    "yMax": 9
+   },
+   "edge": 0.9,
+   "bottom": 10,
+   "strands": {
+    "dx": [
+     -14,
+     -7,
+     7,
+     14
+    ],
+    "top": 4.5,
+    "lean": 0.6,
+    "bottomUp": 1.5,
+    "width": 0.35
+   },
+   "ring": {
+    "halfWidth": 15,
+    "dy": 4.2,
+    "curve": 2,
+    "width": 0.95,
+    "hiWidth": 0.5,
+    "hiFrom": 5,
+    "hiTo": 14
+   }
+  }
+ },
+ "headphones": {
+  "doc": "ヘッドホン(耳)。ふだんの輪郭に沿って付く。",
+  "y": 1,
+  "rx": 4.2,
+  "ry": 5.4,
+  "offset": 0.5,
+  "hi": {
+   "dx": -0.8,
+   "dy": -1.2,
+   "rx": 1.6,
+   "ry": 2.2
+  },
+  "accent": {
+   "dx": 0.3,
+   "dy": 3.2,
+   "rx": 1.8,
+   "ry": 0.9
+  }
+ },
+ "body": {
+  "doc": "首・肩・ネクタイ(ピンチで動かない)。点は中心からの相対x、絶対y。sleeve は左側の点で、右は左右反転して使う。",
+  "neck": {
+   "topDy": 18,
+   "bottom": 72,
+   "half": 5
+  },
+  "shirt": [
+   [
+    -30,
+    80
+   ],
+   [
+    -27,
+    71
+   ],
+   [
+    -12,
+    66
+   ],
+   [
+    -5,
+    66
+   ],
+   [
+    5,
+    66
+   ],
+   [
+    12,
+    66
+   ],
+   [
+    27,
+    71
+   ],
+   [
+    30,
+    80
+   ]
+  ],
+  "shirtShade": {
+   "from": 66,
+   "to": 80,
+   "amount": 0.6
+  },
+  "sleeve": [
+   [
+    -30,
+    80
+   ],
+   [
+    -27,
+    71
+   ],
+   [
+    -21,
+    69
+   ],
+   [
+    -19,
+    80
+   ]
+  ],
+  "neckline": [
+   [
+    -5,
+    66
+   ],
+   [
+    0,
+    70
+   ],
+   [
+    5,
+    66
+   ]
+  ],
+  "tie": [
+   [
+    -2,
+    68
+   ],
+   [
+    2,
+    68
+   ],
+   [
+    3,
+    80
+   ],
+   [
+    -3,
+    80
+   ]
+  ],
+  "tieShade": [
+   [
+    0,
+    68
+   ],
+   [
+    2,
+    68
+   ],
+   [
+    3,
+    80
+   ],
+   [
+    0,
+    80
+   ]
+  ]
+ },
+ "fx": {
+  "doc": "マンガ記号。表情の fx(0〜1)に応じて大きさが連続して変わる。ramp=現れ始め/満量。hatch=赤面の斜線 tears=涙 waves=声の衝撃波 sparkle=きらきら squeeze=押される線 sweat=汗としずく shout=声の放射線。",
+  "ramp": [
+   0.2,
+   0.85
+  ],
+  "sparkle": {
+   "pos": [
+    [
+     -30,
+     28,
+     1.3
+    ],
+    [
+     30,
+     32,
+     1.0
+    ],
+    [
+     -26,
+     20,
+     0.8
+    ],
+    [
+     27,
+     22,
+     0.9
+    ]
+   ],
+   "size": 2.6,
+   "width": 0.6,
+   "dot": 0.8,
+   "diagonal": true
+  },
+  "squeeze": {
+   "x": 27,
+   "push": 3,
+   "y": 49,
+   "len": 4.5,
+   "width": 0.8,
+   "back": 3
+  },
+  "sweat": {
+   "x": -25,
+   "y": 32.4,
+   "rx": 2.0,
+   "ry": 2.8,
+   "tipLen": 5.2,
+   "tipHalf": 1.5,
+   "tipY": 31,
+   "drops": [
+    [
+     -4,
+     -4,
+     0.9
+    ],
+    [
+     3,
+     -7,
+     0.7
+    ],
+    [
+     -7,
+     4,
+     0.7
+    ]
+   ]
+  },
+  "shout": {
+   "x": 32,
+   "y1": 32,
+   "len1": 4.5,
+   "y2": 38,
+   "len2": 5.5,
+   "width": 0.8,
+   "y3": 44
+  },
+  "hatch": {
+   "ramp": [
+    0.1,
+    0.7
+   ],
+   "x": 14.5,
+   "y": 51.5,
+   "count": 3,
+   "len": 4.4,
+   "spacing": 1.9,
+   "slant": 0.55,
+   "width": 0.55
+  },
+  "tears": {
+   "ramp": [
+    0.1,
+    0.7
+   ],
+   "startDx": 3.0,
+   "startDy": 2.2,
+   "r0": 2.0,
+   "r1": 1.0,
+   "curve": [
+    [
+     6,
+     3.5
+    ],
+    [
+     11,
+     6.5
+    ],
+    [
+     15,
+     13
+    ]
+   ],
+   "drops": [
+    [
+     17,
+     17.5,
+     1.1
+    ],
+    [
+     13.5,
+     19,
+     0.9
+    ],
+    [
+     19,
+     12,
+     0.7
+    ]
+   ]
+  },
+  "waves": {
+   "ramp": [
+    0.15,
+    0.8
+   ],
+   "radii": [
+    11,
+    15,
+    19
+   ],
+   "span": 0.62,
+   "width": 0.8
+  }
+ },
+ "motion": {
+  "doc": "動き。spring=顔がぷるんと揺れるバネ(hz=速さ、damping=減衰。1以上で揺れない) weightSmoothSec=spring が無いときの追従の速さ beatBounce=拍の弾み sway=ツインテールの揺れ。",
+  "weightSmoothSec": 0.05,
+  "beatBounce": 2.4,
+  "bounceFollow": 0.5,
+  "sway": {
+   "period": 2.1,
+   "amp": 1.2,
+   "beat": 1.0
+  },
+  "spring": {
+   "hz": 5.0,
+   "damping": 0.42,
+   "doc": "指の動きへの追従をバネにして、ぷるんと少し行き過ぎて戻る(damping が小さいほどよく揺れる)。"
+  }
+ },
+ "expressions": {
+  "doc": "5つの表情(母音)。指の動かした量で、あ→各母音へ連続して混ざる。fw/fh=顔の幅・高さ pull=ほっぺ(+のばす/つままれた跡、−押さえる/押された跡) browY/browTilt=眉(−で困り眉) blush=頬紅。eye: chev(0=喜ぶ目、1=くの字の苦しげな目) size。mouth: w,h,y=大きさと中心の高さ p(0=楕円,1=上が平ら) n(2=丸,3=四角寄り) pad=くちびるの太さ wrinkle/shine=唇の縦じわ・つや tg=舌(dy,rx,ry。舌は口の内側にだけ描く)。",
+  "a": {
+   "label": "あ: 2本指でさわるだけ。にこにこ顔、ほっぺにまんがの赤面の斜線",
+   "fw": 1.06,
+   "fh": 0.98,
+   "pull": 0.0,
+   "browY": -1,
+   "browTilt": 0.0,
+   "blush": 0.8,
+   "eye": {
+    "size": 1.1,
+    "chev": 0
+   },
+   "mouth": {
+    "w": 9,
+    "h": 7,
+    "y": 54,
+    "p": 0,
+    "n": 2,
+    "pad": 0.8,
+    "tg": {
+     "dy": 0.25,
+     "rx": 0.8,
+     "ry": 0.25
+    },
+    "wrinkle": 0,
+    "shine": 0
+   },
+   "fx": {
+    "hatch": 0.7
+   }
+  },
+  "i": {
+   "label": "い: 横にひろげる。ほっぺが餅のようにむにーっと伸びる、大きな笑顔、きらきら、赤面の斜線",
+   "fw": 1.42,
+   "fh": 0.9,
+   "pull": 1.0,
+   "browY": -3,
+   "browTilt": 0.0,
+   "blush": 1.0,
+   "eye": {
+    "size": 1.25,
+    "chev": 0
+   },
+   "mouth": {
+    "w": 27,
+    "h": 12,
+    "y": 55,
+    "p": 1,
+    "n": 2,
+    "pad": 0.8,
+    "tg": {
+     "dy": 0.45,
+     "rx": 0.55,
+     "ry": 0.3
+    },
+    "wrinkle": 0,
+    "shine": 0
+   },
+   "fx": {
+    "sparkle": 1,
+    "hatch": 1
+   }
+  },
+  "u": {
+   "label": "う: 横からおさえる。顔が細くなり、ほっぺがぷくっと赤くふくらみ、ちゅっとした丸い唇(泣かない)",
+   "fw": 0.82,
+   "fh": 1.07,
+   "pull": -1.0,
+   "browY": -1,
+   "browTilt": -0.35,
+   "blush": 1.0,
+   "eye": {
+    "size": 0.92,
+    "chev": 0.85
+   },
+   "mouth": {
+    "w": 5.0,
+    "h": 4.2,
+    "y": 55,
+    "p": 0,
+    "n": 2,
+    "pad": 2.3,
+    "tg": {
+     "dy": 0.2,
+     "rx": 0.2,
+     "ry": 0.15
+    },
+    "wrinkle": 0.0,
+    "shine": 1
+   },
+   "fx": {
+    "squeeze": 1,
+    "hatch": 1
+   }
+  },
+  "e": {
+   "label": "え: たてにつぶす。ぺしゃんこの平たい顔、汗がひとしずく、口は横一文字(泣かない)",
+   "fw": 1.34,
+   "fh": 0.72,
+   "pull": 0.9,
+   "browY": 3,
+   "browTilt": -1.0,
+   "blush": 0.9,
+   "eye": {
+    "size": 1.2,
+    "chev": 1
+   },
+   "mouth": {
+    "w": 19,
+    "h": 5,
+    "y": 55,
+    "p": 0,
+    "n": 3,
+    "pad": 0.9,
+    "tg": {
+     "dy": 0.25,
+     "rx": 0.8,
+     "ry": 0.35
+    },
+    "wrinkle": 0,
+    "shine": 0
+   },
+   "fx": {
+    "sweat": 0.6,
+    "hatch": 0.7
+   }
+  },
+  "o": {
+   "label": "お: たてにひろげる。顔がにょーんと縦に伸びる、巨大なOの口、声の衝撃波と放射線",
+   "fw": 0.8,
+   "fh": 1.25,
+   "pull": 0.0,
+   "browY": -5,
+   "browTilt": -0.4,
+   "blush": 0.7,
+   "eye": {
+    "size": 1.25,
+    "chev": 1
+   },
+   "mouth": {
+    "w": 14,
+    "h": 18,
+    "y": 55.5,
+    "p": 0,
+    "n": 2,
+    "pad": 1.0,
+    "tg": {
+     "dy": 0.25,
+     "rx": 0.8,
+     "ry": 0.25
+    },
+    "wrinkle": 0,
+    "shine": 0
+   },
+   "fx": {
+    "shout": 1,
+    "waves": 1,
+    "sweat": 0.4
+   }
+  }
+ },
+ "cheekMarks": {
+  "doc": "ほっぺが伸ばされた/押されたときの跡(手は描かない)。pinch=つままれた跡(い:pullが+)=指の赤み2つ+そこから扇状にひろがる引っぱり線、press=押された跡(う:pullが−)=赤くなった頬+押されて寄ったしわ。強さは表情の pull に比例。y=高さ inset=頬の縁から内側へのずれ strength=赤みの濃さ。",
+  "pinch": {
+   "y": 49.5,
+   "inset": 7.0,
+   "dy": 3.2,
+   "rx": 3.0,
+   "ry": 3.4,
+   "strength": 1.0,
+   "lines": {
+    "count": 4,
+    "fromInset": 8.6,
+    "len": 5.0,
+    "spread": 3.2,
+    "width": 0.34
+   }
+  },
+  "press": {
+   "y": 50,
+   "inset": 6.2,
+   "rx": 5.8,
+   "ry": 6.6,
+   "strength": 1.0,
+   "creases": {
+    "len": 4.5,
+    "width": 0.4,
+    "gap": 0.5
+   }
+  }
+ }
+}

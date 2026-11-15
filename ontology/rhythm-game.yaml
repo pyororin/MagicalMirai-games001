@@ -394,9 +394,92 @@ pitfalls:
       ひらきに応じて少しずつ現れる)、口は「大きさ・上辺の平らさ・角の立ち・くちびるの太さ・舌」で
       楕円から笑顔・四角・すぼめ口まで1つの式で描く。効果記号(きらきら等)も重みで大きさを変える。
       まばたきも 0/1 ではなく、閉じて開く連続値にする。
+      形どうしを補間するときは、端点の対応に注意する。弧(＾)とくの字(＞)を端点どうしで直接つなぐと、弧の端が
+      目の中を横切って崩れる(右目は上下が逆になる)。「回転させながら寄せる」と途中の形も自然になる。
     detection: >
       量を 0〜100% の 12.5% 刻みで並べたコマ送り表(face-lab.html)を出し、隣のコマ同士で
       形が飛んでいないか見る。
     verified: 2026-11-14 (bunyutto-miku)
     refs: [bunyutto-miku/app/src/face.js, bunyutto-miku/app/face-lab.html]
+
+  - id: synth-voice-verify-by-spectrum
+    symptom: >
+      Web Audio で母音(あいうえお)を合成したが、ヘッドレス環境では聴けず、
+      母音の区別がついているか・音量がそろっているか分からない。
+    cause: >
+      最初の実装は基音ばかりが強く(392Hz で 90% 以上が 1kHz 未満)、フォルマントの山が出なかった。
+      音を聴かずに「それっぽい」と判断すると外す。母音ごとの音量差も 3 倍近く出ていた。
+    solution: >
+      OfflineAudioContext に同じグラフを組んで(Voice.attach(ctx))1秒レンダリングし、
+      FFT で帯域エネルギー・重心・RMS を母音×2つの高さで出す。倍音の減衰(1/n^1.15)、
+      フォルマントの Q(5〜9)、母音ごとの高域の明るさ(い・えは明るく、う・おは暗く)を調整し、
+      RMS をそろえて母音ごとの音量補正にする。聴感の最終確認は実機で行う。
+    detection: 母音ごとの重心と RMS を並べる。い>え>あ>お>う の順で暗くなり、RMS は ±3dB 以内。
+    verified: 2026-11-15 (bunyutto-miku)
+    refs: [bunyutto-miku/app/src/voice.js]
+
+  - id: gate-sound-on-all-inputs
+    symptom: >
+      2つの入力(タップ+ピンチ)を要求するゲームで、片方だけでも鳴る/判定されると、
+      「押していないのに音が出る」「無音なのに当たる」ように感じる。
+    cause: >
+      発声と判定を、片方の入力イベント(タップ)に直結していた。
+    solution: >
+      「条件がそろっている状態」を1つの関数(updateSound)にして、入力が変わるたびに評価する。
+      発声開始の瞬間を判定(attack)の瞬間にする。どちらを先に触っても、そろった時点で鳴り、
+      片方を離せば止まる。ボットと CDP のマルチタッチで「タップだけ/ピンチだけ/両方」を確認する。
+    verified: 2026-11-15 (bunyutto-miku)
+    refs: [bunyutto-miku/app/src/game.js]
+
+  - id: gh-pages-concurrent-push-race
+    symptom: >
+      デプロイのワークフローがテスト・ビルドまで通るのに、最後の push で
+      `cannot lock ref 'refs/heads/gh-pages': is at X but expected Y` で失敗する。
+    cause: >
+      複数のワークフロー(企画ごと・ランディング)が同じ main への push で同時に起動し、
+      concurrency グループがワークフローごとに別なので、同時に gh-pages へ push して競合した。
+    solution: >
+      失敗したジョブを1回再実行すれば通る(先に終わった側と衝突しただけ)。恒久策は全ワークフローで
+      同じ concurrency グループ(例: gh-pages-deploy)にして直列化すること
+      (待機は最新の1件しか残らないので、取りこぼしたら手動で再実行する)。
+    detection: ログ末尾の `remote rejected ... cannot lock ref`。ビルド/テストの段は成功している。
+    verified: 2026-11-15 (bunyutto-miku 初回デプロイ)
+    refs: [.github/workflows/pages-bunyutto-miku.yml, .github/workflows/pages-typing-game.yml]
+
+  - id: character-design-as-data
+    symptom: >
+      キャラクターの見た目(色・形・表情)をコードに埋め込むと、デザイン調整のたびにコードを触ることになり、
+      調整のたびに別の部分が壊れる。デザインを提案・確認・差し替えする人(コードを書かない人)が関われない。
+    cause: >
+      デザインの値(色、顔の大きさ、眉の傾き、表情ごとの口の形、髪の曲線)が描画コードの中の数値リテラルになっていた。
+    solution: >
+      デザインをデータファイル(JSON)に切り出し、描画コードはそれを読んで描くだけにする。
+      コードは検証(必須項目・色・数値、場所つきのエラー)を持ち、壊れたデータは起動時に止めて理由を画面に出す。
+      ?design=URL で別案を試せるようにし、JSON を編集してその場でプレビューできるラボ(face-lab.html)と、
+      項目の意味を書いた README を同じ場所に置く。リファクタは「全表情×まばたき等のピクセルのハッシュが前後で一致する」
+      ことで見た目不変を保証する。デザインシート(PNG)も生成してリポジトリに残す。
+    detection: >
+      デザイン変更の PR で、コードの差分が出ていない(JSON とシートだけ)ことを確認する。
+      単体テストで「データを変えると絵が変わる」「髪はピンチで動かない」を固定する。
+    verified: 2026-11-15 (bunyutto-miku。16パターンのハッシュ一致を確認して移行)
+    refs: [bunyutto-miku/app/data/design/miku-face.json, bunyutto-miku/design/README.md, bunyutto-miku/test/design.test.mjs]
+
+  - id: comic-expression-by-data
+    symptom: >
+      キャラクターの表現を「もっと大袈裟に・コミカルに」したいが、顔の変形を増やすだけでは単調で、
+      動きもカチッとして硬い。
+    cause: >
+      変形量(幅・高さ・口の大きさ)だけを大きくしても、マンガ的な記号(涙・汗・赤面の斜線・衝撃波)が無いと
+      「大きな変形」にしか見えない。追従が指数的ななめらかさだと、ゴムのような「ぷるん」が出ない。
+    solution: >
+      (1)演出を表情ごとの強さ(fx: 0〜1)で持ち、重みに応じて連続して大きくなる記号として描く(涙・汗とそのしずく・
+      赤面の斜線・声の衝撃波・きらきら)。(2)表情の重みをバネ(hz と減衰比 damping<1)で追従させ、少し行き過ぎて戻す。
+      行き過ぎには上限を付け(例: -0.3〜1.35)、細かく刻んで発散させない。(3)すべてデザインデータに置き、案を別ファイルで作って
+      シートで提示 → 了承後に本編へ反映する。前案は残して ?design= で見比べられるようにする。
+      大袈裟にすると髪から肌がはみ出す等が起きるので、シートで頭頂・境目を数値/目視で確認する(お の縦伸びを 1.34→1.25)。
+    detection: >
+      コマ送りシートで、0〜100% の途中が崩れていないか見る。バネは「い の重みの時系列」を 30ms 刻みで出し、
+      1.0 を超えて戻ることを確認する。描画1回は演出が増えて約 7ms(デスクトップ相当)に増えた。
+    verified: 2026-11-15 (bunyutto-miku build 8)
+    refs: [bunyutto-miku/app/data/design/miku-face-comic.json, bunyutto-miku/app/src/motion.js, bunyutto-miku/design/miku-face-comic-sheet.png]
 
