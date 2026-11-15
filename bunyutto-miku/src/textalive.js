@@ -5,8 +5,8 @@
 //   card-data-resolver-unavailable … createFromSongUrl が失敗したらカード URL へフォールバック
 //   side-data-races-onvideoready   … 読みデータは Promise を共有し onVideoReady 側で await
 //   seek-completes-after-play-request … シーク直後は position が古い
-import { dataUrl } from "./songs.js";
-import { toHira } from "./vowel.js";
+import { dataUrl } from "./songs.js?v=9";
+import { toHira } from "./vowel.js?v=9";
 
 const APP_TOKEN = "VQRxHB1a0q8fVvnm"; // 公開前提のクライアント埋め込みトークン
 

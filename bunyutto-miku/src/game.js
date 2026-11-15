@@ -3,17 +3,17 @@
 //   片手: スティック(盤面の段)をタップ/なぞる → 音の高さ
 //   片手: ミクの顔をピンチ → 口の形(あいうえお)= 音色と表情
 // ノーツは「歌詞の1音」。流れてくる段・母音のとおりに、タイミングよく鳴らす。
-import { MikuFace, loadDesign, getDesign } from "./face.js";
-import { stepSpring } from "./motion.js";
-import { Voice } from "./voice.js";
-import { PinchTracker } from "./pinch.js";
-import { Judge, rankOf } from "./judge.js";
-import { buildChart, DIFFS } from "./chart.js";
-import { rowMidi, midiToHz, ROW_COUNT, ROW_SOLFEGE, NOTE_NAMES } from "./key.js";
-import { VOWELS, VOWEL_KANA, GESTURE } from "./vowel.js";
-import { SONGS, dataUrl } from "./songs.js";
-import { DemoSource } from "./demo.js";
-import { TextAliveSource } from "./textalive.js";
+import { MikuFace, loadDesign, getDesign } from "./face.js?v=9";
+import { stepSpring } from "./motion.js?v=9";
+import { Voice } from "./voice.js?v=9";
+import { PinchTracker } from "./pinch.js?v=9";
+import { Judge, rankOf } from "./judge.js?v=9";
+import { buildChart, DIFFS } from "./chart.js?v=9";
+import { rowMidi, midiToHz, ROW_COUNT, ROW_SOLFEGE, NOTE_NAMES } from "./key.js?v=9";
+import { VOWELS, VOWEL_KANA, GESTURE } from "./vowel.js?v=9";
+import { SONGS, dataUrl } from "./songs.js?v=9";
+import { DemoSource } from "./demo.js?v=9";
+import { TextAliveSource } from "./textalive.js?v=9";
 
 export const BUILD = 9;
 
