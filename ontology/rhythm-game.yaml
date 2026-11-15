@@ -400,3 +400,47 @@ pitfalls:
     verified: 2026-11-14 (bunyutto-miku)
     refs: [bunyutto-miku/app/src/face.js, bunyutto-miku/app/face-lab.html]
 
+  - id: synth-voice-verify-by-spectrum
+    symptom: >
+      Web Audio で母音(あいうえお)を合成したが、ヘッドレス環境では聴けず、
+      母音の区別がついているか・音量がそろっているか分からない。
+    cause: >
+      最初の実装は基音ばかりが強く(392Hz で 90% 以上が 1kHz 未満)、フォルマントの山が出なかった。
+      音を聴かずに「それっぽい」と判断すると外す。母音ごとの音量差も 3 倍近く出ていた。
+    solution: >
+      OfflineAudioContext に同じグラフを組んで(Voice.attach(ctx))1秒レンダリングし、
+      FFT で帯域エネルギー・重心・RMS を母音×2つの高さで出す。倍音の減衰(1/n^1.15)、
+      フォルマントの Q(5〜9)、母音ごとの高域の明るさ(い・えは明るく、う・おは暗く)を調整し、
+      RMS をそろえて母音ごとの音量補正にする。聴感の最終確認は実機で行う。
+    detection: 母音ごとの重心と RMS を並べる。い>え>あ>お>う の順で暗くなり、RMS は ±3dB 以内。
+    verified: 2026-11-15 (bunyutto-miku)
+    refs: [bunyutto-miku/app/src/voice.js]
+
+  - id: gate-sound-on-all-inputs
+    symptom: >
+      2つの入力(タップ+ピンチ)を要求するゲームで、片方だけでも鳴る/判定されると、
+      「押していないのに音が出る」「無音なのに当たる」ように感じる。
+    cause: >
+      発声と判定を、片方の入力イベント(タップ)に直結していた。
+    solution: >
+      「条件がそろっている状態」を1つの関数(updateSound)にして、入力が変わるたびに評価する。
+      発声開始の瞬間を判定(attack)の瞬間にする。どちらを先に触っても、そろった時点で鳴り、
+      片方を離せば止まる。ボットと CDP のマルチタッチで「タップだけ/ピンチだけ/両方」を確認する。
+    verified: 2026-11-15 (bunyutto-miku)
+    refs: [bunyutto-miku/app/src/game.js]
+
+  - id: gh-pages-concurrent-push-race
+    symptom: >
+      デプロイのワークフローがテスト・ビルドまで通るのに、最後の push で
+      `cannot lock ref 'refs/heads/gh-pages': is at X but expected Y` で失敗する。
+    cause: >
+      複数のワークフロー(企画ごと・ランディング)が同じ main への push で同時に起動し、
+      concurrency グループがワークフローごとに別なので、同時に gh-pages へ push して競合した。
+    solution: >
+      失敗したジョブを1回再実行すれば通る(先に終わった側と衝突しただけ)。恒久策は全ワークフローで
+      同じ concurrency グループ(例: gh-pages-deploy)にして直列化すること
+      (待機は最新の1件しか残らないので、取りこぼしたら手動で再実行する)。
+    detection: ログ末尾の `remote rejected ... cannot lock ref`。ビルド/テストの段は成功している。
+    verified: 2026-11-15 (bunyutto-miku 初回デプロイ)
+    refs: [.github/workflows/pages-bunyutto-miku.yml, .github/workflows/pages-typing-game.yml]
+

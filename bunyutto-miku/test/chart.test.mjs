@@ -50,7 +50,8 @@ test("声域: 6段が1オクターブ+で並び、高い順", () => {
     const m = rowMidi(k);
     assert.equal(m.length, 6);
     for (let i = 1; i < 6; i++) assert.ok(m[i] > m[i - 1]);
-    assert.ok(m[0] >= 67 && m[0] <= 78, `tonic ${k} → ${m[0]}`);
+    assert.ok(m[0] >= 60 && m[0] <= 71, `tonic ${k} → ${m[0]}`);
+    assert.ok(m[5] <= 83, "最高音は B5 まで");
     assert.equal(m[5] - m[0], 12);
   }
 });

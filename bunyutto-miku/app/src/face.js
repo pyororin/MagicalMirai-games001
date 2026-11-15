@@ -268,13 +268,13 @@ export class MikuFace {
     const fx = (x) => cx + (x - 40) * fw;
     const fy = (y) => cy + (y - 42) * fh;
 
-    this.drawBackHair(r, cx, cy, fw, fh, sway);
-    this.drawBody(r, cx, cy, fh);
+    this.drawBackHair(r, cx, cy, 1, 1, sway); // 髪はピンチで変形しない
+    this.drawBody(r, cx, cy, 1);
     this.drawHead(r, m, cx, cy, fw, fh);
     this.drawBlush(r, m, fx, fy);
     this.drawEyes(r, m, fx, fy, s.blink || 0);
     this.drawMouth(r, m, fx, fy, s.singing);
-    this.drawFringe(r, cx, cy, fw, fh);
+    this.drawFringe(r, cx, cy, 1, 1);
     this.drawBrows(r, m, fx, fy);
     this.drawHeadphones(r, cx, cy);
     this.drawFx(r, m, fx, fy);
@@ -327,18 +327,20 @@ export class MikuFace {
   drawHead(r, m, cx, cy, fw, fh) {
     const rx = 24.5 * fw;
     const ry = 21.5 * fh;
-    const pull = m.pull;
-    const cheekY = cy + 6 * fh;
-    const hw = (yc) => {
-      const t = (yc - cy) / ry;
+    // 顔の輪郭(半幅)。ほっぺ: 引っ張ると外へふくらむ(尖らせず、おもちのように丸く)。押さえるとへこむ
+    const outline = (fw_, fh_, pull) => (yc) => {
+      const rx_ = 24.5 * fw_;
+      const ry_ = 21.5 * fh_;
+      const t = (yc - cy) / ry_;
       if (Math.abs(t) > 1) return -1;
-      let w = rx * Math.sqrt(1 - t * t);
+      let w = rx_ * Math.sqrt(1 - t * t);
       if (t > 0) w *= 1 - 0.1 * t * t; // あごはまるく
-      // ほっぺ: 引っ張ると外へふくらむ(尖らせず、おもちのように丸く)。押さえるとへこむ
-      const bump = Math.max(0, 1 - Math.pow((yc - cheekY) / (9 * fh), 2));
-      w += pull * (pull > 0 ? 3.2 : 1.8) * bump;
-      return w;
+      const bump = Math.max(0, 1 - Math.pow((yc - (cy + 6 * fh_)) / (9 * fh_), 2));
+      return w + pull * (pull > 0 ? 3.2 : 1.8) * bump;
     };
+    const hw = outline(fw, fh, m.pull);
+    // 髪・ヘッドホンはピンチで変形しない。それらが沿う「ふだんの輪郭」を別に持つ
+    this.neutralHW = outline(1, 1, 0);
     const rowsFn = (yc) => {
       const w = hw(yc);
       return w < 0 ? null : [cx - w, cx + w];
@@ -358,19 +360,13 @@ export class MikuFace {
         r.put(b - k, Y, C.outline);
       }
     }
-    for (let X = Math.ceil((cx - rx * 0.4) * S); X <= Math.floor((cx + rx * 0.4) * S); X++) {
-      const xc = (X + 0.5) / S;
-      const t = (xc - cx) / rx;
-      const yb = cy + ry * Math.sqrt(Math.max(0, 1 - t * t * 0.0)) - 0.0;
-      void yb;
-    }
     this.headHW = hw;
     this.headRy = ry;
   }
 
   /* ---- ヘッドホン(耳) ---- */
   drawHeadphones(r, cx, cy) {
-    const hw = this.headHW;
+    const hw = this.neutralHW;
     for (const side of [-1, 1]) {
       const y = cy + 1;
       const ex = cx + side * (hw(y) + 0.5);
@@ -414,8 +410,9 @@ export class MikuFace {
   }
 
   drawEye(r, e, ex, ey, side) {
-    const rx = 5.4 * e.size;
-    const ry = 6.6 * e.size;
+    const EYE_K = 0.86; // 目の大きさ(1.0=初版。少し小さめに)
+    const rx = 5.4 * e.size * EYE_K;
+    const ry = 6.6 * e.size * EYE_K;
     const open = Math.max(0, Math.min(1, e.open));
     const closed = 1 - open;
     const N = 16;
@@ -430,7 +427,7 @@ export class MikuFace {
     // 「＞ ＜」への変形(左目が ＞、右目が ＜)。線の両端が上下の先端、中央が頂点になる
     const sx = side;
     const chev = Math.max(0, Math.min(1, e.chev));
-    const cp = [[ex + sx * 3.8, ey - 3.4], [ex - sx * 3.6, ey], [ex + sx * 3.8, ey + 3.4]];
+    const cp = [[ex + sx * 3.8 * EYE_K, ey - 3.4 * EYE_K], [ex - sx * 3.6 * EYE_K, ey], [ex + sx * 3.8 * EYE_K, ey + 3.4 * EYE_K]];
     const chevAt = (t) => (t < 0.5
       ? [cp[0][0] + (cp[1][0] - cp[0][0]) * (t * 2), cp[0][1] + (cp[1][1] - cp[0][1]) * (t * 2)]
       : [cp[1][0] + (cp[2][0] - cp[1][0]) * (t * 2 - 1), cp[1][1] + (cp[2][1] - cp[1][1]) * (t * 2 - 1)]);
@@ -452,9 +449,9 @@ export class MikuFace {
       // ハイライトも、ひらきに合わせて少しずつ現れる
       const hk = smooth(0.35, 0.9, open);
       if (hk > 0.02) {
-        r.ellipse(ex - side * 1.9 * e.size + 0.3, cy2 - ry2 * 0.36, 1.7 * hk, 1.8 * hk, C.spark);
-        r.ellipse(ex + side * 2.4, cy2 + ry2 * 0.45, 0.7 * hk, 0.7 * hk, C.spark);
-        r.ellipse(ex + side * 3.3, cy2 + ry2 * 0.27, 0.45 * hk, 0.45 * hk, C.spark);
+        r.ellipse(ex - side * 1.9 * e.size * EYE_K + 0.3, cy2 - ry2 * 0.36, 1.7 * hk * EYE_K, 1.8 * hk * EYE_K, C.spark);
+        r.ellipse(ex + side * 2.4 * EYE_K, cy2 + ry2 * 0.45, 0.7 * hk * EYE_K, 0.7 * hk * EYE_K, C.spark);
+        r.ellipse(ex + side * 3.3 * EYE_K, cy2 + ry2 * 0.27, 0.45 * hk * EYE_K, 0.45 * hk * EYE_K, C.spark);
       }
     }
     // 線(まぶた/にっこり弧/＞＜)。太さも連続して変わる
@@ -516,7 +513,7 @@ export class MikuFace {
 
   /* ---- 前髪: ぱっつんにまるい毛先 ---- */
   drawFringe(r, cx, cy, fw, fh) {
-    const hw = this.headHW;
+    const hw = this.neutralHW;
     const topY = cy - 27 * fh;
     const R = 27.5 * fw;
     const base = cy - 11 * fh;

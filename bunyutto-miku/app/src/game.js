@@ -14,7 +14,7 @@ import { SONGS } from "./songs.js";
 import { DemoSource } from "./demo.js";
 import { TextAliveSource } from "./textalive.js";
 
-export const BUILD = 1;
+export const BUILD = 2;
 
 /* 母音ごとの色。ノーツ・ガイド・結果で共通 */
 const VCOL = { a: "#FF7EB6", i: "#FFC93C", u: "#9B7BFF", e: "#38D6CB", o: "#FF6F5E" };
@@ -70,6 +70,8 @@ const G = {
   taps: new Map(), // pointerId -> {row}
   activeRow: -1,
   kbVowel: null,
+  kbSpace: false,
+  firstSound: false,
   hasPinched: false,
   firstTapDone: false,
   result: null,
@@ -154,6 +156,30 @@ function curMouth() {
   return { vowel: "a", amount: 0 };
 }
 
+/** 顔をピンチしている(2本指が顔にある。PC では ←→↑↓ か Space) */
+function pinchActive() {
+  return pinch.count >= 2 || !!G.kbVowel || G.kbSpace;
+}
+
+/**
+ * 声が出るのは「盤面をタップしていて、かつ顔をピンチしているあいだ」だけ。
+ * 出始めの瞬間が判定(attack)の瞬間。どちらを先に触っても、そろった時点で鳴る。
+ */
+function updateSound() {
+  const should = G.taps.size > 0 && G.activeRow >= 0 && pinchActive();
+  if (should && !voice.on) {
+    voice.unlock();
+    voice.noteOn(rowFreq(G.activeRow), 0.02);
+    G.firstSound = true;
+    if (G.mode === "playing" && G.judge) {
+      const r = G.judge.attack(judgeTime(), G.activeRow);
+      if (r.kind === "wrong") G.wrongFlash.push({ row: G.activeRow, t0: performance.now() });
+    }
+  } else if (!should && voice.on) {
+    voice.noteOff();
+  }
+}
+
 /** 顔・声・判定に「いまの口の形」を配る */
 function applyMouth() {
   const m = curMouth();
@@ -169,7 +195,8 @@ function applyMouth() {
   G.amount = m.amount;
   voice.setMouth(w, m.amount);
   if (changed && G.judge && G.mode === "playing") G.judge.setVowel(judgeTime(), m.vowel);
-  if (m.vowel !== "a") G.hasPinched = true;
+  if (m.vowel !== "a" || pinchActive()) G.hasPinched = true;
+  updateSound();
 }
 
 function tapDown(id, row) {
@@ -178,12 +205,7 @@ function tapDown(id, row) {
   G.taps.set(id, { row });
   G.activeRow = row;
   G.firstTapDone = true;
-  applyMouth();
-  voice.noteOn(rowFreq(row), 0.02);
-  if (G.mode === "playing" && G.judge) {
-    const r = G.judge.attack(judgeTime(), row);
-    if (r.kind === "wrong") G.wrongFlash.push({ row, t0: performance.now() });
-  }
+  applyMouth(); // ピンチ中ならここで声が出る(updateSound)
 }
 function tapMove(id, row) {
   const tp = G.taps.get(id);
@@ -191,20 +213,22 @@ function tapMove(id, row) {
   tp.row = row;
   if ([...G.taps.keys()].pop() === id) {
     G.activeRow = row;
-    voice.glideTo(rowFreq(row));
-    if (G.mode === "playing" && G.judge) G.judge.attack(judgeTime(), row, { slide: true });
+    if (voice.on) {
+      voice.glideTo(rowFreq(row));
+      if (G.mode === "playing" && G.judge) G.judge.attack(judgeTime(), row, { slide: true });
+    }
   }
 }
 function tapUp(id) {
   G.taps.delete(id);
   if (!G.taps.size) {
     G.activeRow = -1;
-    voice.noteOff();
   } else {
     const row = [...G.taps.values()].pop().row;
     G.activeRow = row;
-    voice.glideTo(rowFreq(row));
+    if (voice.on) voice.glideTo(rowFreq(row));
   }
+  updateSound();
 }
 
 const owners = new Map(); // pointerId -> 'tap' | 'pinch'
@@ -261,7 +285,11 @@ addEventListener(
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const tag = e.target && e.target.tagName;
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || tag === "BUTTON") return;
-    if (KEY_VOWEL[e.key]) {
+    if (e.key === " ") {
+      e.preventDefault();
+      G.kbSpace = true;
+      applyMouth();
+    } else if (KEY_VOWEL[e.key]) {
       e.preventDefault();
       G.kbVowel = KEY_VOWEL[e.key];
       applyMouth();
@@ -275,7 +303,10 @@ addEventListener(
 addEventListener(
   "keyup",
   (e) => {
-    if (KEY_VOWEL[e.key]) {
+    if (e.key === " ") {
+      G.kbSpace = false;
+      applyMouth();
+    } else if (KEY_VOWEL[e.key]) {
       if (G.kbVowel === KEY_VOWEL[e.key]) G.kbVowel = null;
       applyMouth();
     } else if (KEY_ROW[e.key.toLowerCase()] != null) {
@@ -392,7 +423,7 @@ function update(now) {
     G.lastPos = pos;
     G.pos = pos;
     if (!G.seekPending && G.judge) {
-      G.judge.tick(pos - prefs.offset, { down: G.taps.size > 0, row: G.activeRow, vowel: G.vowel });
+      G.judge.tick(pos - prefs.offset, { down: voice.on, row: G.activeRow, vowel: G.vowel });
       handleEvents();
       const last = G.chart.notes[G.chart.notes.length - 1];
       if (!source.managed) {
@@ -512,7 +543,7 @@ function drawTrack(now, bi) {
     const active = G.activeRow === r;
     if (active) {
       const g = ctx.createLinearGradient(t.x, 0, t.x + t.w, 0);
-      g.addColorStop(0, "rgba(57,197,187,0.55)");
+      g.addColorStop(0, voice.on ? "rgba(57,197,187,0.55)" : "rgba(57,197,187,0.22)");
       g.addColorStop(1, "rgba(57,197,187,0.06)");
       ctx.fillStyle = g;
       ctx.fillRect(t.x, y, t.w, t.rowH);
@@ -838,26 +869,22 @@ function drawPopups(now) {
 /** はじめての操作ガイド */
 function drawHint() {
   if (G.mode !== "playing" && G.mode !== "ready") return;
-  if (G.hasPinched && G.firstTapDone) return;
+  if (G.firstSound) return;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.font = `700 13px ${FONT}`;
-  const f = L.face;
-  const lines = !G.hasPinched ? "ここを2本指でピンチ → 口の形" : "";
-  if (lines) {
+  const put = (text, x, y) => {
     ctx.lineWidth = 4;
     ctx.strokeStyle = "rgba(11,16,38,0.9)";
-    ctx.strokeText(lines, f.x + f.s / 2, f.y + f.s - 14);
+    ctx.strokeText(text, x, y);
     ctx.fillStyle = "#7CE3D8";
-    ctx.fillText(lines, f.x + f.s / 2, f.y + f.s - 14);
-  }
+    ctx.fillText(text, x, y);
+  };
+  const f = L.face;
+  put("盤面を押したまま、ここを2本指でピンチ → 声が出る", f.x + f.s / 2, f.y + f.s - 14);
   if (!G.firstTapDone) {
     const t = L.track;
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = "rgba(11,16,38,0.9)";
-    ctx.strokeText("段をタップ/なぞる → 音の高さ", t.x + t.w / 2 + 20, t.y + t.h - 12);
-    ctx.fillStyle = "#7CE3D8";
-    ctx.fillText("段をタップ/なぞる → 音の高さ", t.x + t.w / 2 + 20, t.y + t.h - 12);
+    put("段をタップ/なぞる → 音の高さ", t.x + t.w / 2 + 20, t.y + t.h - 12);
   }
 }
 
@@ -925,7 +952,7 @@ function buildHowTo() {
   const box = $("howto");
   box.textContent = "";
   const items = [
-    ["a", "さわる\nだけ", "あ"],
+    ["a", "2本指で\nさわる", "あ"],
     ["i", "横に\nひろげる", "い"],
     ["u", "横から\nおさえる", "う"],
     ["e", "たてに\nつぶす", "え"],
