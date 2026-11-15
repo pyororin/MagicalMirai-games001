@@ -483,3 +483,22 @@ pitfalls:
     verified: 2026-11-15 (bunyutto-miku build 8)
     refs: [bunyutto-miku/app/data/design/miku-face-comic.json, bunyutto-miku/app/src/motion.js, bunyutto-miku/design/miku-face-comic-sheet.png]
 
+  - id: check-the-source-art-first
+    symptom: >
+      原作キャラクターのデザインを作ったら、口が「たらこ唇」(太いピンクの輪)に見えて可愛くなくなった。
+      コミカルにしすぎた、という指摘も重なった。
+    cause: >
+      原作の公式イラストを確認せずに、「表情を大きく見せる」方向で口の形を作った。公式イラストの口は
+      顔の幅の1/8ほどの極小で、細い輪郭線の小さな「o」であり、厚い唇は存在しない。誇張はこの極小の口を
+      前提にしないと、不自然な造形になる。
+    solution: >
+      デザインを変える前に、必ず公式サイトのイラストを取得して拡大し、口・目・髪・小物の特徴を読み取って
+      デザインデータの項目に対応づける(design/README.md の「本家イラストの参照」の表)。
+      絵そのものはリポジトリに取り込まない(著作権)。誇張は、原作の特徴を保ったまま控えめに足す。
+      案はシートで先に提示し、了承を得てから本編へ反映する。
+    detection: >
+      公式イラストの口と並べて、口の大きさ・唇の太さ・輪郭線の有無を見比べる。
+      テストで「唇の太さ(pad)は 0.8 以下」「あ・う の口の幅は 6 以下」を固定する。
+    verified: 2026-11-15 (bunyutto-miku build 10)
+    refs: [bunyutto-miku/design/README.md, bunyutto-miku/app/data/design/miku-face-official.json]
+

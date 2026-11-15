@@ -138,6 +138,8 @@ test("舌は口の内側にだけ描く(唇の線にも肌にも触れない)", 
 test("唇は、厚くしても上下に棒状にのびない(口の形を全方向へ均等にふくらませた輪)", () => {
   const d = clone(load());
   Object.assign(d.palette, { lip: "#FFFF00", lipD: "#FFFF00", mouthIn: "#FF0000", tongue: "#FF0000", lipHi: "#FFFF00" });
+  d.expressions.u.mouth.pad = 2.2; // 輪の機能を確かめるため、ここだけ厚くする(本編の唇は細い)
+  d.expressions.u.mouth.w = 5; d.expressions.u.mouth.h = 4.5;
   const px = render(d, { u: 1 });
   const yellow = ((255 << 24) | (255 << 8) | 255) >>> 0; // 唇(黄)
   const S = FACE_W / 80;
@@ -205,12 +207,49 @@ test("コミカル表現: 演出は表情の強さに比例して連続して現
   assert.ok(xs[0] < xs[3] * 0.6, "弱いうちは小さい " + xs.join(","));
 });
 
-test("コミカル案は前案より顔の変形が大きい(大袈裟)", () => {
-  const classic = JSON.parse(readFileSync(join(dirname(file), "miku-face-classic.json"), "utf8"));
-  const comic = load();
-  const spread = (d, k) => Math.abs(d.expressions[k].fw - 1) + Math.abs(d.expressions[k].fh - 1);
-  for (const v of ["i", "u", "e", "o"]) assert.ok(spread(comic, v) > spread(classic, v), v + " の変形が大きい");
-  assert.ok(comic.motion.spring && comic.motion.spring.damping < 1, "ぷるんと揺れるバネ");
+test("本家イラストに寄せた口: 極小で細い線。厚い唇(たらこ唇)にならない", () => {
+  const d = load();
+  for (const v of VOWELS) assert.ok(d.expressions[v].mouth.pad <= 0.8, v + " の唇は細い線(pad " + d.expressions[v].mouth.pad + ")");
+  // あ・う の口は顔の幅の1/8以下の極小(顔の幅 ≈ 49)
+  for (const v of ["a", "u"]) assert.ok(d.expressions[v].mouth.w <= 6, v + " の口は極小");
+  // 唇の輪の太さ(外側−内側)が細い: う で外形と内側の幅の差が 1.6(論理)以下
+  const c = clone(d);
+  Object.assign(c.palette, { lip: "#FFFF00", lipD: "#FFFF00", mouthIn: "#FF0000", tongue: "#FF0000" });
+  const px = render(c, { u: 1 });
+  const S = FACE_W / 80;
+  const span = (color) => { let a = 1e9, b = -1e9; for (let y = 0; y < FACE_H; y++) for (let x = 0; x < FACE_W; x++) if (px[y * FACE_W + x] === color) { a = Math.min(a, x); b = Math.max(b, x); } return (b - a) / S; };
+  const yellow = ((255 << 24) | (255 << 8) | 255) >>> 0, red = ((255 << 24) | 255) >>> 0;
+  const ring = (span(yellow) - span(red)) / 2;
+  assert.ok(ring <= 1.0, "唇の太さ " + ring.toFixed(2));
+});
+
+test("本家イラストの特徴: まつ毛の跳ね・黒い角ばった髪飾りとピンクの線・白い襟・髪の輪郭線が描かれる", () => {
+  const d = load();
+  const base = render(d, { a: 1 });
+  const lash = clone(d); lash.eyes.lash.len = 0.001;
+  assert.ok(!same(base, render(lash, { a: 1 })), "まつ毛の跳ね");
+  const clip = clone(d); clip.palette.clipPink = "#00FF00";
+  assert.ok(!same(base, render(clip, { a: 1 })), "髪飾りのピンクの線");
+  const clip2 = clone(d); clip2.hair.clips.w = 8;
+  assert.ok(!same(base, render(clip2, { a: 1 })), "髪飾りの形");
+  const collar = clone(d); collar.palette.collar = "#FF0000";
+  assert.ok(!same(base, render(collar, { a: 1 })), "白い襟");
+  const outline = clone(d); outline.palette.hairOutline = "#FF00FF";
+  assert.ok(!same(base, render(outline, { a: 1 })), "髪の輪郭線");
+  // 髪飾り・襟・髪の輪郭は表情で動かない(あ と お で同じ画素)
+  const S = FACE_W / 80;
+  const a = render(d, { a: 1 }), o = render(d, { o: 1 });
+  let diff = 0;
+  for (let y = Math.floor(10 * S); y < Math.floor(26 * S); y++) for (let x = Math.floor(12 * S); x < Math.floor(24 * S); x++) if (a[y * FACE_W + x] !== o[y * FACE_W + x]) diff++;
+  assert.equal(diff, 0, "左の髪飾りの領域が表情で動いている");
+});
+
+test("本家寄せの本編は、コミカル案より変形が控えめ(やりすぎない)", () => {
+  const comic = JSON.parse(readFileSync(join(dirname(file), "miku-face-comic.json"), "utf8"));
+  const d = load();
+  const spread = (x, k) => Math.abs(x.expressions[k].fw - 1) + Math.abs(x.expressions[k].fh - 1);
+  for (const v of ["i", "u", "e", "o"]) assert.ok(spread(d, v) < spread(comic, v), v + " の変形はコミカル案より小さい");
+  assert.ok(d.motion.spring && d.motion.spring.damping < 1, "ぷるんと揺れるバネは残す");
 });
 
 test("検証: 壊れたデザインは、場所つきのメッセージで拒否される", () => {

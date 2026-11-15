@@ -7,7 +7,9 @@
 |---|---|
 | [`../app/data/design/miku-face.json`](../app/data/design/miku-face.json) | **デザインの元データ**(色・形・5つの表情・髪・動き)。これを編集する |
 | [`../app/data/design/miku-face-classic.json`](../app/data/design/miku-face-classic.json) | 前案(おだやか版)。`?design=data/design/miku-face-classic.json` で本編に読み込める |
-| [`../app/data/design/miku-face-comic.json`](../app/data/design/miku-face-comic.json) | コミカル案(現在の本編と同じ内容。案としての控え) |
+| [`../app/data/design/miku-face-comic.json`](../app/data/design/miku-face-comic.json) | コミカル案(前の本編。変形が大きく、涙や衝撃波あり) |
+| [`../app/data/design/miku-face-official.json`](../app/data/design/miku-face-official.json) | **本家寄せ案(現在の本編と同じ内容)** |
+| [`miku-face-official-sheet.png`](miku-face-official-sheet.png) | 本家寄せ案を提示したときのシート |
 | [`miku-face-sheet.png`](miku-face-sheet.png) | 現在のデザインシート(5表情+コマ送り)。`render-design-sheet.mjs` で生成 |
 | [`miku-face-comic-sheet.png`](miku-face-comic-sheet.png) | コミカル案を提示したときのシート |
 | [`../app/face-lab.html`](../app/face-lab.html) | デザインラボ。JSON を貼って/編集して、その場でプレビュー |
@@ -28,12 +30,31 @@
 5. ビルド番号を上げてコミット(`app/index.html` の `BUNYU_BUILD` と `app/src/game.js` の `BUILD`)。
    マージして Pages に載ると本編に反映される。
 
+## 本家イラストの参照(最初に必ず確認する)
+
+顔のデザインを変えるときは、**先に本家のイラストを確認する**(この下の「口がたらこ唇に見える」事故は、確認せずに作ったことが原因)。
+参照: 初音ミク V6 ボイスバンク(SONICWIRE) https://sonicwire.com/product/virtualsinger/special/miku-v6?lang=ja
+(Art by LAM © Crypton Future Media, INC. www.piapro.net)。**イラストそのものはリポジトリに取り込まない**(著作権)。特徴だけを読み取って反映する。
+
+本家イラスト(V6)から読み取った特徴と、デザインデータでの対応:
+
+| 本家の特徴 | 反映 |
+|---|---|
+| **口が極小**(顔の幅の1/8ほど)で、細い輪郭線の小さな「o」。厚い唇は無い | `expressions.*.mouth` を小さく、`pad`(唇の太さ)は 0.5〜0.8 まで。**太い唇の輪は描かない** |
+| 色白の肌、影はごく淡いピンク | `palette.skin` `skinS` `outline` |
+| 切れ長の目、上まつ毛の外側が鋭く跳ね上がる | `eyes.lash`(長さ・角度) |
+| 黒い角ばったクリップにピンクの線(ツインテールの根元) | `hair.clips` と `palette.clipPink` |
+| 髪は黒っぽい太い輪郭線 | `hair.outline` と `palette.hairOutline` |
+| 白い襟、ティールのネクタイ、黒い袖 | `body.collar` `palette.collar` |
+| 大きなヘッドホンは無く、耳に小さな飾り | `headphones` を小さく |
+
 ## デザインの原則(可愛さが絶対条件)
 
 - 丸くてシンプルな「ちびミク」。目は小さめ・丸い。口は小さく。ほっぺは「おもち」のように丸く。
 - **怖く見える要素は入れない**: 鋭いまつ毛、歯、ぎざぎざの前髪、濃い輪郭線、怒り方向の眉。
 - **変形するのは顔(表情・輪郭)だけ**。髪・ツインテール・ヘッドホン・体はピンチで動かない。
 - 表情の変化は**連続的**(オン・オフにしない)。目も口も、値を補間して形そのものが変わる。
+- **口は本家のように極小で細い線**(厚い唇=たらこ唇にしない)。コミカルにしすぎない(変形は控えめ、涙は無し)。
 - **押さえる表情(う・え)では泣かせない**(涙は出さない)。「う」は、ぷくっと赤いほっぺと、ちゅっとした丸い唇で可愛く見せる。伸ばす表情(い)は大きな笑顔。
 - 目は**喜ぶ目と、くの字の苦しげな目の2種類だけ**。舌は口の外に出さない。頬は**手を描かず、つままれた/押された跡**で伝える。
 
@@ -61,13 +82,16 @@
 `pinch` つままれた跡(い など `pull` が+): 親指と人差し指の赤み2つ+そこから扇状にひろがる引っぱり線 /
 `press` 押された跡(う など `pull` が−): 赤くなった頬+押されて寄ったしわ。`y` 高さ、`inset` 頬の縁から内側へのずれ、`strength` 赤みの濃さ。
 
+### `eyes.lash` — まつ毛の跳ね
+上まつ毛の外側の端が、外へ向かって跳ね上がる(本家の切れ長の目の特徴)。`len` 長さ / `angle` 角度(度) / `width` 太さ。
+
 ### `brows` `blush` `mouth`
 眉(位置・太さ・傾きの係数)、頬紅(位置・大きさと、表情の `blush` に応じた拡大量)、口の共通設定(最小サイズ・くちびるの太さの基準・舌が現れる大きさ)。
 
 ### `hair` — 髪(変形しない)
 `back` 後ろ髪の楕円 / `tails.points` ツインテールの通り道(`[根元からの相対x, 相対y, 揺れの係数]`)と、
 `shadow`/`body`/`gloss`/`glossHi`/`streaks`(影・本体・つや・筋)、`tie` ヘアゴム /
-`fringe` 前髪: `base` 毛先の高さ、`wave` 毛先のまるい波(`amp` 高さ・`period` 周期)、`part` 真ん中のわけ目、`sweep` 左右へ流れる量、
+`outline` 髪の輪郭線の太さ(色は `palette.hairOutline`) / `clips` 髪飾り(黒い角ばったクリップ+ピンクの線。位置・大きさ・傾き) / `fringe` 前髪: `base` 毛先の高さ、`wave` 毛先のまるい波(`amp` 高さ・`period` 周期)、`part` 真ん中のわけ目、`sweep` 左右へ流れる量、
 `side` 顔の縁に沿って下りるサイドの髪、`strands` 毛束の筋、`ring` てっぺんの艶(天使の輪)。
 
 ### `headphones` `body` `fx`
