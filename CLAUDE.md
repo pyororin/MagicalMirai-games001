@@ -16,8 +16,11 @@
 
 - `miku-twintail/` — 企画「ミクの本体はツインテールである」（設計書・モック・TextAlive 接続版アプリ）
 - `typing-game/` — 企画「打鍵ミライ」(リズムタイピング。判定コア+テスト、合成音デモ、TextAlive 接続版)
+- `bunyutto-miku/` — 企画「ぶにゅっとミク」(片手でスティックをタップ、片手でミクの顔をピンチ。
+  歌詞の母音=口の形=ピンチ操作。`app/` が公開物、`test/` は `node --test` で動く単体テスト、`docs/DESIGN.md` が設計)
 - `.github/workflows/pages.yml` — miku-twintail の Pages デプロイ(gh-pages・サブディレクトリ配置)
 - `.github/workflows/pages-typing-game.yml` — typing-game とランディングの Pages デプロイ
+- `.github/workflows/pages-bunyutto-miku.yml` — bunyutto-miku の Pages デプロイ(テスト通過が条件)
 
 ## 重要な運用注意
 
@@ -29,6 +32,7 @@
   (詳細: `ontology/infra.yaml` の stale-cache-misdiagnosis)。
 - **main へマージしたら、毎回デプロイ先の URL を提示する**(利用者は実機で確認するため)。
   実楽曲版: https://pyororin.github.io/MagicalMirai-games001/typing-game/prototype/textalive.html
+  ぶにゅっとミク: https://pyororin.github.io/MagicalMirai-games001/bunyutto-miku/ (デモ: 末尾に `?demo=1`)
 - sandbox から `pyororin.github.io` へは到達できない(プロキシが 403)。反映確認は
   curl のポーリングではなく Actions のワークフロー実行結果で行う
   (詳細: `ontology/infra.yaml` の pages-unreachable-from-sandbox)。

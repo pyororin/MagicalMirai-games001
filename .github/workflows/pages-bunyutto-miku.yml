@@ -1,0 +1,40 @@
+name: Deploy bunyutto-miku to GitHub Pages
+
+# gh-pages ブランチ配信。他企画を消さないよう destination_dir 方式
+# (ontology/infra.yaml の gh-pages-mutual-wipe を参照)。
+# 公開物は bunyutto-miku/app/ の中身だけ。譜面生成・判定・ピンチ検出のテストが通らなければ公開しない。
+on:
+  push:
+    branches: [main]
+    paths:
+      - "bunyutto-miku/**"
+      - ".github/workflows/pages-bunyutto-miku.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages-bunyutto-miku
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Unit tests (chart / judge / pinch)
+        run: node --test bunyutto-miku/test/*.test.mjs
+      - name: Collect static files
+        run: |
+          mkdir -p _site
+          rsync -a bunyutto-miku/app/ _site/
+      - name: Deploy bunyutto-miku
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_site
+          destination_dir: bunyutto-miku
