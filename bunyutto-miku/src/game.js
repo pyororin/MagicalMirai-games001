@@ -3,18 +3,19 @@
 //   片手: スティック(盤面の段)をタップ/なぞる → 音の高さ
 //   片手: ミクの顔をピンチ → 口の形(あいうえお)= 音色と表情
 // ノーツは「歌詞の1音」。流れてくる段・母音のとおりに、タイミングよく鳴らす。
-import { MikuFace } from "./face.js";
+import { MikuFace, loadDesign, getDesign } from "./face.js";
+import { stepSpring } from "./motion.js";
 import { Voice } from "./voice.js";
 import { PinchTracker } from "./pinch.js";
 import { Judge, rankOf } from "./judge.js";
 import { buildChart, DIFFS } from "./chart.js";
 import { rowMidi, midiToHz, ROW_COUNT, ROW_SOLFEGE, NOTE_NAMES } from "./key.js";
 import { VOWELS, VOWEL_KANA, GESTURE } from "./vowel.js";
-import { SONGS } from "./songs.js";
+import { SONGS, dataUrl } from "./songs.js";
 import { DemoSource } from "./demo.js";
 import { TextAliveSource } from "./textalive.js";
 
-export const BUILD = 1;
+export const BUILD = 9;
 
 /* 母音ごとの色。ノーツ・ガイド・結果で共通 */
 const VCOL = { a: "#FF7EB6", i: "#FFC93C", u: "#9B7BFF", e: "#38D6CB", o: "#FF6F5E" };
@@ -27,7 +28,7 @@ const params = new URLSearchParams(location.search);
 const DEMO = params.get("demo") === "1";
 
 /* ---------------- 設定の保存(失敗しても動く) ---------------- */
-const prefs = { diff: "NORMAL", song: 0, offset: 0, speed: 1, songVol: 0.7, voiceVol: 0.9 };
+const prefs = { diff: "NORMAL", song: 0, offset: 0, speed: 1, songVol: 0.7, voiceVol: 1.0 };
 try {
   Object.assign(prefs, JSON.parse(localStorage.getItem("bunyu.prefs") || "{}"));
 } catch (e) {}
@@ -65,11 +66,14 @@ const G = {
   bursts: [],
   wrongFlash: [],
   weights: { a: 1, i: 0, u: 0, e: 0, o: 0 },
+  vel: { a: 0, i: 0, u: 0, e: 0, o: 0 },
   vowel: "a",
   amount: 0,
   taps: new Map(), // pointerId -> {row}
   activeRow: -1,
   kbVowel: null,
+  kbSpace: false,
+  firstSound: false,
   hasPinched: false,
   firstTapDone: false,
   result: null,
@@ -154,6 +158,30 @@ function curMouth() {
   return { vowel: "a", amount: 0 };
 }
 
+/** 顔をピンチしている(2本指が顔にある。PC では ←→↑↓ か Space) */
+function pinchActive() {
+  return pinch.count >= 2 || !!G.kbVowel || G.kbSpace;
+}
+
+/**
+ * 声が出るのは「盤面をタップしていて、かつ顔をピンチしているあいだ」だけ。
+ * 出始めの瞬間が判定(attack)の瞬間。どちらを先に触っても、そろった時点で鳴る。
+ */
+function updateSound() {
+  const should = G.taps.size > 0 && G.activeRow >= 0 && pinchActive();
+  if (should && !voice.on) {
+    voice.unlock();
+    voice.noteOn(rowFreq(G.activeRow), 0.02);
+    G.firstSound = true;
+    if (G.mode === "playing" && G.judge) {
+      const r = G.judge.attack(judgeTime(), G.activeRow);
+      if (r.kind === "wrong") G.wrongFlash.push({ row: G.activeRow, t0: performance.now() });
+    }
+  } else if (!should && voice.on) {
+    voice.noteOff();
+  }
+}
+
 /** 顔・声・判定に「いまの口の形」を配る */
 function applyMouth() {
   const m = curMouth();
@@ -169,7 +197,8 @@ function applyMouth() {
   G.amount = m.amount;
   voice.setMouth(w, m.amount);
   if (changed && G.judge && G.mode === "playing") G.judge.setVowel(judgeTime(), m.vowel);
-  if (m.vowel !== "a") G.hasPinched = true;
+  if (m.vowel !== "a" || pinchActive()) G.hasPinched = true;
+  updateSound();
 }
 
 function tapDown(id, row) {
@@ -178,12 +207,7 @@ function tapDown(id, row) {
   G.taps.set(id, { row });
   G.activeRow = row;
   G.firstTapDone = true;
-  applyMouth();
-  voice.noteOn(rowFreq(row), 0.02);
-  if (G.mode === "playing" && G.judge) {
-    const r = G.judge.attack(judgeTime(), row);
-    if (r.kind === "wrong") G.wrongFlash.push({ row, t0: performance.now() });
-  }
+  applyMouth(); // ピンチ中ならここで声が出る(updateSound)
 }
 function tapMove(id, row) {
   const tp = G.taps.get(id);
@@ -191,20 +215,22 @@ function tapMove(id, row) {
   tp.row = row;
   if ([...G.taps.keys()].pop() === id) {
     G.activeRow = row;
-    voice.glideTo(rowFreq(row));
-    if (G.mode === "playing" && G.judge) G.judge.attack(judgeTime(), row, { slide: true });
+    if (voice.on) {
+      voice.glideTo(rowFreq(row));
+      if (G.mode === "playing" && G.judge) G.judge.attack(judgeTime(), row, { slide: true });
+    }
   }
 }
 function tapUp(id) {
   G.taps.delete(id);
   if (!G.taps.size) {
     G.activeRow = -1;
-    voice.noteOff();
   } else {
     const row = [...G.taps.values()].pop().row;
     G.activeRow = row;
-    voice.glideTo(rowFreq(row));
+    if (voice.on) voice.glideTo(rowFreq(row));
   }
+  updateSound();
 }
 
 const owners = new Map(); // pointerId -> 'tap' | 'pinch'
@@ -261,7 +287,11 @@ addEventListener(
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const tag = e.target && e.target.tagName;
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || tag === "BUTTON") return;
-    if (KEY_VOWEL[e.key]) {
+    if (e.key === " ") {
+      e.preventDefault();
+      G.kbSpace = true;
+      applyMouth();
+    } else if (KEY_VOWEL[e.key]) {
       e.preventDefault();
       G.kbVowel = KEY_VOWEL[e.key];
       applyMouth();
@@ -275,7 +305,10 @@ addEventListener(
 addEventListener(
   "keyup",
   (e) => {
-    if (KEY_VOWEL[e.key]) {
+    if (e.key === " ") {
+      G.kbSpace = false;
+      applyMouth();
+    } else if (KEY_VOWEL[e.key]) {
       if (G.kbVowel === KEY_VOWEL[e.key]) G.kbVowel = null;
       applyMouth();
     } else if (KEY_ROW[e.key.toLowerCase()] != null) {
@@ -335,7 +368,40 @@ function finish() {
   showResult();
 }
 
+/** ノーツも採点も無しで、曲に合わせて自由に鳴らす。音階は曲の調なので、どこを鳴らしても曲に合う */
+async function startFree() {
+  if (!G.song) return;
+  voice.unlock();
+  if (source.kind === "demo") source.bindAudio(voice.ctx);
+  applyVolumes();
+  setChart();
+  hideOverlay();
+  G.mode = "free";
+  G.seekPending = false;
+  G.freeLoopAt = 0;
+  pinch.reset();
+  for (const id of [...G.taps.keys()]) tapUp(id);
+  owners.clear();
+  applyMouth();
+  try {
+    await source.seek(G.skipTo);
+    await source.play();
+  } catch (e) {
+    showError("再生の開始に失敗: " + e);
+  }
+}
+function exitFree() {
+  G.mode = "ready";
+  try {
+    source.pause();
+  } catch (e) {}
+  voice.noteOff();
+  showOverlay("READY", "曲と難易度を選んでスタート。", "スタート");
+  $("startBtn").onclick = startPlay;
+}
+
 function pauseGame() {
+  if (G.mode === "free") return exitFree();
   if (G.mode !== "playing" || source.managed) return;
   G.mode = "paused";
   try {
@@ -368,11 +434,18 @@ function update(now) {
   lastFrame = now;
   // 顔の重みをなめらかに追従
   const tgt = G.target || { a: 1, i: 0, u: 0, e: 0, o: 0 };
-  const k = 1 - Math.exp(-dt / 0.05);
+  const mo = getDesign().motion;
   let sum = 0;
-  for (const v of VOWELS) {
-    G.weights[v] += (tgt[v] - G.weights[v]) * k;
-    sum += G.weights[v];
+  if (mo.spring) {
+    // ぷるんと揺れるバネ(少しいきすぎて戻る)。コミカルな「ゴムっぽさ」
+    stepSpring(G.weights, G.vel, tgt, dt, mo.spring.hz, mo.spring.damping, VOWELS);
+    for (const v of VOWELS) sum += G.weights[v];
+  } else {
+    const k = 1 - Math.exp(-dt / mo.weightSmoothSec); // 顔が指に追いつく速さはデザインデータ
+    for (const v of VOWELS) {
+      G.weights[v] += (tgt[v] - G.weights[v]) * k;
+      sum += G.weights[v];
+    }
   }
   if (sum > 0) for (const v of VOWELS) G.weights[v] /= sum;
 
@@ -392,7 +465,7 @@ function update(now) {
     G.lastPos = pos;
     G.pos = pos;
     if (!G.seekPending && G.judge) {
-      G.judge.tick(pos - prefs.offset, { down: G.taps.size > 0, row: G.activeRow, vowel: G.vowel });
+      G.judge.tick(pos - prefs.offset, { down: voice.on, row: G.activeRow, vowel: G.vowel });
       handleEvents();
       const last = G.chart.notes[G.chart.notes.length - 1];
       if (!source.managed) {
@@ -402,6 +475,14 @@ function update(now) {
     }
   } else {
     G.pos = pos;
+    // 自由演奏は、曲の終わりまで行ったら頭(歌い出しの手前)から繰り返す
+    if (G.mode === "free" && G.chart && G.chart.notes.length) {
+      const last = G.chart.notes[G.chart.notes.length - 1];
+      if (pos > last.t + last.dur + 3000 && now - G.freeLoopAt > 3000) {
+        G.freeLoopAt = now;
+        Promise.resolve(source.seek(G.skipTo)).catch(() => {});
+      }
+    }
   }
   G.popups = G.popups.filter((p) => now - p.t0 < p.life);
   G.bursts = G.bursts.filter((b) => now - b.t0 < 520);
@@ -512,7 +593,7 @@ function drawTrack(now, bi) {
     const active = G.activeRow === r;
     if (active) {
       const g = ctx.createLinearGradient(t.x, 0, t.x + t.w, 0);
-      g.addColorStop(0, "rgba(57,197,187,0.55)");
+      g.addColorStop(0, voice.on ? "rgba(57,197,187,0.55)" : "rgba(57,197,187,0.22)");
       g.addColorStop(1, "rgba(57,197,187,0.06)");
       ctx.fillStyle = g;
       ctx.fillRect(t.x, y, t.w, t.rowH);
@@ -728,10 +809,7 @@ function drawLyrics() {
 
 function drawFace(now, bi) {
   const f = L.face;
-  // まばたきも一瞬でパチッと切り替えず、閉じて開く動きにする(口の形を作っているあいだはしない)
-  const bp = now % 3600;
-  const blink = bp < 170 ? Math.sin((Math.PI * bp) / 170) * G.weights.a : 0;
-  face.render({ w: G.weights, blink, beat: G.mode === "playing" ? bi.pulse : 0, t: now / 1000, singing: voice.on });
+  face.render({ w: G.weights, beat: G.mode === "playing" ? bi.pulse : 0, t: now / 1000, singing: voice.on });
   // 320×320 の細かいドット絵を滑らかに縮小して描く(ドットが一見わからない細かさ)
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
@@ -797,7 +875,11 @@ function drawHud() {
   ctx.textAlign = "right";
   ctx.font = `800 24px ${FONT}`;
   ctx.fillStyle = "#fff";
-  ctx.fillText(String(j ? j.score : 0).padStart(7, "0"), L.W - 12, y);
+  if (G.mode === "free") {
+    ctx.font = `800 17px ${FONT}`;
+    ctx.fillStyle = "#7CE3D8";
+    ctx.fillText("FREE PLAY", L.W - 12, y);
+  } else ctx.fillText(String(j ? j.score : 0).padStart(7, "0"), L.W - 12, y);
   ctx.textAlign = "left";
   ctx.font = `700 12px ${FONT}`;
   ctx.fillStyle = "rgba(232,236,255,0.7)";
@@ -807,7 +889,11 @@ function drawHud() {
     while (ctx.measureText(ttl).width > maxW && ttl.length > 6) ttl = ttl.slice(0, -2);
     ctx.fillText(ttl, 54, 17);
   }
-  if (j && j.combo > 1) {
+  if (G.mode === "free") {
+    ctx.font = `600 11px ${FONT}`;
+    ctx.fillStyle = "rgba(232,236,255,0.6)";
+    ctx.fillText("ノーツなし。曲に合わせて自由に(Ⅱでもどる)", 54, 36);
+  } else if (j && j.combo > 1) {
     ctx.font = `800 15px ${FONT}`;
     ctx.fillStyle = "#FFE066";
     ctx.fillText(j.combo + " COMBO", 54, 36);
@@ -837,27 +923,23 @@ function drawPopups(now) {
 
 /** はじめての操作ガイド */
 function drawHint() {
-  if (G.mode !== "playing" && G.mode !== "ready") return;
-  if (G.hasPinched && G.firstTapDone) return;
+  if (G.mode !== "playing" && G.mode !== "ready" && G.mode !== "free") return;
+  if (G.firstSound) return;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.font = `700 13px ${FONT}`;
-  const f = L.face;
-  const lines = !G.hasPinched ? "ここを2本指でピンチ → 口の形" : "";
-  if (lines) {
+  const put = (text, x, y) => {
     ctx.lineWidth = 4;
     ctx.strokeStyle = "rgba(11,16,38,0.9)";
-    ctx.strokeText(lines, f.x + f.s / 2, f.y + f.s - 14);
+    ctx.strokeText(text, x, y);
     ctx.fillStyle = "#7CE3D8";
-    ctx.fillText(lines, f.x + f.s / 2, f.y + f.s - 14);
-  }
+    ctx.fillText(text, x, y);
+  };
+  const f = L.face;
+  put("盤面を押したまま、ここを2本指でピンチ → 声が出る", f.x + f.s / 2, f.y + f.s - 14);
   if (!G.firstTapDone) {
     const t = L.track;
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = "rgba(11,16,38,0.9)";
-    ctx.strokeText("段をタップ/なぞる → 音の高さ", t.x + t.w / 2 + 20, t.y + t.h - 12);
-    ctx.fillStyle = "#7CE3D8";
-    ctx.fillText("段をタップ/なぞる → 音の高さ", t.x + t.w / 2 + 20, t.y + t.h - 12);
+    put("段をタップ/なぞる → 音の高さ", t.x + t.w / 2 + 20, t.y + t.h - 12);
   }
 }
 
@@ -925,7 +1007,7 @@ function buildHowTo() {
   const box = $("howto");
   box.textContent = "";
   const items = [
-    ["a", "さわる\nだけ", "あ"],
+    ["a", "2本指で\nさわる", "あ"],
     ["i", "横に\nひろげる", "い"],
     ["u", "横から\nおさえる", "う"],
     ["e", "たてに\nつぶす", "え"],
@@ -940,7 +1022,7 @@ function buildHowTo() {
     f.attach(c);
     const w = { a: 0, i: 0, u: 0, e: 0, o: 0 };
     w[v] = 1;
-    f.render({ w, blink: 0, beat: 0, t: 0 });
+    f.render({ w, beat: 0, t: 0 });
     const k = document.createElement("div");
     k.className = "hk";
     k.style.background = VCOL[v];
@@ -1009,6 +1091,7 @@ function buildControls() {
     $("startBtn").onclick = startPlay;
   };
   $("pauseBtn").addEventListener("click", pauseGame);
+  $("freeBtn").addEventListener("click", startFree);
   $("startBtn").onclick = startPlay;
 }
 
@@ -1040,7 +1123,9 @@ function onSongReady(song) {
 
 /** TextAlive は onTimerReady(再生できる状態)まで待つ。デモは曲データが来ればよい */
 function updateStartEnabled() {
-  $("startBtn").disabled = !(G.songReady && (source.kind === "demo" || G.timerReady));
+  const ok = !!(G.songReady && (source.kind === "demo" || G.timerReady));
+  $("startBtn").disabled = !ok;
+  $("freeBtn").disabled = !ok;
 }
 
 async function loadSelected() {
@@ -1062,8 +1147,17 @@ async function loadSelected() {
   }
 }
 
-function boot() {
+/** 顔のデザインデータ。?design=URL で別案を試せる(デザイン案の確認用) */
+const DESIGN_URL = params.get("design") || dataUrl("data/design/miku-face.json", BUILD);
+
+async function boot() {
   resize();
+  try {
+    await loadDesign(DESIGN_URL);
+  } catch (e) {
+    showError("顔のデザインデータを読み込めません: " + (e.message || e));
+    return;
+  }
   buildHowTo();
   buildControls();
   requestAnimationFrame(frame);
@@ -1144,4 +1238,4 @@ function boot() {
   }, 15000);
 }
 
-boot();
+boot().catch((e) => showError("起動に失敗: " + (e && e.stack ? e.stack.split("\n").slice(0, 3).join("\n") : e)));

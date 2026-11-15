@@ -90,9 +90,9 @@ export const ROW_COUNT = 6;
 export const ROW_SEMITONES = [0, 2, 4, 7, 9, 12];
 export const ROW_SOLFEGE = ["ド", "レ", "ミ", "ソ", "ラ", "ド"];
 
-/** 各段の MIDI ノート番号。声域に収まるようトニックを G3〜F#4 に置き、1オクターブ上げる。 */
+/** 各段の MIDI ノート番号。ミクの歌声の声域(C4〜B5)に収まるよう、トニックを C4〜B4 に置く。 */
 export function rowMidi(tonicPc) {
-  const base = 60 + (((tonicPc + 5) % 12) - 5) + 12;
+  const base = 60 + (((tonicPc + 5) % 12) - 5) + 5;
   return ROW_SEMITONES.map((s) => base + s);
 }
 

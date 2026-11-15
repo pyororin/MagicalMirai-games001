@@ -1,13 +1,16 @@
 // ドット絵のミクの顔。320×320 ドット(論理80×80の4倍)、固定パレット、アンチエイリアス無し。
 //
-// 丸くて小さな目と口のシンプルな「ちびミク」にしている
-// (怖く見えないこと = 可愛さが最優先。鋭いまつ毛・歯・濃い輪郭線は使わない)。
-// 顔は「5つの表情の重み」で決まる。あ(ふつう) い(横にのばす) う(横からおさえる)
-// え(たてにつぶす) お(たてにのばす=Oの口)。重みから、顔の幅・高さ・ほっぺの引っ張り・
-// 眉・口の大きさを連続的に混ぜ、目と口の「型」だけを最大の重みで切り替える。
-// だから指を動かす量に応じて、顔がむにっと変形していく。
+// 顔のデザイン(色・形・各母音の表情・髪・動き)は、すべて
+//   app/data/design/miku-face.json
+// に置いてある。このファイルは、そのデザインデータを読んで描くだけ。
+// デザインを変えるときは JSON を編集する(コードは触らない)。意味は design/README.md。
 //
-// 表情を足すには EXPR に1行足し、drawEyes / drawMouth に型を足す(README 参照)。
+// 丸くて小さな目と口のシンプルな「ちびミク」。怖く見えないこと = 可愛さが最優先
+// (鋭いまつ毛・歯・濃い輪郭線は使わない)。
+// 顔は「5つの表情の重み」で決まる。あ(ふつう) い(横にのばす) う(横からおさえる)
+// え(たてにつぶす) お(たてにのばす=Oの口)。重みから、顔の幅・高さ・ほっぺ・眉・
+// 目の開き・口の大きさなどを連続的に混ぜる(型の切り替えは無い)。
+// 表情を足すには、JSON の expressions に1つ足す。
 
 // 論理座標は 80×80(描画コードはこの単位で書く)。実解像度はその S 倍。
 // S=4 → 320×320 ドット。表示時に滑らかに拡大するので、ドットは一見わからない細かさになる。
@@ -17,29 +20,110 @@ export const FACE_W = FACE_LOGICAL * FACE_S;
 export const FACE_H = FACE_LOGICAL * FACE_S;
 const S = FACE_S;
 
+export const VOWEL_KEYS = ["a", "i", "u", "e", "o"];
+
 function hex(c) {
   const n = parseInt(c.slice(1), 16);
   return (255 << 24) | ((n & 255) << 16) | (((n >> 8) & 255) << 8) | ((n >> 16) & 255);
 }
 
-const PAL = {
-  // 髪
-  hair: "#33BDB2", hairD: "#1F8E8E", hairDD: "#176B73", hairL: "#7CE3D8", hairLL: "#BFF5EE",
-  // 肌
-  skin: "#FFEBDD", skinS: "#FFD6C6", skinSS: "#F2B3A8", outline: "#F0B0A4",
-  blush: "#FF9FB4", blush2: "#FFBCCA",
-  // 目
-  ink: "#16303C", white: "#F7FCFF", irisD: "#0B7C8E", irisM: "#1DB4C2", irisL: "#86EAEA", pupil: "#08384A",
-  // 口
-  mouthIn: "#8A2B45", tongue: "#FF8FA5", teeth: "#FFFFFF", lip: "#E88A98", lipD: "#B9566A",
-  // 服・ヘッドセット
-  shirt: "#B4BDC8", shirtS: "#8D97A5", sleeve: "#262A34", sleeveL: "#4A5060", tie: "#33BDB2", tieD: "#1F8E8E",
-  gear: "#2C303B", gearL: "#565D6E", gearT: "#33BDB2",
-  // 演出
-  spark: "#FFFFFF", sweat: "#9BE3F5",
-};
-const C = {};
-for (const k of Object.keys(PAL)) C[k] = hex(PAL[k]);
+/* ------------------------------------------------------------------ */
+/* デザインデータの読み込みと検証                                        */
+/* ------------------------------------------------------------------ */
+const PALETTE_KEYS = [
+  "hair", "hairD", "hairDD", "hairL", "hairLL", "skin", "skinS", "skinSS", "outline", "blush", "blush2",
+  "ink", "mouthIn", "tongue", "lip", "lipD", "lipHi", "markPinch", "markPress", "hatch",
+  "shirt", "shirtS", "sleeve", "sleeveL", "tie", "tieD", "gear", "gearL", "gearT", "spark", "sweat",
+];
+const SECTIONS = ["palette", "head", "eyes", "brows", "blush", "mouth", "hair", "headphones", "body", "fx", "motion", "expressions", "cheekMarks"];
+const EXPR_FIELDS = ["fw", "fh", "pull", "browY", "browTilt", "blush"];
+const EYE_FIELDS = ["size", "chev"];
+const MOUTH_FIELDS = ["w", "h", "y", "p", "n", "pad", "wrinkle", "shine"];
+const TG_FIELDS = ["dy", "rx", "ry"];
+
+/** デザインデータを検証する。問題があれば、場所つきのメッセージで例外を投げる。 */
+export function validateDesign(d) {
+  const errs = [];
+  const num = (v, path) => {
+    if (typeof v !== "number" || !Number.isFinite(v)) errs.push(path + " は数値にしてください(現在: " + JSON.stringify(v) + ")");
+  };
+  if (!d || typeof d !== "object") throw new Error("デザインデータが空、またはオブジェクトではありません");
+  for (const s of SECTIONS) if (!d[s] || typeof d[s] !== "object") errs.push("セクション " + s + " がありません");
+  if (errs.length) throw new Error(errs.join("\n"));
+  for (const k of PALETTE_KEYS) {
+    if (typeof d.palette[k] !== "string" || !/^#[0-9a-fA-F]{6}$/.test(d.palette[k])) errs.push("palette." + k + " は #RRGGBB の色にしてください(現在: " + JSON.stringify(d.palette[k]) + ")");
+  }
+  for (const k of VOWEL_KEYS) {
+    const e = d.expressions[k];
+    if (!e) { errs.push("expressions." + k + " がありません(あいうえお の5つが必要)"); continue; }
+    for (const f of EXPR_FIELDS) num(e[f], "expressions." + k + "." + f);
+    for (const f of EYE_FIELDS) num(e.eye && e.eye[f], "expressions." + k + ".eye." + f);
+    for (const f of MOUTH_FIELDS) num(e.mouth && e.mouth[f], "expressions." + k + ".mouth." + f);
+    for (const f of TG_FIELDS) num(e.mouth && e.mouth.tg && e.mouth.tg[f], "expressions." + k + ".mouth.tg." + f);
+    if (e.fx) for (const [q, v] of Object.entries(e.fx)) num(v, "expressions." + k + ".fx." + q);
+  }
+  // 数値は、使う場所で必ず参照されるものを一通り確かめる(欠けると NaN で絵が壊れるため)
+  const need = {
+    head: ["cx", "cy", "rx", "ry", "chinTaper", "outlineWidth"],
+    eyes: ["size", "dx", "y", "rx"],
+    brows: ["x0", "x1", "y", "width", "tiltInner", "tiltOuter"],
+    blush: ["x", "y", "rx", "ry", "rxGain", "ryGain", "minAmount"],
+    mouth: ["minW", "minH", "ringBase", "ringRange", "tongueMargin"],
+    headphones: ["y", "rx", "ry", "offset"],
+    motion: ["weightSmoothSec", "beatBounce", "bounceFollow"],
+  };
+  for (const [sec, keys] of Object.entries(need)) for (const k of keys) num(d[sec][k], sec + "." + k);
+  for (const k of ["shirt", "sleeve", "neckline", "tie", "tieShade"]) {
+    if (!Array.isArray(d.body[k]) || d.body[k].some((p) => !Array.isArray(p) || p.length !== 2 || !p.every(Number.isFinite))) errs.push("body." + k + " は [[x,y],...] にしてください");
+  }
+  if (!Array.isArray(d.hair.tails && d.hair.tails.points) || d.hair.tails.points.length < 3) errs.push("hair.tails.points は3点以上の [x,y,揺れ係数] にしてください");
+  if (!d.hair.fringe || !d.hair.back) errs.push("hair.back / hair.fringe がありません");
+  for (const [g, ks] of Object.entries({ arc: ["bow", "yoff"], chevron: ["tipX", "tipY", "innerX"], line: ["width", "chevronExtra", "steps"] })) {
+    for (const k of ks) num(d.eyes[g] && d.eyes[g][k], "eyes." + g + "." + k);
+  }
+  for (const [g, ks] of Object.entries({ pinch: ["y", "inset", "dy", "rx", "ry", "strength"], press: ["y", "inset", "rx", "ry", "strength"] })) {
+    for (const k of ks) num(d.cheekMarks[g] && d.cheekMarks[g][k], "cheekMarks." + g + "." + k);
+  }
+  for (const k of ["count", "fromInset", "len", "spread", "width"]) num(d.cheekMarks.pinch && d.cheekMarks.pinch.lines && d.cheekMarks.pinch.lines[k], "cheekMarks.pinch.lines." + k);
+  for (const k of ["len", "width", "gap"]) num(d.cheekMarks.press && d.cheekMarks.press.creases && d.cheekMarks.press.creases[k], "cheekMarks.press.creases." + k);
+  const mo = d.motion.spring;
+  if (mo) for (const k of ["hz", "damping"]) num(mo[k], "motion.spring." + k);
+  for (const [g, ks] of Object.entries({ tears: ["startDx", "startDy", "r0", "r1"], hatch: ["x", "y", "count", "len", "spacing", "slant", "width"], waves: ["span", "width"] })) {
+    if (d.fx[g]) for (const k of ks) num(d.fx[g][k], "fx." + g + "." + k);
+  }
+  const pf = d.head.cheek && d.head.cheek.puff;
+  if (!pf) errs.push("head.cheek.puff がありません");
+  else for (const k of ["dy", "height", "amount"]) num(pf[k], "head.cheek.puff." + k);
+  for (const k of ["count", "inner", "outer", "width"]) num(d.mouth.wrinkle && d.mouth.wrinkle[k], "mouth.wrinkle." + k);
+  for (const k of ["dx", "dy", "r"]) num(d.mouth.shine && d.mouth.shine[k], "mouth.shine." + k);
+  if (errs.length) throw new Error("デザインデータの問題:\n" + errs.join("\n"));
+  return d;
+}
+
+let D = null;
+let C = {};
+let designVersion = 0;
+
+/** デザインデータを設定する(検証つき)。以降の描画はこれを使う。 */
+export function setDesign(d) {
+  validateDesign(d);
+  D = d;
+  C = {};
+  for (const k of PALETTE_KEYS) C[k] = hex(d.palette[k]);
+  designVersion++;
+  return D;
+}
+
+/** URL からデザインデータを読み込む(キャッシュさせない) */
+export async function loadDesign(url) {
+  const r = await fetch(url, { cache: "no-cache" });
+  if (!r.ok) throw new Error("デザインデータの取得に失敗: " + url + " → HTTP " + r.status);
+  return setDesign(await r.json());
+}
+
+export function getDesign() {
+  return D;
+}
 
 const lerpC = (a, b, t) => {
   t = Math.max(0, Math.min(1, t));
@@ -155,46 +239,16 @@ class Raster {
 }
 
 /* ------------------------------------------------------------------ */
-/* 表情テーブル。ここに1行足すと表情が増える。                            */
-/* すべて連続値。指の動かした量に応じて、母音ごとの値が重みで混ざる。      */
-/*   fw/fh=顔の幅・高さ  pull=ほっぺ  browY/browTilt=眉  blush=頬紅       */
-/*   eye: open=ひらき(1=まるい目,0=閉じた線) size=大きさ                  */
-/*        bow=閉じた線の反り(+で上に凸=にっこり、-でたれ目) yoff=線の高さ  */
-/*        chev=「＞ ＜」への変形量                                        */
-/*   mouth: w/h=大きさ y=中心の高さ p=上辺の平らさ(0=楕円,1=上が平ら)     */
-/*        n=角の立ち(2=丸,3=四角寄り) pad=くちびるの太さ                  */
-/*        tg=舌(dy,rx,ry は口の大きさに対する比)                          */
+/* 表情の混ぜ合わせ                                                      */
 /* ------------------------------------------------------------------ */
-export const EXPR = {
-  // あ: さわっただけ。にこにこで、小さく口をあけている
-  a: { fw: 1.0, fh: 1.0, pull: 0.0, browY: 0, browTilt: 0.0, blush: 0.6,
-       eye: { open: 1, size: 1, bow: 0, yoff: 0, chev: 0 },
-       mouth: { w: 6, h: 5, y: 54, p: 0, n: 2, pad: 0.8, tg: { dy: 0.25, rx: 0.8, ry: 0.25 } } },
-  // い: ほっぺを横にのばされて、むにーっと笑顔。目はにっこり弧
-  i: { fw: 1.14, fh: 0.95, pull: 1.0, browY: -1, browTilt: 0.0, blush: 1.0,
-       eye: { open: 0, size: 1, bow: 4, yoff: 1.5, chev: 0 },
-       mouth: { w: 17, h: 8, y: 54, p: 1, n: 2, pad: 0.8, tg: { dy: 0.42, rx: 0.5, ry: 0.3 } } },
-  // う: 両側から押さえられて、ほっぺがぷくっ。口はちゅっと小さな丸
-  u: { fw: 0.9, fh: 1.03, pull: -1.0, browY: 0, browTilt: -0.4, blush: 1.0,
-       eye: { open: 1, size: 1.12, bow: 0, yoff: 0, chev: 0 },
-       mouth: { w: 4, h: 4, y: 54, p: 0, n: 2, pad: 1.3, tg: { dy: 0.2, rx: 0.2, ry: 0.15 } } },
-  // え: たてに押しつぶされて、むぎゅっ。口は横にきゅっと開く
-  e: { fw: 1.1, fh: 0.88, pull: 0.5, browY: 1, browTilt: -0.3, blush: 0.8,
-       eye: { open: 0, size: 1, bow: -0.9, yoff: 1.1, chev: 0 },
-       mouth: { w: 13, h: 4, y: 54, p: 0, n: 3, pad: 0.8, tg: { dy: 0.25, rx: 0.8, ry: 0.35 } } },
-  // お: たてにのばされ、Oの口で元気に歌う。目はぎゅっと閉じた「＞ ＜」
-  o: { fw: 0.94, fh: 1.12, pull: 0.0, browY: -2, browTilt: 0.0, blush: 0.7,
-       eye: { open: 0, size: 1, bow: 0, yoff: 0, chev: 1 },
-       mouth: { w: 10, h: 12, y: 55, p: 0, n: 2, pad: 0.8, tg: { dy: 0.25, rx: 0.8, ry: 0.25 } } },
-};
-const VOWEL_KEYS = ["a", "i", "u", "e", "o"];
-
 /** 重み w(合計1)で、すべてのパラメータを連続的に混ぜる(型の切り替えは無い) */
 export function mixExpr(w) {
+  const EXPR = D.expressions;
   const m = {
     fw: 0, fh: 0, pull: 0, browY: 0, browTilt: 0, blush: 0,
-    eye: { open: 0, size: 0, bow: 0, yoff: 0, chev: 0 },
-    mouth: { w: 0, h: 0, y: 0, p: 0, n: 0, pad: 0, tg: { dy: 0, rx: 0, ry: 0 } },
+    eye: { size: 0, chev: 0 },
+    mouth: { w: 0, h: 0, y: 0, p: 0, n: 0, pad: 0, wrinkle: 0, shine: 0, tg: { dy: 0, rx: 0, ry: 0 } },
+    fx: { sparkle: 0, squeeze: 0, sweat: 0, shout: 0, tears: 0, hatch: 0, waves: 0 },
     w: {},
   };
   let sum = 0;
@@ -206,8 +260,11 @@ export function mixExpr(w) {
     m.fw += e.fw * wk; m.fh += e.fh * wk; m.pull += e.pull * wk;
     m.browY += e.browY * wk; m.browTilt += e.browTilt * wk; m.blush += e.blush * wk;
     for (const q of Object.keys(m.eye)) m.eye[q] += e.eye[q] * wk;
-    for (const q of ["w", "h", "y", "p", "n", "pad"]) m.mouth[q] += e.mouth[q] * wk;
+    for (const q of ["w", "h", "y", "p", "n", "pad", "wrinkle", "shine"]) m.mouth[q] += e.mouth[q] * wk;
     for (const q of ["dy", "rx", "ry"]) m.mouth.tg[q] += e.mouth.tg[q] * wk;
+    // 表情ごとの演出(マンガ記号)の強さ。無い表情は、母音に対応する従来の演出
+    const fxv = e.fx || { sparkle: k === "i" ? 1 : 0, squeeze: k === "u" ? 1 : 0, sweat: k === "e" ? 1 : 0, shout: k === "o" ? 1 : 0 };
+    for (const q of Object.keys(m.fx)) m.fx[q] += (fxv[q] || 0) * wk;
   }
   return m;
 }
@@ -241,15 +298,17 @@ export class MikuFace {
 
   /**
    * @param {object} s
-   *  w: {a,i,u,e,o} 表情の重み(合計1) / blink: 0..1 / beat: 0..1 / singing: 声が出ているか / t: 秒
+   *  w: {a,i,u,e,o} 表情の重み(合計1) / beat: 0..1 / singing: 声が出ているか / t: 秒
    */
   render(s) {
+    if (!D) throw new Error("顔のデザインデータが未読み込みです(loadDesign か setDesign を先に呼んでください)");
     const w = s.w || { a: 1 };
-    const sway = Math.round((Math.sin((s.t || 0) * 2.1) * 0.7 + (s.beat || 0)) * 6) / 6;
+    const mo = D.motion;
+    const sway = Math.round((Math.sin((s.t || 0) * mo.sway.period) * mo.sway.amp + (s.beat || 0) * mo.sway.beat) * 6) / 6;
     // 見た目が変わらないフレームは描き直さない(高解像度なので重い)
     const key = [
+      designVersion,
       ...VOWEL_KEYS.map((k) => Math.round((w[k] || 0) * 48)),
-      Math.round((s.blink || 0) * 8),
       Math.round((s.beat || 0) * 12),
       sway,
       s.singing ? 1 : 0,
@@ -260,21 +319,22 @@ export class MikuFace {
     const r = this.r;
     r.clear();
     const m = mixExpr(w);
-    const bounce = (s.beat || 0) * 1.0;
+    const bounce = (s.beat || 0) * mo.beatBounce;
     const fw = m.fw;
     const fh = m.fh;
-    const cx = 40;
-    const cy = 42 + bounce * 0.5;
-    const fx = (x) => cx + (x - 40) * fw;
-    const fy = (y) => cy + (y - 42) * fh;
+    const cx = D.head.cx;
+    const cy = D.head.cy + bounce * mo.bounceFollow;
+    const fx = (x) => cx + (x - D.head.cx) * fw;
+    const fy = (y) => cy + (y - D.head.cy) * fh;
 
-    this.drawBackHair(r, cx, cy, fw, fh, sway);
-    this.drawBody(r, cx, cy, fh);
+    this.drawBackHair(r, cx, cy, sway); // 髪はピンチで変形しない
+    this.drawBody(r, cx, cy);
     this.drawHead(r, m, cx, cy, fw, fh);
     this.drawBlush(r, m, fx, fy);
-    this.drawEyes(r, m, fx, fy, s.blink || 0);
+    this.drawCheekMarks(r, m, cx, fy);
+    this.drawEyes(r, m, fx, fy);
     this.drawMouth(r, m, fx, fy, s.singing);
-    this.drawFringe(r, cx, cy, fw, fh);
+    this.drawFringe(r, cx, cy);
     this.drawBrows(r, m, fx, fy);
     this.drawHeadphones(r, cx, cy);
     this.drawFx(r, m, fx, fy);
@@ -285,68 +345,84 @@ export class MikuFace {
     }
   }
 
+  /** デザインを差し替えたあと、強制的に描き直す */
+  invalidate() {
+    this.lastKey = "";
+  }
+
   /* ---- 後ろ髪 + ちびツインテール ---- */
-  drawBackHair(r, cx, cy, fw, fh, sway) {
+  drawBackHair(r, cx, cy, sway) {
+    const H = D.hair;
+    const T = H.tails;
     for (const side of [-1, 1]) {
-      const pts = [
-        [cx + side * 24 * fw, cy - 8],
-        [cx + side * (30 * fw + 1), cy + 3],
-        [cx + side * (32 * fw + 1 + sway * 0.5), cy + 15],
-        [cx + side * (29 * fw + sway), cy + 26],
-      ];
-      r.stroke(pts.map((p) => [p[0] + side * 1.1, p[1]]), 8.6, 4.6, C.hairD);
-      r.stroke(pts, 7.8, 3.8, (u) => lerpC(C.hair, C.hairD, smooth(0.55, 1, u) * 0.55));
-      r.stroke(pts.map((p) => [p[0] - side * 2.4, p[1] - 0.8]), 2.2, 1.0, C.hairL);
-      r.stroke(pts.map((p) => [p[0] - side * 2.6, p[1] - 0.8]), 0.9, 0.4, C.hairLL);
+      const pts = T.points.map((p) => [cx + side * (p[0] + sway * p[2]), cy + p[1]]);
+      r.stroke(pts.map((p) => [p[0] + side * T.shadow.dx, p[1]]), T.shadow.r0, T.shadow.r1, C.hairD);
+      r.stroke(pts, T.body.r0, T.body.r1, (u) => lerpC(C.hair, C.hairD, smooth(T.body.shadeFrom, 1, u) * T.body.shadeAmount));
+      r.stroke(pts.map((p) => [p[0] - side * T.gloss.dx, p[1] + T.gloss.dy]), T.gloss.r0, T.gloss.r1, C.hairL);
+      r.stroke(pts.map((p) => [p[0] - side * T.glossHi.dx, p[1] + T.glossHi.dy]), T.glossHi.r0, T.glossHi.r1, C.hairLL);
       // 毛束の筋
-      for (const o of [-1.2, 1.6]) {
-        r.polyline(pts.slice(1).map((p) => [p[0] + side * o, p[1]]), C.hairD, 0.35);
+      for (const o of T.streaks.offsets) {
+        r.polyline(pts.slice(1).map((p) => [p[0] + side * o, p[1]]), C.hairD, T.streaks.width);
       }
       // ヘアゴム
-      const bx = cx + side * 25 * fw;
-      const by = cy - 8;
-      r.ellipse(bx + side * 1, by, 3.6, 3.6, C.gear);
-      r.ellipse(bx + side * 1 - 0.6, by - 0.8, 1.3, 1.3, C.gearL);
+      const bx = cx + side * T.tie.x;
+      const by = cy + T.tie.y;
+      r.ellipse(bx + side * T.tie.dx, by, T.tie.r, T.tie.r, C.gear);
+      r.ellipse(bx + side * T.tie.dx + T.tie.hi.dx, by + T.tie.hi.dy, T.tie.hi.r, T.tie.hi.r, C.gearL);
     }
-    r.ellipse(cx, cy - 4, 27.5 * fw, 25 * fh, C.hair);
+    r.ellipse(cx, cy + H.back.dy, H.back.rx, H.back.ry, C.hair);
   }
 
   /* ---- 首・小さな肩・ネクタイ ---- */
-  drawBody(r, cx, cy, fh) {
-    const top = cy + 18 * fh;
-    r.rows(top, 72, () => [cx - 5, cx + 5], C.skinS);
-    r.poly([[cx - 30, 80], [cx - 27, 71], [cx - 12, 66], [cx - 5, 66], [cx + 5, 66], [cx + 12, 66], [cx + 27, 71], [cx + 30, 80]], (x, y) => lerpC(C.shirt, C.shirtS, smooth(66, 80, y) * 0.6));
-    r.poly([[cx - 30, 80], [cx - 27, 71], [cx - 21, 69], [cx - 19, 80]], C.sleeve);
-    r.poly([[cx + 30, 80], [cx + 27, 71], [cx + 21, 69], [cx + 19, 80]], C.sleeve);
-    r.poly([[cx - 5, 66], [cx, 70], [cx + 5, 66]], C.skinS);
-    r.poly([[cx - 2, 68], [cx + 2, 68], [cx + 3, 80], [cx - 3, 80]], C.tie);
-    r.poly([[cx, 68], [cx + 2, 68], [cx + 3, 80], [cx, 80]], C.tieD);
+  drawBody(r, cx, cy) {
+    const B = D.body;
+    const P = (pts) => pts.map((p) => [cx + p[0], p[1]]);
+    const top = cy + B.neck.topDy;
+    r.rows(top, B.neck.bottom, () => [cx - B.neck.half, cx + B.neck.half], C.skinS);
+    const sh = B.shirtShade;
+    r.poly(P(B.shirt), (x, y) => lerpC(C.shirt, C.shirtS, smooth(sh.from, sh.to, y) * sh.amount));
+    r.poly(P(B.sleeve), C.sleeve);
+    r.poly(P(B.sleeve.map((p) => [-p[0], p[1]])), C.sleeve);
+    r.poly(P(B.neckline), C.skinS);
+    r.poly(P(B.tie), C.tie);
+    r.poly(P(B.tieShade), C.tieD);
   }
 
   /* ---- 顔: 丸い ---- */
   drawHead(r, m, cx, cy, fw, fh) {
-    const rx = 24.5 * fw;
-    const ry = 21.5 * fh;
-    const pull = m.pull;
-    const cheekY = cy + 6 * fh;
-    const hw = (yc) => {
-      const t = (yc - cy) / ry;
+    const Hd = D.head;
+    const ry = Hd.ry * fh;
+    // 顔の輪郭(半幅)。ほっぺ: 引っ張ると外へふくらむ(尖らせず、おもちのように丸く)。押さえるとへこむ
+    const outline = (fw_, fh_, pull) => (yc) => {
+      const rx_ = Hd.rx * fw_;
+      const ry_ = Hd.ry * fh_;
+      const t = (yc - cy) / ry_;
       if (Math.abs(t) > 1) return -1;
-      let w = rx * Math.sqrt(1 - t * t);
-      if (t > 0) w *= 1 - 0.1 * t * t; // あごはまるく
-      // ほっぺ: 引っ張ると外へふくらむ(尖らせず、おもちのように丸く)。押さえるとへこむ
-      const bump = Math.max(0, 1 - Math.pow((yc - cheekY) / (9 * fh), 2));
-      w += pull * (pull > 0 ? 3.2 : 1.8) * bump;
+      let w = rx_ * Math.sqrt(1 - t * t);
+      if (t > 0) w *= 1 - Hd.chinTaper * t * t; // あごはまるく
+      const bump = Math.max(0, 1 - Math.pow((yc - (cy + Hd.cheek.y * fh_)) / (Hd.cheek.height * fh_), 2));
+      w += pull * (pull > 0 ? Hd.cheek.bulgeOut : Hd.cheek.bulgeIn) * bump;
+      if (pull < 0) {
+        // 手で押さえられた頬は、押された所がへこみ、その上と下がふくらむ
+        const pf = Hd.cheek.puff;
+        for (const sg of [-1, 1]) {
+          const bp = Math.max(0, 1 - Math.pow((yc - (cy + (Hd.cheek.y + sg * pf.dy) * fh_)) / (pf.height * fh_), 2));
+          w += -pull * pf.amount * bp;
+        }
+      }
       return w;
     };
+    const hw = outline(fw, fh, m.pull);
+    // 髪・ヘッドホンはピンチで変形しない。それらが沿う「ふだんの輪郭」を別に持つ
+    this.neutralHW = outline(1, 1, 0);
     const rowsFn = (yc) => {
       const w = hw(yc);
       return w < 0 ? null : [cx - w, cx + w];
     };
     // 肌: あご下に向かってやわらかく影になる
-    r.rows(cy - ry, cy + ry, rowsFn, (x, y) => lerpC(C.skin, C.skinS, smooth(0.45, 1.0, (y - cy) / ry)));
+    r.rows(cy - ry, cy + ry, rowsFn, (x, y) => lerpC(C.skin, C.skinS, smooth(Hd.shade.from, Hd.shade.to, (y - cy) / ry)));
     // 輪郭はうすい肌色の線だけ
-    const ow = 0.55;
+    const ow = Hd.outlineWidth;
     for (let Y = Math.floor((cy - ry) * S); Y <= Math.ceil((cy + ry) * S); Y++) {
       const yc = (Y + 0.5) / S;
       const w = hw(yc);
@@ -358,35 +434,31 @@ export class MikuFace {
         r.put(b - k, Y, C.outline);
       }
     }
-    for (let X = Math.ceil((cx - rx * 0.4) * S); X <= Math.floor((cx + rx * 0.4) * S); X++) {
-      const xc = (X + 0.5) / S;
-      const t = (xc - cx) / rx;
-      const yb = cy + ry * Math.sqrt(Math.max(0, 1 - t * t * 0.0)) - 0.0;
-      void yb;
-    }
     this.headHW = hw;
     this.headRy = ry;
   }
 
   /* ---- ヘッドホン(耳) ---- */
   drawHeadphones(r, cx, cy) {
-    const hw = this.headHW;
+    const P = D.headphones;
+    const hw = this.neutralHW;
     for (const side of [-1, 1]) {
-      const y = cy + 1;
-      const ex = cx + side * (hw(y) + 0.5);
-      r.ellipse(ex, y, 4.2, 5.4, C.gear);
-      r.ellipse(ex - side * 0.8, y - 1.2, 1.6, 2.2, C.gearL);
-      r.ellipse(ex + side * 0.3, y + 3.2, 1.8, 0.9, C.gearT);
+      const y = cy + P.y;
+      const ex = cx + side * (hw(y) + P.offset);
+      r.ellipse(ex, y, P.rx, P.ry, C.gear);
+      r.ellipse(ex + side * P.hi.dx, y + P.hi.dy, P.hi.rx, P.hi.ry, C.gearL);
+      r.ellipse(ex + side * P.accent.dx, y + P.accent.dy, P.accent.rx, P.accent.ry, C.gearT);
     }
   }
 
   drawBlush(r, m, fx, fy) {
-    const a = Math.max(0.2, Math.min(1, m.blush));
+    const B = D.blush;
+    const a = Math.max(B.minAmount, Math.min(1, m.blush));
     for (const side of [-1, 1]) {
-      const bx = fx(40 + side * 14.5);
-      const by = fy(51.5);
-      const rx = 3.8 + a * 1.4;
-      const ry = 2.3 + a * 0.5;
+      const bx = fx(D.head.cx + side * B.x);
+      const by = fy(B.y);
+      const rx = B.rx + a * B.rxGain;
+      const ry = B.ry + a * B.ryGain;
       // 中心ほど濃い、ふんわりした頬紅
       r.rows(by - ry, by + ry, (yc) => {
         const t = (yc - by) / ry;
@@ -395,96 +467,126 @@ export class MikuFace {
         return [bx - hw, bx + hw];
       }, (x, y) => {
         const d = Math.hypot((x - bx) / rx, (y - by) / ry);
-        return lerpC(C.blush, C.blush2, smooth(0.2, 1, d));
+        return lerpC(C.blush, C.blush2, smooth(B.fade[0], B.fade[1], d));
       });
     }
   }
 
-  /* ---- 目: まるい目 → にっこり弧 / 線 / 「＞ ＜」へ、形そのものが連続して変わる ---- */
-  drawEyes(r, m, fx, fy, blink) {
-    const e = { ...m.eye };
-    // まばたき: 閉じた線(ふせたまつ毛の弧)へ滑らかに
-    const bl = Math.max(0, Math.min(1, blink)) * e.open;
-    e.open *= 1 - blink;
-    e.bow = e.bow * (1 - bl) + -2.2 * bl;
-    e.yoff = e.yoff * (1 - bl) + -0.2 * bl;
+  /* ---- 頬の跡: のばされた/押された跡(手は描かない)。強さは pull に比例 ---- */
+  drawCheekMarks(r, m, cx, fy) {
+    const CM = D.cheekMarks;
+    const hw = this.headHW;
+    const wp = Math.max(0, Math.min(1, m.pull)); // のばされた(つままれた跡)
+    const wq = Math.max(0, Math.min(1, -m.pull)); // 押された(押された跡)
+    // 肌の上にだけ、いまの色に赤みを重ねる(縁・髪の上にはかけない)
+    const tint = (x, y, rx, ry, col, strength) => {
+      r.rows(y - ry, y + ry, (yc) => {
+        const t = (yc - y) / ry;
+        if (Math.abs(t) > 1) return null;
+        const w = rx * Math.sqrt(1 - t * t);
+        return [x - w, x + w];
+      }, (px, py) => {
+        const cur = r.get(px, py);
+        const edge = hw(py);
+        if (cur === 0 || edge < 0 || Math.abs(px - cx) > edge - 0.5) return cur;
+        const d = Math.hypot((px - x) / rx, (py - y) / ry);
+        return lerpC(cur, col, strength * (1 - smooth(0.2, 1, d)));
+      });
+    };
     for (const side of [-1, 1]) {
-      this.drawEye(r, e, fx(40 + side * 11.2), fy(43.5), side);
+      if (wp > 0.04) {
+        const P = CM.pinch;
+        const yy = fy(P.y);
+        const x = cx + side * (hw(yy) - P.inset);
+        // つまんだ指の跡: 親指と人差し指の2つの赤み
+        for (const sg of [-1, 1]) tint(x, yy + sg * P.dy, P.rx * (0.55 + 0.45 * wp), P.ry * (0.55 + 0.45 * wp), C.markPinch, P.strength * wp);
+        // つままれた皮膚が顔の中心側へのびる引っぱり線
+        const L = P.lines;
+        const x0 = x - side * (L.fromInset - P.inset); // つまんだ点のすぐ内側から、扇状にひろがる
+        for (let j = 0; j < L.count; j++) {
+          const ang = (j - (L.count - 1) / 2) * (L.spread / 5.5); // spread=扇の開き(大きいほど広い)
+          r.line(x0, yy, x0 - side * Math.cos(ang) * L.len * wp, yy + Math.sin(ang) * L.len * wp, C.skinSS, L.width);
+        }
+      }
+      if (wq > 0.04) {
+        const Q = CM.press;
+        const yy = fy(Q.y);
+        const x = cx + side * (hw(yy) - Q.inset);
+        // 押された跡: てのひらの形に赤くなった頬
+        tint(x, yy, Q.rx * (0.6 + 0.4 * wq), Q.ry * (0.6 + 0.4 * wq), C.markPress, Q.strength * wq);
+        // 押されて肉が寄ったしわ(跡の上と下から、外側へ)
+        const Cr = Q.creases;
+        for (const sg of [-1, 1]) {
+          const ry = Q.ry * (0.6 + 0.4 * wq) + Cr.gap;
+          r.line(x - side * 0.6, yy + sg * ry, x + side * Cr.len * wq, yy + sg * (ry + 0.5 * wq), C.skinSS, Cr.width);
+        }
+      }
+    }
+  }
+
+  /* ---- 目: 2種類だけ。喜ぶ目(＾＾)と、くの字の少し苦しげな目(＞＜)。chev で連続して変形 ---- */
+  drawEyes(r, m, fx, fy) {
+    const E = D.eyes;
+    for (const side of [-1, 1]) {
+      this.drawEye(r, m.eye, fx(D.head.cx + side * E.dx), fy(E.y), side);
     }
   }
 
   drawEye(r, e, ex, ey, side) {
-    const rx = 5.4 * e.size;
-    const ry = 6.6 * e.size;
-    const open = Math.max(0, Math.min(1, e.open));
-    const closed = 1 - open;
-    const N = 16;
-    // まぶたの線: ひらいているときは目の上の縁、閉じるにつれて「反った線」へ
-    const bowY = (u) => e.yoff - e.bow * (1 - u * u);
-    const lidY = (u) => ey - ry * open * Math.sqrt(Math.max(0, 1 - u * u)) - 0.5 * open + closed * bowY(u);
-    const lid = [];
+    const E = D.eyes;
+    const K = E.size * e.size;
+    const rx = E.rx * K;
+    const N = E.line.steps;
+    const chev = Math.max(0, Math.min(1, e.chev));
+    // 喜ぶ目: 上に凸の弧
+    const arc = [];
     for (let k = 0; k <= N; k++) {
       const u = (k / N) * 2 - 1;
-      lid.push([ex + u * (rx + 0.2 * open), lidY(u)]);
+      arc.push([ex + u * rx, ey + (E.arc.yoff - E.arc.bow * (1 - u * u)) * K]);
     }
-    // 「＞ ＜」への変形(左目が ＞、右目が ＜)。線の両端が上下の先端、中央が頂点になる
-    const sx = side;
-    const chev = Math.max(0, Math.min(1, e.chev));
-    const cp = [[ex + sx * 3.8, ey - 3.4], [ex - sx * 3.6, ey], [ex + sx * 3.8, ey + 3.4]];
+    // くの字の目(左目が ＞、右目が ＜)。弧の両端が上下の先端、中央が頂点になる
+    const CV = E.chevron;
+    const cp = [[ex + side * CV.tipX * K, ey - CV.tipY * K], [ex - side * CV.innerX * K, ey], [ex + side * CV.tipX * K, ey + CV.tipY * K]];
     const chevAt = (t) => (t < 0.5
       ? [cp[0][0] + (cp[1][0] - cp[0][0]) * (t * 2), cp[0][1] + (cp[1][1] - cp[0][1]) * (t * 2)]
       : [cp[1][0] + (cp[2][0] - cp[1][0]) * (t * 2 - 1), cp[1][1] + (cp[2][1] - cp[1][1]) * (t * 2 - 1)]);
-    // 目玉(虹彩)は、ひらき具合に応じて縦に縮む。ほぼ閉じたら出さない
-    if (open > 0.04) {
-      const top = lidY(0);
-      const bottom = ey + ry * (0.1 + 0.9 * open) * (1 - chev);
-      const H = Math.max(0.1, bottom - top);
-      const cy2 = top + H / 2;
-      const ry2 = H / 2;
-      const rx2 = rx * (0.55 + 0.45 * Math.sqrt(open));
-      r.ellipse(ex, cy2, rx2 + 0.7, ry2 + 0.7, C.ink);
-      r.ellipse(ex, cy2, rx2, ry2, (x, y) => {
-        const t = (y - cy2) / ry2;
-        return t < 0.1 ? lerpC(C.irisD, C.irisM, smooth(-1, 0.1, t)) : lerpC(C.irisM, C.irisL, smooth(0.1, 0.95, t));
-      });
-      const pk = smooth(0.15, 0.6, open);
-      r.ellipse(ex, cy2 + ry2 * 0.06, rx2 * 0.46 * pk, ry2 * 0.5 * pk, C.pupil);
-      // ハイライトも、ひらきに合わせて少しずつ現れる
-      const hk = smooth(0.35, 0.9, open);
-      if (hk > 0.02) {
-        r.ellipse(ex - side * 1.9 * e.size + 0.3, cy2 - ry2 * 0.36, 1.7 * hk, 1.8 * hk, C.spark);
-        r.ellipse(ex + side * 2.4, cy2 + ry2 * 0.45, 0.7 * hk, 0.7 * hk, C.spark);
-        r.ellipse(ex + side * 3.3, cy2 + ry2 * 0.27, 0.45 * hk, 0.45 * hk, C.spark);
-      }
-    }
-    // 線(まぶた/にっこり弧/＞＜)。太さも連続して変わる
-    const wLine = 1.3 + 0.3 * closed + 0.2 * chev;
-    const pts = lid.map((p, k) => {
+    // 変形のしかた: 喜ぶ目(＾)を、くの字(＞ / ＜)の向きへ90°回しながら、少しずつ角張ったくの字の形へ寄せる。
+    // (端点どうしを直接つなぐと、弧の端が目の中を横切って崩れるため)
+    const ang = -side * chev * (Math.PI / 2);
+    const ca = Math.cos(ang), sa = Math.sin(ang);
+    const pv = [ex, ey + E.arc.yoff * K - E.arc.bow * K * 0.5]; // 弧の中心あたりを軸に
+    const settle = smooth(0.45, 1, chev);
+    const pts = arc.map((p, k) => {
       if (chev <= 0) return p;
-      const c = chevAt(k / N);
-      return [p[0] + (c[0] - p[0]) * chev, p[1] + (c[1] - p[1]) * chev];
+      const dx = p[0] - pv[0], dy = p[1] - pv[1];
+      const rp = [pv[0] + dx * ca - dy * sa, pv[1] + dx * sa + dy * ca];
+      // 右目は逆向きに回るので、弧の端と くの字の端の対応(上/下)も反対にする
+      const c = chevAt(side < 0 ? k / N : 1 - k / N);
+      return [rp[0] + (c[0] - rp[0]) * settle, rp[1] + (c[1] - rp[1]) * settle];
     });
-    r.polyline(pts, C.ink, wLine);
+    r.polyline(pts, C.ink, E.line.width + E.line.chevronExtra * chev);
   }
 
   /* ---- まゆ: ちいさく。怒り顔にならない角度だけ ---- */
   drawBrows(r, m, fx, fy) {
+    const B = D.brows;
     for (const side of [-1, 1]) {
-      const x0 = fx(40 + side * 8);
-      const x1 = fx(40 + side * 14);
-      const y = fy(34.5) + m.browY;
-      const yi = y + m.browTilt * -1.2;
-      const yo = y + m.browTilt * 1.0;
-      r.line(x0, yi, x1, yo, C.hairD, 0.8);
+      const x0 = fx(D.head.cx + side * B.x0);
+      const x1 = fx(D.head.cx + side * B.x1);
+      const y = fy(B.y) + m.browY;
+      const yi = y + m.browTilt * B.tiltInner;
+      const yo = y + m.browTilt * B.tiltOuter;
+      r.line(x0, yi, x1, yo, C.hairD, B.width);
     }
   }
 
   /* ---- 口: 楕円 → 上が平らな笑顔 → 四角い口 → 小さなすぼめ口、まで連続して変わる ---- */
   drawMouth(r, m, fx, fy, singing) {
+    const M = D.mouth;
     const g = m.mouth;
-    const mx = fx(40);
-    const w = Math.max(3, g.w);
-    const h = Math.max(2, g.h);
+    const mx = fx(D.head.cx);
+    const w = Math.max(M.minW, g.w);
+    const h = Math.max(M.minH, g.h);
     const half = w / 2;
     const my = fy(g.y);
     const top = my - h / 2;
@@ -503,104 +605,207 @@ export class MikuFace {
       return hw == null ? null : [mx - hw, mx + hw];
     };
     // くちびる: すぼめるほど太く明るい色に
-    const ring = lerpC(C.lipD, C.lip, Math.min(1, (g.pad - 0.8) / 0.5));
-    r.rows(top - g.pad, my + h / 2 + g.pad, shape(g.pad), ring);
-    r.rows(top, my + h / 2, shape(0), C.mouthIn);
-    // 舌: 口の大きさに応じて、小さい口ではしぼむ
-    const tk = smooth(2.5, 5, h) * smooth(2.5, 5, w);
-    if (tk > 0.02) {
-      r.ellipse(mx, my + h * (g.tg.dy - 0.0), half * g.tg.rx * tk, h * g.tg.ry * tk, C.tongue);
+    const ring = lerpC(C.lipD, C.lip, Math.min(1, (g.pad - M.ringBase) / M.ringRange));
+    // 唇の輪: 口の形を全方向へ均等に pad だけふくらませた形(厚い唇でも、上下に棒状にのびたりしない)
+    const base = shape(0);
+    const OFFS = 16;
+    for (let k = 0; k < OFFS; k++) {
+      const a = (k / OFFS) * Math.PI * 2;
+      const ox = Math.cos(a) * g.pad, oy = Math.sin(a) * g.pad;
+      r.rows(top + oy, my + h / 2 + oy, (yc) => {
+        const rr = base(yc - oy);
+        return rr ? [rr[0] + ox, rr[1] + ox] : null;
+      }, ring);
     }
-    if (singing) r.ellipse(mx + half + 3, my - 3, 0.6, 0.6, C.spark);
+    r.rows(top, my + h / 2, base, C.mouthIn);
+    // すぼめた唇の縦じわ(放射状の線)と、ぷるんとしたつや
+    if (g.wrinkle > 0.05) {
+      const Wr = M.wrinkle;
+      for (let i = 0; i < Wr.count; i++) {
+        const a = ((i + 0.5) / Wr.count) * Math.PI * 2;
+        const ca = Math.cos(a), sa = Math.sin(a);
+        const r0 = Wr.inner * g.pad + 0.0, r1 = Wr.outer * g.pad;
+        const ex0 = half + r0, ey0 = h / 2 + r0, ex1 = half + r1 * g.wrinkle, ey1 = h / 2 + r1 * g.wrinkle;
+        r.line(mx + ca * ex0, my + sa * ey0, mx + ca * ex1, my + sa * ey1, C.lipD, Wr.width);
+      }
+    }
+    if (g.shine > 0.05) {
+      const Sn = M.shine;
+      r.ellipse(mx + half * Sn.dx * 2, top - g.pad * 0.5 + Sn.dy, Sn.r * g.shine, Sn.r * 0.7 * g.shine, C.lipHi);
+    }
+    // 舌: 口の大きさに応じて、小さい口ではしぼむ
+    const tf = M.tongueFade;
+    const tk = smooth(tf[0], tf[1], h) * smooth(tf[0], tf[1], w);
+    if (tk > 0.02) {
+      // 舌は口の内側(唇の線から少し内側)に切り取って描く。口からはみ出さない
+      const tcx = mx, tcy = my + h * g.tg.dy;
+      const trx = half * g.tg.rx * tk, tryy = h * g.tg.ry * tk;
+      const inner = shape(-M.tongueMargin);
+      r.rows(tcy - tryy, tcy + tryy, (yc) => {
+        const t = (yc - tcy) / tryy;
+        if (Math.abs(t) > 1) return null;
+        const tw = trx * Math.sqrt(1 - t * t);
+        // 口の下側は丸く急に狭まるので、上下1画素ぶんも内側に収まる範囲にする
+        const mr = inner(yc), up = inner(yc - 1 / S), dn = inner(yc + 1 / S);
+        if (!mr || !up || !dn) return null;
+        const a = Math.max(tcx - tw, mr[0], up[0], dn[0]);
+        const b = Math.min(tcx + tw, mr[1], up[1], dn[1]);
+        return a < b ? [a, b] : null;
+      }, C.tongue);
+    }
+    if (singing) r.ellipse(mx + half + M.singingSpark.dx, my + M.singingSpark.dy, M.singingSpark.r, M.singingSpark.r, C.spark);
   }
 
   /* ---- 前髪: ぱっつんにまるい毛先 ---- */
-  drawFringe(r, cx, cy, fw, fh) {
-    const hw = this.headHW;
-    const topY = cy - 27 * fh;
-    const R = 27.5 * fw;
-    const base = cy - 11 * fh;
+  drawFringe(r, cx, cy) {
+    const F = D.hair.fringe;
+    const hw = this.neutralHW;
+    const topY = cy + F.top;
+    const R = F.R;
+    const base = cy + F.base;
     const tip = (x) => {
       const d = Math.abs(x - cx);
-      const wave = Math.abs(Math.sin(((x - cx) * Math.PI) / (9 * fw)));
-      const part = d < 2 ? -3 + d * 1.2 : 0; // 真ん中のわけ目
-      const sweep = Math.min(1, d / (22 * fw));
-      return base + 5 * wave * (1 - sweep * 0.4) - sweep * sweep * 6 + part;
+      const wave = Math.abs(Math.sin(((x - cx) * Math.PI) / F.wave.period));
+      const part = d < F.part.half ? F.part.depth + d * F.part.slope : 0; // 真ん中のわけ目
+      const sweep = Math.min(1, d / F.sweep.radius);
+      return base + F.wave.amp * wave * (1 - sweep * F.wave.sweepDamp) - sweep * sweep * F.sweep.drop + part;
     };
     const x0 = Math.floor((cx - R) * S);
     const x1 = Math.ceil((cx + R) * S);
     const tips = [];
     for (let X = x0; X <= x1; X++) tips[X - x0] = tip((X + 0.5) / S);
-    for (let Y = Math.floor(topY * S); Y <= Math.ceil((cy + 10) * S); Y++) {
+    for (let Y = Math.floor(topY * S); Y <= Math.ceil((cy + F.bottom) * S); Y++) {
       const yc = (Y + 0.5) / S;
       const w = hw(yc);
       for (let X = x0; X <= x1; X++) {
         const xc = (X + 0.5) / S;
         const u = (xc - cx) / R;
         if (Math.abs(u) > 1) continue;
-        if (yc < cy - 4 - 25 * fh * Math.sqrt(1 - u * u)) continue;
+        if (yc < cy + D.hair.back.dy - F.domeRy * Math.sqrt(1 - u * u)) continue;
         const tp = tips[X - x0];
         const inFringe = yc < tp;
         // サイドの髪(顔の縁にそって下りる)
         const dx = Math.abs(xc - cx);
-        const side = w > 0 && dx > w - 2.6 && dx < w + 3 && yc < cy + 9;
+        const side = w > 0 && dx > w - F.side.in && dx < w + F.side.out && yc < cy + F.side.yMax;
         if (!inFringe && !side) continue;
         // 毛先の少し内側を濃くして、毛束の厚みを出す
-        const edge = inFringe && yc > tp - 0.9;
+        const edge = inFringe && yc > tp - F.edge;
         r.put(X, Y, edge ? C.hairD : C.hair);
       }
     }
     // 毛束の筋(うすい影)
-    for (const dx of [-14, -7, 7, 14]) {
-      const x = cx + dx * fw;
-      r.line(x, topY + 4.5, x + Math.sign(dx) * 0.6, tip(x) - 1.5, C.hairD, 0.35);
+    const St = F.strands;
+    for (const dx of St.dx) {
+      const x = cx + dx;
+      r.line(x, topY + St.top, x + Math.sign(dx) * St.lean, tip(x) - St.bottomUp, C.hairD, St.width);
     }
     // てっぺんのつや(天使の輪)
+    const Rg = F.ring;
     const ring = [];
     for (let k = -10; k <= 10; k++) {
       const u = k / 10;
-      const x = cx + u * 15 * fw;
-      const y = cy - 4 - 25 * fh * Math.sqrt(1 - Math.pow((x - cx) / R, 2)) + 4.2 + u * u * 2;
+      const x = cx + u * Rg.halfWidth;
+      const y = cy + D.hair.back.dy - F.domeRy * Math.sqrt(1 - Math.pow((x - cx) / R, 2)) + Rg.dy + u * u * Rg.curve;
       ring.push([x, y]);
     }
-    r.polyline(ring, C.hairL, 0.95);
-    r.polyline(ring.slice(5, 14), C.hairLL, 0.5);
+    r.polyline(ring, C.hairL, Rg.width);
+    r.polyline(ring.slice(Rg.hiFrom, Rg.hiTo), C.hairLL, Rg.hiWidth);
   }
 
-  /* ---- 効果(マンガ記号): 母音の重みに応じて大きさが連続して変わる ---- */
+  /* ---- 効果(マンガ記号): 表情の fx の重みに応じて、大きさが連続して変わる ---- */
   drawFx(r, m, fx, fy) {
+    const X = D.fx;
+    const F = m.fx;
     const col = C.spark;
-    const wi = smooth(0.2, 0.85, m.w.i);
-    if (wi > 0.04) {
-      const sp = (x, y) => {
-        const k = 1.6 * wi;
-        r.line(x - k, y, x + k, y, col, 0.5);
-        r.line(x, y - k, x, y + k, col, 0.5);
-        r.ellipse(x, y, 0.5 * wi, 0.5 * wi, col);
-      };
-      sp(fx(40 - 28), fy(30));
-      sp(fx(40 + 28), fy(34));
-    }
-    const wu = smooth(0.2, 0.85, m.w.u);
-    if (wu > 0.04) {
+    const cx0 = D.head.cx;
+    const ramp = (kind) => {
+      const rg = (X[kind] && X[kind].ramp) || X.ramp;
+      return smooth(rg[0], rg[1], F[kind]);
+    };
+    // 赤面の斜線(まんがの照れ・のぼせ): 頬紅の上に短い斜線を並べる
+    const wh = X.hatch ? ramp("hatch") : 0;
+    if (wh > 0.04) {
+      const Hh = X.hatch;
       for (const side of [-1, 1]) {
-        const x = fx(40 + side * 26) + side * 3;
-        const k = wu;
-        r.polyline([[x, fy(49 - 3 * k)], [x - side * 2 * k, fy(49)], [x, fy(49 + 3 * k)]], col, 0.6);
+        const bx = fx(cx0 + side * Hh.x), by = fy(Hh.y);
+        for (let j = 0; j < Hh.count; j++) {
+          const ox = (j - (Hh.count - 1) / 2) * Hh.spacing;
+          const L = Hh.len * wh;
+          r.line(bx + ox - side * Hh.slant * L * 0.5 * -1, by - L / 2, bx + ox + side * Hh.slant * L * 0.5 * -1 - side * Hh.slant * L, by + L / 2, C.hatch, Hh.width);
+        }
       }
     }
-    const we = smooth(0.2, 0.85, m.w.e);
-    if (we > 0.04) {
-      const x = fx(40 - 24);
-      r.ellipse(x, fy(32.4), 1.4 * we, 2.0 * we, C.sweat);
-      r.poly([[x, fy(32.4 - 3.8 * we)], [x - 1.1 * we, fy(31)], [x + 1.1 * we, fy(31)]], C.sweat);
-    }
-    const wo = smooth(0.2, 0.85, m.w.o);
-    if (wo > 0.04) {
+    // 涙: 目の外側から、勢いよく流れ出す(くの字の苦しげな目のとき)
+    const wt = X.tears ? ramp("tears") : 0;
+    if (wt > 0.04) {
+      const T = X.tears;
       for (const side of [-1, 1]) {
-        const x = 40 + side * 31;
-        r.line(x, fy(32), x + side * 3 * wo, fy(32 - 3 * wo), col, 0.6);
-        r.line(x + side, fy(38), x + side * (1 + 4 * wo), fy(38), col, 0.6);
+        const ex = fx(cx0 + side * D.eyes.dx), ey = fy(D.eyes.y);
+        const pts = (T.curve || [[4.5, 2], [9, 3.5], [12.5, 9]]).map((p) => [ex + side * (T.startDx + (p[0] - T.startDx) * wt), ey + T.startDy + (p[1] - T.startDy) * wt]);
+        pts.unshift([ex + side * T.startDx, ey + T.startDy]);
+        r.stroke(pts, T.r0, T.r1 * (0.6 + 0.4 * wt), C.sweat);
+        for (const dp of T.drops || []) r.ellipse(ex + side * (T.startDx + (dp[0] - T.startDx) * wt), ey + T.startDy + (dp[1] - T.startDy) * wt, dp[2] * wt, dp[2] * wt * 1.25, C.sweat);
+      }
+    }
+    const wi = ramp("sparkle");
+    if (wi > 0.04) {
+      const Sp = X.sparkle;
+      const sp = (x, y, sz) => {
+        const k = Sp.size * wi * sz;
+        r.line(x - k, y, x + k, y, col, Sp.width);
+        r.line(x, y - k, x, y + k, col, Sp.width);
+        if (Sp.diagonal) {
+          const q = k * 0.55;
+          r.line(x - q, y - q, x + q, y + q, col, Sp.width * 0.8);
+          r.line(x - q, y + q, x + q, y - q, col, Sp.width * 0.8);
+        }
+        r.ellipse(x, y, Sp.dot * wi, Sp.dot * wi, col);
+      };
+      for (const p of Sp.pos) sp(fx(cx0 + p[0]), fy(p[1]), p[2] || 1);
+    }
+    const wu = ramp("squeeze");
+    if (wu > 0.04) {
+      const Q = X.squeeze;
+      for (const side of [-1, 1]) {
+        const x = fx(cx0 + side * Q.x) + side * Q.push;
+        const k = wu;
+        r.polyline([[x, fy(Q.y - Q.len * k)], [x - side * Q.back * k, fy(Q.y)], [x, fy(Q.y + Q.len * k)]], col, Q.width);
+      }
+    }
+    const we = ramp("sweat");
+    if (we > 0.04) {
+      const W = X.sweat;
+      const x = fx(cx0 + W.x);
+      r.ellipse(x, fy(W.y), W.rx * we, W.ry * we, C.sweat);
+      r.poly([[x, fy(W.y - W.tipLen * we)], [x - W.tipHalf * we, fy(W.tipY)], [x + W.tipHalf * we, fy(W.tipY)]], C.sweat);
+      // 飛び散る小さなしずく
+      for (const dp of W.drops || []) r.ellipse(x + dp[0] * we, fy(W.y) + dp[1] * we, dp[2] * we, dp[2] * we * 1.3, C.sweat);
+    }
+    const wo = ramp("shout");
+    if (wo > 0.04) {
+      const Sh = X.shout;
+      for (const side of [-1, 1]) {
+        const x = cx0 + side * Sh.x;
+        r.line(x, fy(Sh.y1), x + side * Sh.len1 * wo, fy(Sh.y1 - Sh.len1 * wo), col, Sh.width);
+        r.line(x + side, fy(Sh.y2), x + side * (1 + Sh.len2 * wo), fy(Sh.y2), col, Sh.width);
+        if (Sh.y3 != null) r.line(x, fy(Sh.y3), x + side * Sh.len1 * wo, fy(Sh.y3 + Sh.len1 * wo), col, Sh.width);
+      }
+    }
+    // 声の衝撃波: 口を中心にひろがる「)))」「(((」
+    const ww = X.waves ? ramp("waves") : 0;
+    if (ww > 0.04) {
+      const Wv = X.waves;
+      const mcx = fx(cx0), mcy = fy(m.mouth.y);
+      for (const side of [-1, 1]) {
+        Wv.radii.forEach((rad, idx) => {
+          const pts = [];
+          const sp = Wv.span * (0.6 + 0.4 * ww);
+          for (let k = 0; k <= 8; k++) {
+            const a = (k / 8) * 2 * sp - sp;
+            pts.push([mcx + side * Math.cos(a) * rad * ww * (D.head.rx / 24.5), mcy + Math.sin(a) * rad * ww]);
+          }
+          r.polyline(pts, col, Wv.width * (1 - idx * 0.12));
+        });
       }
     }
   }
