@@ -80,8 +80,10 @@ test("表情の混ぜ合わせ: 重みの和が1でなくても正規化され�
 
 test("う: 唇の縦じわとつやは う のときだけ。頬は押された所がへこみ、上下がふくらむ(手は無い)", () => {
   const d = load();
-  const wr = clone(d); wr.mouth.wrinkle.count = 12;
-  assert.ok(!same(render(d, { u: 1 }), render(wr, { u: 1 })), "う は唇のしわが変わる");
+  // 唇の縦じわの機能は生きている(う にしわを指定すれば出る)。本編の う は、可愛さ優先でしわを付けていない
+  const wr = clone(d); wr.expressions.u.mouth.wrinkle = 1;
+  assert.ok(!same(render(d, { u: 1 }), render(wr, { u: 1 })), "う にしわを指定すれば出る");
+  wr.mouth.wrinkle.count = 12;
   assert.ok(same(render(d, { o: 1 }), render(wr, { o: 1 })), "お にはしわが無い");
   const pf = clone(d); pf.head.cheek.puff.amount = 4;
   assert.ok(!same(render(d, { u: 1 }), render(pf, { u: 1 })), "頬のふくらみ");
@@ -91,8 +93,9 @@ test("う: 唇の縦じわとつやは う のときだけ。頬は押された�
 test("目は2種類だけ: 喜ぶ目(＾＾)とくの字の苦しげな目(＞＜)。表情ごとに選び、途中は連続して変わる", () => {
   const d = load();
   // あ・い = 喜ぶ目(chev 0)、う・え・お = くの字(chev 1)
-  assert.deepEqual({ a: 0, i: 0, u: 1, e: 1, o: 1 }, Object.fromEntries(VOWELS.map((v) => [v, d.expressions[v].eye.chev])));
-  for (const v of VOWELS) assert.ok([0, 1].includes(d.expressions[v].eye.chev), v + " の目は 0 か 1");
+  const chev = Object.fromEntries(VOWELS.map((v) => [v, d.expressions[v].eye.chev]));
+  assert.deepEqual([chev.a, chev.i], [0, 0], "あ・い は喜ぶ目");
+  for (const v of ["u", "e", "o"]) assert.ok(chev[v] >= 0.7 && chev[v] <= 1, v + " はくの字寄り(やわらかさ調整で 1 未満もあり)");
   // chev を変えると目の絵が変わる(2種類が実在する)
   const happy = clone(d); happy.expressions.u.eye.chev = 0;
   assert.ok(!same(render(d, { u: 1 }), render(happy, { u: 1 })), "う の目の形");
@@ -132,6 +135,19 @@ test("舌は口の内側にだけ描く(唇の線にも肌にも触れない)", 
   }
 });
 
+test("唇は、厚くしても上下に棒状にのびない(口の形を全方向へ均等にふくらませた輪)", () => {
+  const d = clone(load());
+  Object.assign(d.palette, { lip: "#FFFF00", lipD: "#FFFF00", mouthIn: "#FF0000", tongue: "#FF0000", lipHi: "#FFFF00" });
+  const px = render(d, { u: 1 });
+  const yellow = ((255 << 24) | (255 << 8) | 255) >>> 0; // 唇(黄)
+  const S = FACE_W / 80;
+  let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+  for (let y = 0; y < FACE_H; y++) for (let x = 0; x < FACE_W; x++) if (px[y * FACE_W + x] === yellow) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
+  const w = (maxX - minX) / S, h = (maxY - minY) / S;
+  assert.ok(w > 4 && h > 4, "唇が描かれている " + w + "x" + h);
+  assert.ok(h < w * 1.35, "縦に棒状にのびていない(縦/横 = " + (h / w).toFixed(2) + ")");
+});
+
 test("頬の跡: のばされた(い)=つままれた跡、押された(う)=押された跡。手は描かない", () => {
   const d = load();
   const pin = clone(d); pin.cheekMarks.pinch.strength = 0; pin.cheekMarks.pinch.lines.len = 0.001;
@@ -160,10 +176,10 @@ test("デザインデータはすべて検証を通り、描画できる(本編�
 test("コミカル表現: 涙・汗・赤面の斜線・衝撃波・きらきらが、該当する表情にだけ出る", () => {
   const d = load();
   const off = (kind, patch) => { const c = clone(d); patch(c); return c; };
-  // 涙: う/え に出て、あ・い・お には出ない(涙のパラメータを変えても絵が変わらない)
-  const tears = off("tears", (c) => { c.fx.tears.r0 = 0.5; c.fx.tears.drops = []; });
-  for (const v of ["u", "e"]) assert.ok(!same(render(d, { [v]: 1 }), render(tears, { [v]: 1 })), v + " に涙");
-  for (const v of ["a", "i", "o"]) assert.ok(same(render(d, { [v]: 1 }), render(tears, { [v]: 1 })), v + " に涙は出ない");
+  // 涙の機能そのものは生きている(う に涙を指定すれば出る)。ただし本編のデザインでは、押さえる表情(う・え)で泣かせない
+  const withTears = clone(d); withTears.expressions.u.fx.tears = 1;
+  assert.ok(!same(render(d, { u: 1 }), render(withTears, { u: 1 })), "涙を指定すれば う に出る");
+  for (const v of VOWELS) assert.ok(!((d.expressions[v].fx || {}).tears > 0), v + " は涙なし(泣くまで押し込まない)");
   // 衝撃波: お だけ
   const waves = off("waves", (c) => { c.fx.waves.radii = [6]; });
   assert.ok(!same(render(d, { o: 1 }), render(waves, { o: 1 })), "お に衝撃波");
@@ -180,13 +196,13 @@ test("コミカル表現: 涙・汗・赤面の斜線・衝撃波・きらきら
 
 test("コミカル表現: 演出は表情の強さに比例して連続して現れる(0 → 満量)", () => {
   const d = load();
-  const noTears = clone(d); noTears.fx.tears.r0 = 0.05; noTears.fx.tears.r1 = 0.05; noTears.fx.tears.drops = [];
-  const amount = (w) => { const a = render(d, w), b = render(noTears, w); let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++; return n; };
+  // 例: 押される線(う だけの演出)。表情の強さ 0.1〜1 で、だんだん大きくなる
+  const noHatch = clone(d); noHatch.fx.squeeze.width = 0.01; noHatch.fx.squeeze.len = 0.01;
+  const amount = (w) => { const a = render(d, w), b = render(noHatch, w); let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++; return n; };
   const xs = [0.1, 0.3, 0.5, 0.7, 1].map((k) => amount({ a: 1 - k, u: k }));
-  // 満量(重み0.7)まで増え続け、そこから先はほぼ一定(顔の形が変わる分の誤差は許容)
-  for (let i = 1; i <= 3; i++) assert.ok(xs[i] > xs[i - 1], "涙が増える " + xs.join(","));
+  for (let i = 1; i <= 3; i++) assert.ok(xs[i] > xs[i - 1], "線が増える " + xs.join(","));
   assert.ok(xs[4] > xs[3] * 0.8, "満量以降は一定 " + xs.join(","));
-  assert.ok(xs[0] < xs[3] * 0.5, "弱いうちは小さい");
+  assert.ok(xs[0] < xs[3] * 0.6, "弱いうちは小さい " + xs.join(","));
 });
 
 test("コミカル案は前案より顔の変形が大きい(大袈裟)", () => {

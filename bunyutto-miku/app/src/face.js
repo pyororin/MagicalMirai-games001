@@ -606,8 +606,18 @@ export class MikuFace {
     };
     // くちびる: すぼめるほど太く明るい色に
     const ring = lerpC(C.lipD, C.lip, Math.min(1, (g.pad - M.ringBase) / M.ringRange));
-    r.rows(top - g.pad, my + h / 2 + g.pad, shape(g.pad), ring);
-    r.rows(top, my + h / 2, shape(0), C.mouthIn);
+    // 唇の輪: 口の形を全方向へ均等に pad だけふくらませた形(厚い唇でも、上下に棒状にのびたりしない)
+    const base = shape(0);
+    const OFFS = 16;
+    for (let k = 0; k < OFFS; k++) {
+      const a = (k / OFFS) * Math.PI * 2;
+      const ox = Math.cos(a) * g.pad, oy = Math.sin(a) * g.pad;
+      r.rows(top + oy, my + h / 2 + oy, (yc) => {
+        const rr = base(yc - oy);
+        return rr ? [rr[0] + ox, rr[1] + ox] : null;
+      }, ring);
+    }
+    r.rows(top, my + h / 2, base, C.mouthIn);
     // すぼめた唇の縦じわ(放射状の線)と、ぷるんとしたつや
     if (g.wrinkle > 0.05) {
       const Wr = M.wrinkle;
