@@ -23,7 +23,7 @@ for (let i = 0; i < W * H; i++) px.set(BG, i * 4);
 
 const render = (w) => {
   const f = new MikuFace();
-  f.render({ w: { a: 0, i: 0, u: 0, e: 0, o: 0, ...w }, blink: 0, beat: 0, t: 0 });
+  f.render({ w: { a: 0, i: 0, u: 0, e: 0, o: 0, ...w }, beat: 0, t: 0 });
   return f.r.px; // ABGR(リトルエンディアンの RGBA)
 };
 const blit = (src, sw, sh, ox, oy, shrink) => {

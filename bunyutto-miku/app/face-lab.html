@@ -45,7 +45,7 @@
 <h2>コマ送り(あ → 各母音へ、指を動かした量 0〜100% を 12.5% 刻み)</h2>
 <div id="strip" class="strip"></div>
 
-<h2>まばたき・拍の弾み・歌っているとき</h2>
+<h2>拍の弾み・歌っているとき・頬の跡(途中)</h2>
 <div class="row" id="extra"></div>
 
 <script type="module">
@@ -69,7 +69,7 @@ function draw() {
     const { f, mf } = mk(names[k] + " — " + (getDesign().expressions[k].label || ""));
     f.style.maxWidth = "210px";
     const w = { a: 0, i: 0, u: 0, e: 0, o: 0 }; w[k] = 1;
-    mf.render({ w, blink: 0, beat: 0, t: 0 });
+    mf.render({ w, beat: 0, t: 0 });
     $("row").appendChild(f);
   }
   for (const v of ["i", "u", "e", "o"]) {
@@ -77,19 +77,19 @@ function draw() {
     for (let k = 0; k <= 8; k++) {
       const c = document.createElement("canvas"); const mf = new MikuFace(); mf.attach(c);
       const w = { a: 1 - k / 8, i: 0, u: 0, e: 0, o: 0 }; w[v] += k / 8;
-      mf.render({ w, blink: 0, beat: 0, t: 0 }); row.appendChild(c);
+      mf.render({ w, beat: 0, t: 0 }); row.appendChild(c);
     }
     $("strip").appendChild(row);
   }
   const extras = [
-    ["まばたき(半分)", { a: 1 }, { blink: 0.5 }],
-    ["まばたき(閉じた)", { a: 1 }, { blink: 1 }],
     ["拍の頭(弾み)", { a: 1 }, { beat: 1 }],
     ["歌っている(い)", { i: 1 }, { singing: true }],
+    ["つままれた跡(い 60%)", { a: 0.4, i: 0.6 }, {}],
+    ["押された跡(う 60%)", { a: 0.4, u: 0.6 }, {}],
   ];
   for (const [label, w, o] of extras) {
     const { f, mf } = mk(label);
-    mf.render({ w: { a: 0, i: 0, u: 0, e: 0, o: 0, ...w }, blink: 0, beat: 0, t: 1.3, ...o });
+    mf.render({ w: { a: 0, i: 0, u: 0, e: 0, o: 0, ...w }, beat: 0, t: 1.3, ...o });
     $("extra").appendChild(f);
   }
 }

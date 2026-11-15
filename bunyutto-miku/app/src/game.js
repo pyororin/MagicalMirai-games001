@@ -14,7 +14,7 @@ import { SONGS, dataUrl } from "./songs.js";
 import { DemoSource } from "./demo.js";
 import { TextAliveSource } from "./textalive.js";
 
-export const BUILD = 6;
+export const BUILD = 7;
 
 /* 母音ごとの色。ノーツ・ガイド・結果で共通 */
 const VCOL = { a: "#FF7EB6", i: "#FFC93C", u: "#9B7BFF", e: "#38D6CB", o: "#FF6F5E" };
@@ -800,11 +800,7 @@ function drawLyrics() {
 
 function drawFace(now, bi) {
   const f = L.face;
-  // まばたきも一瞬でパチッと切り替えず、閉じて開く動きにする(口の形を作っているあいだはしない)
-  const bk = getDesign().motion.blink;
-  const bp = now % bk.periodMs;
-  const blink = bp < bk.durationMs ? Math.sin((Math.PI * bp) / bk.durationMs) * G.weights.a : 0;
-  face.render({ w: G.weights, blink, beat: G.mode === "playing" ? bi.pulse : 0, t: now / 1000, singing: voice.on });
+  face.render({ w: G.weights, beat: G.mode === "playing" ? bi.pulse : 0, t: now / 1000, singing: voice.on });
   // 320×320 の細かいドット絵を滑らかに縮小して描く(ドットが一見わからない細かさ)
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
@@ -1017,7 +1013,7 @@ function buildHowTo() {
     f.attach(c);
     const w = { a: 0, i: 0, u: 0, e: 0, o: 0 };
     w[v] = 1;
-    f.render({ w, blink: 0, beat: 0, t: 0 });
+    f.render({ w, beat: 0, t: 0 });
     const k = document.createElement("div");
     k.className = "hk";
     k.style.background = VCOL[v];
