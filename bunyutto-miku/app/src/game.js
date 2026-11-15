@@ -15,7 +15,7 @@ import { SONGS, dataUrl } from "./songs.js";
 import { DemoSource } from "./demo.js";
 import { TextAliveSource } from "./textalive.js";
 
-export const BUILD = 10;
+export const BUILD = 11;
 
 /* 母音ごとの色。ノーツ・ガイド・結果で共通 */
 const VCOL = { a: "#FF7EB6", i: "#FFC93C", u: "#9B7BFF", e: "#38D6CB", o: "#FF6F5E" };
@@ -1139,10 +1139,12 @@ async function loadSelected() {
   $("ovText").textContent = "楽曲を読み込んでいます: " + def.url;
   $("chartInfo").textContent = "";
   $("ovErr").hidden = true;
+  G.loadFailed = false;
   try {
     if (source.kind === "demo") onSongReady(await source.loadSong(def));
     else await source.loadSong(def); // 完了は onVideoReady → ready イベント
   } catch (e) {
+    G.loadFailed = true; // 15秒の見張りがこのエラー表示を上書きしないように
     showError("楽曲の読み込みに失敗: " + e);
   }
 }
@@ -1234,7 +1236,7 @@ async function boot() {
   source.init();
   // 15秒たっても読み込みが進まなければ、通信の失敗を表示して原因を切り分けられるようにする
   setTimeout(() => {
-    if (G.mode === "loading") showError("楽曲の読み込みが進みません(15秒)。ネットワーク/トークン/曲URLを確認してください。");
+    if (G.mode === "loading" && !G.loadFailed) showError("楽曲の読み込みが進みません(15秒)。ネットワーク/トークン/曲URLを確認してください。");
   }, 15000);
 }
 

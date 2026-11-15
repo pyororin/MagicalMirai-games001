@@ -20,6 +20,7 @@ export class TextAliveSource {
     this.managed = false;
     this.song = null;
     this.netDiag = [];
+    this.loadLog = []; // 読み込み経路ごとの結果(失敗の原因を画面に出す)
     this.handlers = { ready: [], error: [], end: [], appReady: [], mediaChange: [], timerReady: [] };
     this.readingsPromise = null;
     this.lastSong = null;
@@ -69,7 +70,7 @@ export class TextAliveSource {
   }
 
   get diag() {
-    return this.netDiag.slice(-4);
+    return this.loadLog.concat(this.netDiag.slice(-4));
   }
 
   init() {
@@ -106,23 +107,44 @@ export class TextAliveSource {
     });
   }
 
-  /** app.songUrl が無いときだけ自分で曲を読む(ホスト接続時は自動読み込み) */
-  loadSong(def) {
+  /**
+   * app.songUrl が無いときだけ自分で曲を読む(ホスト接続時は自動読み込み)。
+   * 経路を順に試し、失敗した理由は loadLog に残して画面に出す(端末ごとに失敗経路が違うため)。
+   *   1. 事前解決したカード URL(/cards/resolve のリダイレクトを使わない。いちばん確実)
+   *   2. 曲 URL(ライブラリ任せ。クライアント v0.5.2 は 302 を扱えず失敗しうる)
+   *   3. /cards/resolve を自前でリダイレクト追従してカード URL を得る
+   * 「Card data resolver」以外のエラーでも次の経路へ進む(端末によって例外の文言が違い、
+   * 文言で絞ると別端末で止まるため)。
+   */
+  async loadSong(def) {
     this.lastSong = def;
     this.song = null;
+    this.loadLog.length = 0;
     const opts = def.video ? { video: def.video } : {};
-    return this.player.createFromSongUrl(def.url, opts).catch((e) => {
-      if (String(e).indexOf("Card data resolver") < 0) throw e;
-      // クライアント v0.5.2 は /cards/resolve の 302 を扱えない。事前解決したカード URL へ。
-      if (def.card) return this.player.createFromCardUrl(def.card, opts);
-      return this._fetch("https://api.textalive.jp/cards/resolve?url=" + encodeURIComponent(def.url), {
-        redirect: "follow",
-        headers: { "x-ta-app-token": APP_TOKEN },
-      }).then((r) => {
-        if (!r.ok || !r.url) throw e;
-        return this.player.createFromCardUrl(r.url, opts);
-      });
-    });
+    const attempts = [];
+    if (def.card) attempts.push(["カードURL", () => this.player.createFromCardUrl(def.card, opts)]);
+    attempts.push(["曲URL", () => this.player.createFromSongUrl(def.url, opts)]);
+    attempts.push([
+      "resolve追従",
+      () =>
+        this._fetch("https://api.textalive.jp/cards/resolve?url=" + encodeURIComponent(def.url), {
+          redirect: "follow",
+          headers: { "x-ta-app-token": APP_TOKEN },
+        }).then((r) => {
+          if (!r.ok || !r.url) throw new Error("HTTP " + r.status);
+          return this.player.createFromCardUrl(r.url, opts);
+        }),
+    ]);
+    for (const [name, run] of attempts) {
+      try {
+        const r = await run();
+        this.loadLog.push(name + " → 要求済み");
+        return r;
+      } catch (e) {
+        this.loadLog.push(name + " → 失敗: " + String((e && e.message) || e).slice(0, 90));
+      }
+    }
+    throw new Error("すべての読み込み経路が失敗しました");
   }
 
   _readings() {

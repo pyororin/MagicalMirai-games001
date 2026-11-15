@@ -524,3 +524,24 @@ pitfalls:
     verified: 2026-11-14 (bunyutto-miku)
     refs: [bunyutto-miku/app/src/game.js]
 
+
+  - id: load-fallback-by-message-fails-on-other-devices
+    symptom: >
+      自分の端末では曲が読み込めるのに、別の端末(スマホ等)だと「楽曲の読み込みが進みません(15秒)」。
+      診断には /cards/resolve → HTTP 0 だけが出て、本当の失敗理由が分からない。
+    cause: >
+      (1) フォールバックを「例外の文言に Card data resolver を含むとき」だけに絞っていたため、
+      端末・ブラウザで文言が違う(Safari の "Load failed" など)と次の経路に進まず止まる。
+      (2) 曲 URL 経由(createFromSongUrl)は /cards/resolve の 302 を redirect:"manual" で受けるため、
+      そもそも壊れやすい経路を最初に使っていた。
+      (3) 読み込み失敗のエラー表示を、15 秒の見張りが別の文面で上書きして原因が消えていた。
+    solution: >
+      経路を順に試す: ①事前解決したカード URL(リダイレクト不要) → ②曲 URL → ③resolve の自前追従。
+      例外の文言は問わず次へ進み、各経路の結果(成功/失敗の理由)を診断に残して画面に出す。
+      失敗表示は見張りが上書きしない。サーバー側(カード 200・resolve 302)は curl で確認でき、
+      端末固有の失敗は経路別ログで切り分ける。
+    detection: >
+      Playwright で特定経路の通信を route.abort() し、各経路の失敗理由が画面に出ること・
+      フォールバックが進むことを確認する(bunyutto-miku/test/textalive-load.test.mjs が経路の順序を固定)。
+    verified: 2026-11-15 (bunyutto-miku build 11。実機での復旧は未確認)
+    refs: [bunyutto-miku/app/src/textalive.js, bunyutto-miku/app/src/game.js]
