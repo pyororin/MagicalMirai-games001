@@ -35,6 +35,8 @@ const PALETTE_KEYS = [
   "ink", "mouthIn", "tongue", "lip", "lipD", "lipHi", "markPinch", "markPress", "hatch",
   "shirt", "shirtS", "sleeve", "sleeveL", "tie", "tieD", "gear", "gearL", "gearT", "spark", "sweat",
 ];
+// 任意の色(無い案では使わない): 髪の輪郭線 / 髪飾りのピンク / 白い襟
+const OPTIONAL_PALETTE = ["hairOutline", "clipPink", "collar"];
 const SECTIONS = ["palette", "head", "eyes", "brows", "blush", "mouth", "hair", "headphones", "body", "fx", "motion", "expressions", "cheekMarks"];
 const EXPR_FIELDS = ["fw", "fh", "pull", "browY", "browTilt", "blush"];
 const EYE_FIELDS = ["size", "chev"];
@@ -50,6 +52,9 @@ export function validateDesign(d) {
   if (!d || typeof d !== "object") throw new Error("デザインデータが空、またはオブジェクトではありません");
   for (const s of SECTIONS) if (!d[s] || typeof d[s] !== "object") errs.push("セクション " + s + " がありません");
   if (errs.length) throw new Error(errs.join("\n"));
+  for (const k of OPTIONAL_PALETTE) {
+    if (d.palette[k] != null && !/^#[0-9a-fA-F]{6}$/.test(d.palette[k])) errs.push("palette." + k + " は #RRGGBB の色にしてください(現在: " + JSON.stringify(d.palette[k]) + ")");
+  }
   for (const k of PALETTE_KEYS) {
     if (typeof d.palette[k] !== "string" || !/^#[0-9a-fA-F]{6}$/.test(d.palette[k])) errs.push("palette." + k + " は #RRGGBB の色にしてください(現在: " + JSON.stringify(d.palette[k]) + ")");
   }
@@ -91,6 +96,10 @@ export function validateDesign(d) {
   for (const [g, ks] of Object.entries({ tears: ["startDx", "startDy", "r0", "r1"], hatch: ["x", "y", "count", "len", "spacing", "slant", "width"], waves: ["span", "width"] })) {
     if (d.fx[g]) for (const k of ks) num(d.fx[g][k], "fx." + g + "." + k);
   }
+  if (d.eyes.lash) for (const k of ["len", "angle", "width"]) num(d.eyes.lash[k], "eyes.lash." + k);
+  if (d.hair.clips) for (const k of ["x", "y", "w", "h", "tilt"]) num(d.hair.clips[k], "hair.clips." + k);
+  if (d.hair.outline) num(d.hair.outline.width, "hair.outline.width");
+  if (d.body.collar && (!Array.isArray(d.body.collar) || d.body.collar.some((p) => !Array.isArray(p) || p.length !== 2 || !p.every(Number.isFinite)))) errs.push("body.collar は [[x,y],...] にしてください");
   const pf = d.head.cheek && d.head.cheek.puff;
   if (!pf) errs.push("head.cheek.puff がありません");
   else for (const k of ["dy", "height", "amount"]) num(pf[k], "head.cheek.puff." + k);
@@ -110,6 +119,7 @@ export function setDesign(d) {
   D = d;
   C = {};
   for (const k of PALETTE_KEYS) C[k] = hex(d.palette[k]);
+  for (const k of OPTIONAL_PALETTE) if (d.palette[k]) C[k] = hex(d.palette[k]);
   designVersion++;
   return D;
 }
@@ -222,7 +232,7 @@ class Raster {
     const P = (i) => pts[Math.max(0, Math.min(n - 1, i))];
     let len = 0;
     for (let i = 0; i + 1 < n; i++) len += Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
-    const steps = Math.max(8, Math.ceil(len / 0.9));
+    const steps = Math.max(8, Math.ceil(len / 1.5)); // 太い線(半径3以上)なので、円の間隔は 1.5 でも滑らか
     for (let s = 0; s <= steps; s++) {
       const u = (s / steps) * (n - 1);
       const i = Math.min(n - 2, Math.floor(u));
@@ -335,6 +345,7 @@ export class MikuFace {
     this.drawEyes(r, m, fx, fy);
     this.drawMouth(r, m, fx, fy, s.singing);
     this.drawFringe(r, cx, cy);
+    this.drawClips(r, cx, cy);
     this.drawBrows(r, m, fx, fy);
     this.drawHeadphones(r, cx, cy);
     this.drawFx(r, m, fx, fy);
@@ -356,6 +367,7 @@ export class MikuFace {
     const T = H.tails;
     for (const side of [-1, 1]) {
       const pts = T.points.map((p) => [cx + side * (p[0] + sway * p[2]), cy + p[1]]);
+      if (H.outline) r.stroke(pts.map((p) => [p[0] + side * T.shadow.dx, p[1]]), T.shadow.r0 + H.outline.width, T.shadow.r1 + H.outline.width, C.hairOutline);
       r.stroke(pts.map((p) => [p[0] + side * T.shadow.dx, p[1]]), T.shadow.r0, T.shadow.r1, C.hairD);
       r.stroke(pts, T.body.r0, T.body.r1, (u) => lerpC(C.hair, C.hairD, smooth(T.body.shadeFrom, 1, u) * T.body.shadeAmount));
       r.stroke(pts.map((p) => [p[0] - side * T.gloss.dx, p[1] + T.gloss.dy]), T.gloss.r0, T.gloss.r1, C.hairL);
@@ -364,13 +376,34 @@ export class MikuFace {
       for (const o of T.streaks.offsets) {
         r.polyline(pts.slice(1).map((p) => [p[0] + side * o, p[1]]), C.hairD, T.streaks.width);
       }
-      // ヘアゴム
-      const bx = cx + side * T.tie.x;
-      const by = cy + T.tie.y;
-      r.ellipse(bx + side * T.tie.dx, by, T.tie.r, T.tie.r, C.gear);
-      r.ellipse(bx + side * T.tie.dx + T.tie.hi.dx, by + T.tie.hi.dy, T.tie.hi.r, T.tie.hi.r, C.gearL);
+      if (!H.clips) {
+        // ヘアゴム
+        const bx = cx + side * T.tie.x;
+        const by = cy + T.tie.y;
+        r.ellipse(bx + side * T.tie.dx, by, T.tie.r, T.tie.r, C.gear);
+        r.ellipse(bx + side * T.tie.dx + T.tie.hi.dx, by + T.tie.hi.dy, T.tie.hi.r, T.tie.hi.r, C.gearL);
+      }
     }
+    if (H.outline) r.ellipse(cx, cy + H.back.dy, H.back.rx + H.outline.width, H.back.ry + H.outline.width, C.hairOutline);
     r.ellipse(cx, cy + H.back.dy, H.back.rx, H.back.ry, C.hair);
+  }
+
+  /* ---- 髪飾り: 黒い角ばったクリップにピンクの線(本家イラストのツインテールの根元)。髪の上に描く ---- */
+  drawClips(r, cx, cy) {
+    const Cl = D.hair.clips;
+    if (!Cl) return;
+    for (const side of [-1, 1]) {
+      const ccx = cx + side * Cl.x, ccy = cy + Cl.y;
+      const ang = (side * Cl.tilt * Math.PI) / 180;
+      const co = Math.cos(ang), sn = Math.sin(ang);
+      const rot = (px, py) => [ccx + px * co - py * sn, ccy + px * sn + py * co];
+      const hw = Cl.w / 2, hh = Cl.h / 2;
+      r.poly([rot(-hw - 0.5, -hh - 0.5), rot(hw + 0.5, -hh - 0.5), rot(hw + 0.5, hh + 0.5), rot(-hw - 0.5, hh + 0.5)], D.hair.outline ? C.hairOutline : C.gear);
+      r.poly([rot(-hw, -hh), rot(hw, -hh), rot(hw, hh), rot(-hw, hh)], C.gear);
+      const sx = -side * (hw - Cl.stripe.inset); // 頭の中心側の縁に、ピンクの線
+      const a0 = rot(sx, -hh + 0.8), a1 = rot(sx, hh - 0.8);
+      r.line(a0[0], a0[1], a1[0], a1[1], C.clipPink, Cl.stripe.w);
+    }
   }
 
   /* ---- 首・小さな肩・ネクタイ ---- */
@@ -384,6 +417,10 @@ export class MikuFace {
     r.poly(P(B.sleeve), C.sleeve);
     r.poly(P(B.sleeve.map((p) => [-p[0], p[1]])), C.sleeve);
     r.poly(P(B.neckline), C.skinS);
+    if (B.collar) {
+      r.poly(P(B.collar), C.collar);
+      r.poly(P(B.collar.map((p) => [-p[0], p[1]])), C.collar);
+    }
     r.poly(P(B.tie), C.tie);
     r.poly(P(B.tieShade), C.tieD);
   }
@@ -565,6 +602,14 @@ export class MikuFace {
       return [rp[0] + (c[0] - rp[0]) * settle, rp[1] + (c[1] - rp[1]) * settle];
     });
     r.polyline(pts, C.ink, E.line.width + E.line.chevronExtra * chev);
+    // まつ毛の跳ね: 上まつ毛の外側の端が、外へ向かって鋭く跳ね上がる(本家イラストの切れ長の目の特徴)
+    if (E.lash) {
+      const La = E.lash;
+      const end = side < 0 ? pts[0] : pts[N]; // 外側の端(くの字のときは上の先端)
+      const a = (La.angle * Math.PI) / 180;
+      const L = La.len * K;
+      r.line(end[0], end[1], end[0] + side * Math.cos(a) * L, end[1] - Math.sin(a) * L, C.ink, La.width);
+    }
   }
 
   /* ---- まゆ: ちいさく。怒り顔にならない角度だけ ---- */
@@ -690,7 +735,7 @@ export class MikuFace {
         if (!inFringe && !side) continue;
         // 毛先の少し内側を濃くして、毛束の厚みを出す
         const edge = inFringe && yc > tp - F.edge;
-        r.put(X, Y, edge ? C.hairD : C.hair);
+        r.put(X, Y, edge ? (D.hair.outline ? C.hairOutline : C.hairD) : C.hair);
       }
     }
     // 毛束の筋(うすい影)

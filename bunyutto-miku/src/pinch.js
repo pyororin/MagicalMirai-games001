@@ -4,7 +4,7 @@
 //   開く(ratio>1) = out   つぼめる(ratio<1) = in
 // 指の結ぶ線が横寄りなら h、縦寄りなら v。
 //   h+out=い  h+in=う  v+in=え  v+out=お  それ以外=あ
-import { vowelOfGesture } from "./vowel.js?v=9";
+import { vowelOfGesture } from "./vowel.js?v=10";
 
 export const PINCH = {
   dead: 0.07, // 基準の±7%は「動かしていない」とみなす
