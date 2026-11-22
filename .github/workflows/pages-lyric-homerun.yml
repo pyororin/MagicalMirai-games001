@@ -1,0 +1,44 @@
+name: Deploy lyric-homerun to GitHub Pages
+
+# gh-pages ブランチ配信。他企画を消さないよう destination_dir 方式
+# (ontology/infra.yaml の gh-pages-mutual-wipe を参照)。
+# 公開物は lyric-homerun/app/ の中身だけ。投球生成・判定のテストが通らなければ公開しない。
+on:
+  push:
+    branches: [main]
+    paths:
+      - "lyric-homerun/**"
+      - ".github/workflows/pages-lyric-homerun.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages-lyric-homerun
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Unit tests (chart / judge)
+        run: node --test lyric-homerun/test/*.test.mjs
+      - name: Collect static files
+        run: |
+          mkdir -p _site
+          rsync -a lyric-homerun/app/ _site/
+      - name: Stamp build number on module URLs (stale-cache guard)
+        # ES Module は 1 ファイルごとにブラウザへキャッシュされ、HTML と JS の新旧が混ざりうる。
+        # 全 import に ?v=<build> を付け、index.html と game.js の番号が食い違えばここで失敗させる。
+        run: node lyric-homerun/tools/stamp-build.mjs _site
+      - name: Deploy lyric-homerun
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_site
+          destination_dir: lyric-homerun

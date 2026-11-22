@@ -25,10 +25,12 @@
   **ミクの顔・表情のデザインは `app/data/design/miku-face.json`(データ)で、本編はこれを読んで描く。顔を直すときはこのJSONを編集する**。`design/README.md` に手順)
   **顔のデザインを変える前に、本家の公式イラスト(`design/README.md` の「本家イラストの参照」)を必ず確認する。口は極小の細い線で、たらこ唇にしない。コミカルにしすぎない。案はシートで先に提示してから本編に反映する**
 - `lyric-homerun/` — 企画「とどけ!リリックホームラン(仮)」(飛んでくる歌詞をミクがネギで打ち返してスタンドへ届ける。打つ=歌う。
-  骨子はプーさんのホームランダービー。**設計段階**で実装なし。`docs/DESIGN.md` が設計)
+  骨子はプーさんのホームランダービー。**MVP**(ストレートのみ・絵はコード描画の仮絵)。`app/` が公開物、`test/` は `node --test`、`docs/DESIGN.md` が設計。
+  絵は `app/data/art.json` に画像パスを書くと差し替わる(`app/assets/README.md`)。ビルド番号は `app/index.html` の `LH_BUILD` と `app/src/game.js` の `BUILD`(両方そろえる))
 - `.github/workflows/pages.yml` — miku-twintail の Pages デプロイ(gh-pages・サブディレクトリ配置)
 - `.github/workflows/pages-typing-game.yml` — typing-game とランディングの Pages デプロイ
 - `.github/workflows/pages-bunyutto-miku.yml` — bunyutto-miku の Pages デプロイ(テスト通過が条件)
+- `.github/workflows/pages-lyric-homerun.yml` — lyric-homerun の Pages デプロイ(テスト通過が条件)
 
 ## 重要な運用注意
 
@@ -41,6 +43,7 @@
 - **main へマージしたら、毎回デプロイ先の URL を提示する**(利用者は実機で確認するため)。
   実楽曲版: https://pyororin.github.io/MagicalMirai-games001/typing-game/prototype/textalive.html
   ぶにゅっとミク: https://pyororin.github.io/MagicalMirai-games001/bunyutto-miku/?v=<ビルド番号> (デモ: `?demo=1&v=<ビルド番号>`)
+  リリックホームラン: https://pyororin.github.io/MagicalMirai-games001/lyric-homerun/?v=<ビルド番号> (デモ: `?demo=1&v=<ビルド番号>`)
 - **返信のたびに Pages の URL を添える**(マージ前でも。公開済みの版のビルド番号と、未マージの変更があるかも一緒に伝える)。
   **URL には必ず `?v=<ビルド番号>` を付けて出す**(Pages は10分キャッシュされ、利用者が古い版を見る事故が起きたため)。
   例: ぶにゅっとミク build 9 → https://pyororin.github.io/MagicalMirai-games001/bunyutto-miku/?v=9 、

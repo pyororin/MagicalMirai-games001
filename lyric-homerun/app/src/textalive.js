@@ -1,0 +1,232 @@
+// TextAlive App API につなぐソース。Player から曲データ(拍・コード・歌詞)を取り出し、
+// 投球生成が読める形(chart.js の expandSong と同じ)にそろえる。
+// (bunyutto-miku/app/src/textalive.js から読みデータの処理を除いたもの)
+//
+// 躓きどころは ontology/textalive.yaml に集約済み:
+//   card-data-resolver-unavailable … createFromSongUrl が失敗したらカード URL へフォールバック
+//   seek-completes-after-play-request … シーク直後は position が古い
+
+const APP_TOKEN = "VQRxHB1a0q8fVvnm"; // 公開前提のクライアント埋め込みトークン
+
+export class TextAliveSource {
+  constructor({ build, mediaEl, onDiag, onManaged }) {
+    this.kind = "textalive";
+    this.build = build;
+    this.mediaEl = mediaEl;
+    this.onDiag = onDiag || (() => {});
+    this.player = null;
+    this.managed = false;
+    this.song = null;
+    this.netDiag = [];
+    this.stages = []; // 進捗(appReady → ready → timerReady の到達時刻)。止まった場所を画面で分かるように
+    this.t0 = performance.now();
+    this.loadLog = []; // 読み込み経路ごとの結果(失敗の原因を画面に出す)
+    this.handlers = { ready: [], error: [], end: [], appReady: [], mediaChange: [], timerReady: [] };
+    this.lastSong = null;
+    this._wrapNetwork();
+  }
+
+  on(ev, fn) {
+    this.handlers[ev].push(fn);
+  }
+  _emit(ev, ...a) {
+    if (ev !== "end") this.stages.push(ev + " " + ((performance.now() - this.t0) / 1000).toFixed(1) + "s");
+    for (const f of this.handlers[ev]) {
+      try {
+        f(...a);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }
+
+  /** 失敗した通信の URL とステータスを記録する(原因の切り分け用) */
+  _wrapNetwork() {
+    const diag = this.netDiag;
+    if (window.axios && axios.interceptors) {
+      axios.interceptors.response.use(
+        (r) => r,
+        (e) => {
+          const u = (e.config && e.config.url) || "?";
+          diag.push(u.slice(0, 80) + " → " + (e.response ? "HTTP " + e.response.status : e.message));
+          return Promise.reject(e);
+        }
+      );
+    }
+    this._fetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const u = (typeof input === "string" ? input : input && input.url) || "?";
+      return this._fetch(input, init).then(
+        (r) => {
+          if (!r.ok && u.indexOf("http") === 0) diag.push(u.slice(0, 80) + " → HTTP " + r.status);
+          return r;
+        },
+        (e) => {
+          if (u.indexOf("http") === 0) diag.push(u.slice(0, 80) + " → " + e.message);
+          throw e;
+        }
+      );
+    };
+  }
+
+  get diag() {
+    const st = this.stages.length ? ["進捗: " + this.stages.join(" → ")] : [];
+    return this.loadLog.concat(st, this.netDiag.slice(-4));
+  }
+
+  init() {
+    if (typeof TextAliveApp === "undefined") {
+      this._emit("error", "TextAlive App API の読み込みに失敗しました。ネットワークを確認してください。");
+      return;
+    }
+    try {
+      this.player = new TextAliveApp.Player({
+        app: { token: APP_TOKEN },
+        mediaElement: this.mediaEl,
+      });
+    } catch (e) {
+      this._emit("error", "Player の初期化に失敗: " + e);
+      return;
+    }
+    this.player.addListener({
+      onAppReady: (app) => {
+        this.managed = !!app.managed;
+        this._emit("appReady", app);
+      },
+      onAppMediaChange: () => this._emit("mediaChange"),
+      onVideoReady: (v) => {
+        this._buildSong(v).then(
+          (song) => {
+            this.song = song;
+            this._emit("ready", song);
+          },
+          (e) => this._emit("error", "歌詞データの変換に失敗: " + e)
+        );
+      },
+      onTimerReady: () => this._emit("timerReady"),
+      onStop: () => this._emit("end"),
+    });
+  }
+
+  /**
+   * app.songUrl が無いときだけ自分で曲を読む(ホスト接続時は自動読み込み)。
+   * 経路を順に試し、失敗した理由は loadLog に残して画面に出す(端末ごとに失敗経路が違うため)。
+   *   1. 事前解決したカード URL(/cards/resolve のリダイレクトを使わない。いちばん確実)
+   *   2. 曲 URL(ライブラリ任せ。クライアント v0.5.2 は 302 を扱えず失敗しうる)
+   *   3. /cards/resolve を自前でリダイレクト追従してカード URL を得る
+   * 「Card data resolver」以外のエラーでも次の経路へ進む(端末によって例外の文言が違い、
+   * 文言で絞ると別端末で止まるため)。
+   */
+  async loadSong(def) {
+    this.lastSong = def;
+    this.song = null;
+    this.loadLog.length = 0;
+    const opts = def.video ? { video: def.video } : {};
+    const attempts = [];
+    if (def.card) attempts.push(["カードURL", () => this.player.createFromCardUrl(def.card, opts)]);
+    attempts.push(["曲URL", () => this.player.createFromSongUrl(def.url, opts)]);
+    attempts.push([
+      "resolve追従",
+      () =>
+        this._fetch("https://api.textalive.jp/cards/resolve?url=" + encodeURIComponent(def.url), {
+          redirect: "follow",
+          headers: { "x-ta-app-token": APP_TOKEN },
+        }).then((r) => {
+          if (!r.ok || !r.url) throw new Error("HTTP " + r.status);
+          return this.player.createFromCardUrl(r.url, opts);
+        }),
+    ]);
+    for (const [name, run] of attempts) {
+      try {
+        const r = await run();
+        this.loadLog.push(name + " → 要求済み");
+        return r;
+      } catch (e) {
+        this.loadLog.push(name + " → 失敗: " + String((e && e.message) || e).slice(0, 90));
+      }
+    }
+    throw new Error("すべての読み込み経路が失敗しました");
+  }
+
+  async _buildSong(v) {
+    const p = this.player;
+    let code = null;
+    try {
+      code = p.data.song.code;
+    } catch (e) {}
+    const phrases = [];
+    let ph = v.firstPhrase;
+    while (ph) {
+      const chars = [];
+      let c = ph.firstChar;
+      while (c) {
+        const s = c.startTime;
+        const e = c.endTime && c.endTime > s ? c.endTime : s + 180;
+        chars.push({
+          text: c.text,
+          s,
+          e,
+          w: !!(c.parent && c.parent.firstChar === c),
+        });
+        if (c === ph.lastChar) break;
+        c = c.next;
+      }
+      if (chars.length) phrases.push({ s: ph.startTime, e: ph.endTime, chars });
+      ph = ph.next;
+    }
+    const d = p.data;
+    const beats = ((d && (typeof d.getBeats === "function" ? d.getBeats() : d.beats)) || []).map((b) => ({
+      t: b.startTime,
+      pos: b.position,
+      len: b.length,
+    }));
+    let chords = [];
+    try {
+      chords = ((d && d.getChords && d.getChords()) || [])
+        .filter((x) => x.name && x.name !== "N")
+        .map((x) => ({ s: x.startTime, e: x.endTime, name: x.name }));
+    } catch (e) {}
+    if (!phrases.length) throw new Error("歌詞を取得できませんでした");
+    return {
+      code,
+      title: d.song.name,
+      artist: d.song.artist.name,
+      url: this.lastSong && this.lastSong.url,
+      beats,
+      chords,
+      phrases,
+    };
+  }
+
+  getPosition() {
+    try {
+      return this.player.timer.position;
+    } catch (e) {
+      return 0;
+    }
+  }
+  isPlaying() {
+    try {
+      return !!this.player.isPlaying;
+    } catch (e) {
+      return false;
+    }
+  }
+  async play() {
+    this.player.requestPlay();
+  }
+  pause() {
+    this.player.requestPause();
+  }
+  async seek(ms) {
+    this.player.requestMediaSeek(ms);
+  }
+  /** 楽曲音量は <audio> を直接操作するのが実効(ontology: playback-rate-is-controllable) */
+  setVolume(v) {
+    try {
+      const a = this.mediaEl.querySelector("audio");
+      if (a) a.volume = v;
+      this.player.volume = Math.round(v * 100);
+    } catch (e) {}
+  }
+}
