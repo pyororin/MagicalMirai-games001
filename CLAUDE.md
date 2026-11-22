@@ -24,6 +24,8 @@
   歌詞の母音=口の形=ピンチ操作。`app/` が公開物、`test/` は `node --test` で動く単体テスト、`docs/DESIGN.md` が設計。
   **ミクの顔・表情のデザインは `app/data/design/miku-face.json`(データ)で、本編はこれを読んで描く。顔を直すときはこのJSONを編集する**。`design/README.md` に手順)
   **顔のデザインを変える前に、本家の公式イラスト(`design/README.md` の「本家イラストの参照」)を必ず確認する。口は極小の細い線で、たらこ唇にしない。コミカルにしすぎない。案はシートで先に提示してから本編に反映する**
+- `lyric-homerun/` — 企画「とどけ!リリックホームラン(仮)」(ミクが歌いながら投げる歌詞を打ち返してスタンドへ届ける。
+  骨子はプーさんのホームランダービー。**設計段階**で実装なし。`docs/DESIGN.md` が設計)
 - `.github/workflows/pages.yml` — miku-twintail の Pages デプロイ(gh-pages・サブディレクトリ配置)
 - `.github/workflows/pages-typing-game.yml` — typing-game とランディングの Pages デプロイ
 - `.github/workflows/pages-bunyutto-miku.yml` — bunyutto-miku の Pages デプロイ(テスト通過が条件)
