@@ -8,6 +8,8 @@ on:
     branches: [main]
     paths:
       - "lyric-homerun/**"
+      - "tools/artgen/**"
+      - "tools/check_art_provenance.py"
       - ".github/workflows/pages-lyric-homerun.yml"
   workflow_dispatch:
 
@@ -26,8 +28,21 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Unit tests (chart / judge)
+      - name: Unit tests (chart / judge / carry)
         run: node --test lyric-homerun/test/*.test.mjs
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Art checks (provenance / proportions)
+        # 画像はすべてプログラムで作り、AI 生成の画像は元絵にも使わない(コンテスト規約。docs/ai-art-policy.md)。
+        # 出どころ(art-src/provenance.json)が program / human / licensed 以外の素材があれば、公開しない。
+        # キャラクターのバランス検査(docs/character-design-basics.md)も通ること。
+        run: |
+          pip install numpy pillow resvg_py
+          python tools/check_art_provenance.py
+          python tools/artgen/proportion_check.py --all
+          python -m unittest discover -s tools -p "test_check*.py"
+          python -m unittest discover -s tools/artgen
       - name: Collect static files
         run: |
           mkdir -p _site

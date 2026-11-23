@@ -2,6 +2,23 @@
 
 マジカルミライ プログラミング・コンテスト向けゲーム企画のリポジトリ。企画ごとに直下のディレクトリに分ける。
 
+## 進め方の約束(必ず守る)
+
+### 1. 変更依頼は、先に「基本設計の Artifact」へ反映してから実施する(リリックホームラン)
+- 設計元: **[とどけ!リリックホームラン デザイン基本設計](https://claude.ai/artifact/96kYsyYV2rF8xb4UFMaDa5)**(UI・キャラクター・観客・飛距離ウィンドウ・手書き風の作り方・実装との対応表)。
+- UI・キャラクター・画面の配置・演出・素材の作り方を変える依頼は、**コードより先にこの Artifact を更新する**(該当の節と、末尾の「変更履歴」)。
+  そのあとで、Artifact の内容どおりにコードを直す。食い違いが見つかったら、コードでなく設計を先に直す。
+- Artifact は `Artifact` ツールで同じファイルを再公開して更新する(URL は変わらない)。元の HTML が手元に無ければ `action: "read"` で読んで直す。
+- 変更の最後に、Artifact を更新したこと(またはその必要がなかったこと)を報告に書く。
+- 設計に関係しない修正(バグ・テスト・ビルド番号など)は、この手順を省いてよい。
+
+### 2. イメージ画像は、すべてプログラムで作る。AI 生成の画像は、入力にも使わない
+- コンテスト規約は、作品に表示される絵に AI 生成物を使うことを一切認めない(`docs/ai-art-policy.md`)。
+- したがって画像は、**このリポジトリのプログラム(`tools/img2vector` やコードの描画)で作る**。Gemini などの画像生成 AI の出力は、完成品にも、**模写の元絵(入力)にも使わない**。
+- 元絵にしてよいもの: 自分(人)が描いた絵、コードや JSON のデザインデータで描いた図、正規に許諾を得た絵(作者名をアプリ内に明示)。公式イラストは参考にするだけで、リポジトリには取り込まない。
+- 画像を `assets/` に置くときは、出どころを `lyric-homerun/art-src/provenance.json` に書き、`python tools/check_art_provenance.py` が通ること。通らない素材は応募版に入れない。
+- 画像を入れる・差し替えるときは、この点を毎回ユーザーに知らせる。
+
 ## 最初に読むもの
 
 - **`docs/PRINCIPLES.md`** — リリックアプリの目的とコンテスト規約から導いた**全企画共通の大方針**
@@ -27,6 +44,11 @@
 - `lyric-homerun/` — 企画「とどけ!リリックホームラン(仮)」(飛んでくる歌詞をミクがネギで打ち返してスタンドへ届ける。打つ=歌う。
   骨子はプーさんのホームランダービー。**MVP**(ストレートのみ・絵はコード描画の仮絵)。`app/` が公開物、`test/` は `node --test`、`docs/DESIGN.md` が設計。
   絵は `app/data/art.json` に画像パスを書くと差し替わる(`app/assets/README.md`)。ビルド番号は `app/index.html` の `LH_BUILD` と `app/src/game.js` の `BUILD`(両方そろえる))
+- `tools/img2vector/` — **画像→べた塗りベクター画像(SVG/PNG)に模写する共通ツール**(Python。`README.md` に使い方)。
+  グラデーション・フィルターは使わない。元画像の背景透過・縦補正・精度レポート付き。絵の素材づくりはまずこれを使う
+- `tools/artgen/` — **デザインデータ(JSON)から、元絵をコードで描く**(AI 不使用)。`build_art.py` が、背景・ミク・MEIKO を「元絵 → 手書き風」まで一括で作る(下書き→案シート→承認→`--install`)。**キャラクターの絵は、デッサンの検査(`proportion_check.py`、根拠は `docs/character-design-basics.md`)に通らないと作らない**
+- `tools/check_art_provenance.py` — 素材の出どころ(`lyric-homerun/art-src/provenance.json`)を検査。AI 由来の素材があると失敗する
+- `docs/ai-art-policy.md` — AI 生成物の規約(コンテスト)と、クリアする方法の検討メモ。**画像を入れる前に必ず読む**
 - `.github/workflows/pages.yml` — miku-twintail の Pages デプロイ(gh-pages・サブディレクトリ配置)
 - `.github/workflows/pages-typing-game.yml` — typing-game とランディングの Pages デプロイ
 - `.github/workflows/pages-bunyutto-miku.yml` — bunyutto-miku の Pages デプロイ(テスト通過が条件)

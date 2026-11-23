@@ -7,10 +7,11 @@ import { SONGS, dataUrl } from "./songs.js";
 import { DemoSource } from "./demo.js";
 import { TextAliveSource } from "./textalive.js";
 import { generatePitches, DIFFS } from "./chart.js";
+import { carry, fence, FOUL_DEG } from "./carry.js";
 import { WIN, judge, isHomerun, direction, pickPitch, tally } from "./judge.js";
 import { Sfx } from "./sfx.js";
 
-export const BUILD = 1;
+export const BUILD = 6;
 
 const qs = new URLSearchParams(location.search);
 const IS_DEMO = qs.has("demo");
@@ -77,6 +78,7 @@ window.addEventListener("resize", resize);
 resize();
 const fx = (u) => X0 + u * FW;
 const MOUND_V = 0.4, PLATE_V = 0.7;
+const PITCHER_H = 0.14, BATTER_H = 0.24; // 身長(画面高に対する比。デザイン基本設計 §3 §4)
 const lerp = (a, b, t) => a + (b - a) * t;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const FONT = '"Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic",system-ui,sans-serif';
@@ -92,6 +94,8 @@ const ART = {};
 fetch(dataUrl("data/art.json", BUILD), { cache: "no-cache" })
   .then((r) => (r.ok ? r.json() : {}))
   .then((j) => {
+    // 打者の手元(ネギの付け根)。画像内の位置の比率 [左からx, 上からy]。右打ち。無ければ仮の絵の手元
+    if (Array.isArray(j.batterHand) && j.batterHand.length === 2) ART.hand = j.batterHand;
     for (const k of ["background", "batter", "pitcher"]) {
       if (!j[k]) continue;
       const im = new Image();
@@ -282,11 +286,14 @@ function update(pos) {
 }
 
 // ---------------------------------------------------------------- 描画(仮の絵)
+const BG = { x: 0, y: 0, w: 0, h: 0 }; // 背景画像を置いた範囲(観客などを、絵に合わせて置くため)
 function drawBackground(pos) {
+  BG.x = 0; BG.y = 0; BG.w = W; BG.h = H;
   if (ART.background) {
     const im = ART.background;
     const k = Math.max(W / im.width, H / im.height);
-    cx.drawImage(im, (W - im.width * k) / 2, (H - im.height * k) / 2, im.width * k, im.height * k);
+    BG.x = (W - im.width * k) / 2; BG.y = (H - im.height * k) / 2; BG.w = im.width * k; BG.h = im.height * k;
+    cx.drawImage(im, BG.x, BG.y, BG.w, BG.h);
     return;
   }
   const sky = cx.createLinearGradient(0, 0, 0, H * 0.36);
@@ -369,7 +376,7 @@ function drawBeat(pos) {
 }
 
 function drawPitcher(pos) {
-  const x = fx(0.5), y = H * MOUND_V, h = H * 0.085;
+  const x = fx(0.5), y = H * MOUND_V, h = H * PITCHER_H;
   // 次に投げる球までの時間から、振りかぶりを決める
   let wind = 0;
   if (G.chart) {
@@ -433,12 +440,12 @@ function negiAngle(pos) {
 }
 
 function drawBatter(pos) {
-  const x = fx(0.5) - FW * 0.19, y = H * (PLATE_V + 0.065), h = H * 0.2;
+  const x = fx(0.5) - FW * 0.19, y = H * (PLATE_V + 0.065), h = H * BATTER_H;
   const b = beatAt(pos);
   const bob = Math.sin(b.phase * Math.PI) * 2 * S;
   const a = negiAngle(pos);
   const swingK = clamp((a + 2.0) / 3.25, 0, 1); // 0=構え … 1=振り切り
-  const hx = x + h * 0.2, hy = y - h * 0.5 - bob; // 手元
+  let hx = x + h * 0.2, hy = y - h * 0.5 - bob; // 手元(ネギの付け根)
   cx.fillStyle = "rgba(0,0,0,.15)";
   cx.beginPath();
   cx.ellipse(x, y, h * 0.28, h * 0.05, 0, 0, 7);
@@ -446,6 +453,10 @@ function drawBatter(pos) {
   if (ART.batter) {
     const im = ART.batter, k = h / im.height;
     cx.drawImage(im, x - im.width * k / 2, y - h - bob, im.width * k, h);
+    if (ART.hand) { // 絵の拳から、ネギを出す
+      hx = x - im.width * k / 2 + im.width * k * ART.hand[0];
+      hy = y - h - bob + h * ART.hand[1];
+    }
   } else {
     // 仮のミク(斜め後ろ姿)。ツインテールは振りに遅れてついてくる
     const sway = Math.sin(pos / 420) * 0.08 - swingK * 0.9 + (swingK > 0.99 ? 0 : 0);
@@ -546,7 +557,7 @@ function landing(p, r, order) {
 
 function drawBalls(pos) {
   const C = G.chart, P = C.pitches;
-  const px = fx(0.5), y0 = H * (MOUND_V - 0.05), y1 = H * (PLATE_V - 0.01);
+  const px = fx(0.5), y0 = H * (MOUND_V - PITCHER_H * 0.55), y1 = H * (PLATE_V - 0.01);
   cx.textAlign = "center";
   cx.textBaseline = "middle";
   let hrOrder = 0, hrTotal = 0;
@@ -723,6 +734,224 @@ function drawHud() {
   }
 }
 
+
+// ---------------------------------------------------------------- 観客(ライブ会場)
+// デザイン基本設計 §5。スタンドの左右の翼に、顔のない丸い頭と体の観客。ペンライトが拍で揺れる。
+// 位置・色・揺れの位相は番号から決める(同じプレイなら同じ絵)。背景画像に合わせて、画像の範囲(BG)から座標を取る。
+const CROWD_COLORS = ["#F7A8B8", "#8FB8E8", "#F7D86A", "#9EDCCB", "#FFFFFF", "#C9A8E8"];
+function drawCrowd(pos) {
+  const t = pos;
+  const b = G.chart && G.mode !== "loading" && G.mode !== "ready" ? beatAt(pos) : { phase: (performance.now() % 600) / 600 };
+  let hr = 0;
+  if (G.chart) for (let i = 0; i < G.results.length; i++) if (G.results[i] && isHomerun(G.results[i].res)) hr++;
+  const lights = clamp(0.3 + hr * 0.04, 0.3, 1); // ボルテージ: 連続ホームランでペンライトが増える
+  const rows = 4;
+  for (let wing = 0; wing < 2; wing++) {
+    const u0 = wing === 0 ? 0.015 : 0.615, u1 = wing === 0 ? 0.385 : 0.985;
+    for (let r = 0; r < rows; r++) {
+      const v = 0.168 + r * 0.021; // 画像内の高さの比
+      const n = 9 + (r % 2);
+      const rad = BG.w * (0.0095 + r * 0.0009);
+      for (let c = 0; c < n; c++) {
+        const id = wing * 400 + r * 40 + c;
+        const u = lerp(u0, u1, (c + 0.5 + (r % 2) * 0.35 - 0.17) / n);
+        const x = BG.x + BG.w * u + (hash01(id) - 0.5) * rad * 0.6;
+        const y = BG.y + BG.h * v + (hash01(id + 90) - 0.5) * rad * 0.4;
+        const hop = Math.max(0, Math.sin((b.phase + hash01(id + 7) * 0.15) * Math.PI)) * rad * 0.18; // 拍で小さく弾む
+        const col = CROWD_COLORS[Math.floor(hash01(id + 3) * CROWD_COLORS.length)];
+        cx.lineWidth = Math.max(1, rad * 0.16);
+        cx.strokeStyle = "#3B2A1A";
+        // 体
+        cx.fillStyle = col;
+        cx.beginPath();
+        cx.arc(x, y + rad * 1.55 - hop, rad * 1.15, Math.PI, 0);
+        cx.closePath();
+        cx.fill();
+        cx.stroke();
+        // 頭
+        cx.fillStyle = "#F7D9C4";
+        cx.beginPath();
+        cx.arc(x, y - hop, rad * 0.78, 0, 7);
+        cx.fill();
+        cx.stroke();
+        // ペンライト
+        if (hash01(id + 11) < lights) {
+          const sway = Math.sin((b.phase + hash01(id + 21)) * Math.PI * 2) * 0.55 + (hash01(id + 5) - 0.5) * 0.3;
+          const lx = x + rad * 0.9, ly = y + rad * 0.4 - hop;
+          cx.strokeStyle = hash01(id + 31) < 0.8 ? "#33BDB2" : "#FFD84A";
+          cx.lineWidth = Math.max(1.5, rad * 0.32);
+          cx.lineCap = "round";
+          cx.beginPath();
+          cx.moveTo(lx, ly);
+          cx.lineTo(lx + Math.sin(sway) * rad * 1.9, ly - Math.cos(sway) * rad * 1.9);
+          cx.stroke();
+        }
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------- 飛距離ウィンドウ(別枠)
+// デザイン基本設計 §6。打球が「どのくらい・どの場所へ」届いたかを、真上から見たミニ図で見せる。
+// 結果(G.results)から毎フレーム求めるので、曲の巻き戻しでも整合する。計算は carry.js(純関数)。
+const CARRY_R = 172; // ミニ図に映す距離(m)
+function drawCarryWindow(pos) {
+  const w = Math.min(FW * 0.43, 190 * S), x = fx(0.985) - w, y = H * 0.285;
+  const head = 20 * S, foot = 38 * S, fh = w * 0.66, h = head + fh + foot;
+  // 結果から打球を集める
+  const hits = [];
+  for (let i = 0; i < G.results.length; i++) {
+    const r = G.results[i];
+    if (!r || r.at > pos) continue;
+    const c = carry(r.res, r.dt, G.chart.pitches[i].idx);
+    if (c) hits.push({ r, c });
+  }
+  hits.sort((a, b) => a.r.at - b.r.at);
+  const last = hits[hits.length - 1];
+  const best = hits.reduce((m, o) => Math.max(m, o.c.dist), 0);
+  // 枠
+  cx.fillStyle = "#FFF8E7";
+  cx.strokeStyle = "#3B2A1A";
+  cx.lineWidth = 3 * S;
+  cx.beginPath();
+  cx.roundRect(x, y, w, h, 12 * S);
+  cx.fill();
+  cx.stroke();
+  cx.textBaseline = "middle";
+  cx.textAlign = "left";
+  cx.fillStyle = "#3B2A1A";
+  cx.font = font(11 * S);
+  cx.fillText("とんだ きょり", x + 10 * S, y + head * 0.55);
+  if (best > 0) {
+    cx.textAlign = "right";
+    cx.fillStyle = "#7A6A55";
+    cx.font = font(10 * S, 700);
+    cx.fillText(`ベスト ${Math.round(best)}m`, x + w - 10 * S, y + head * 0.55);
+  }
+  // ミニ図(ホームが下の中央)
+  const hx = x + w / 2, hy = y + head + fh - 4 * S;
+  const sc = Math.min((w - 16 * S) / (2 * CARRY_R * Math.sin(Math.PI / 4)), (fh - 8 * S) / CARRY_R);
+  const P = (m, deg) => [hx + Math.sin((deg * Math.PI) / 180) * m * sc, hy - Math.cos((deg * Math.PI) / 180) * m * sc];
+  cx.save();
+  cx.beginPath();
+  cx.rect(x + 3 * S, y + head, w - 6 * S, fh);
+  cx.clip();
+  // 芝(扇形)
+  cx.fillStyle = "#DDEFA0";
+  cx.beginPath();
+  cx.moveTo(hx, hy);
+  for (let a = -45; a <= 45; a += 3) cx.lineTo(...P(CARRY_R, a));
+  cx.closePath();
+  cx.fill();
+  // スタンド(フェンスの外の帯)
+  cx.fillStyle = "#E7C9A0";
+  cx.beginPath();
+  for (let a = -45; a <= 45; a += 3) cx.lineTo(...P(fence(a), a));
+  for (let a = 45; a >= -45; a -= 3) cx.lineTo(...P(fence(a) + 16, a));
+  cx.closePath();
+  cx.fill();
+  // 内野
+  cx.fillStyle = "#F5D9AE";
+  cx.beginPath();
+  cx.moveTo(hx, hy);
+  cx.lineTo(...P(27.4, 45));
+  cx.lineTo(...P(38.8, 0));
+  cx.lineTo(...P(27.4, -45));
+  cx.closePath();
+  cx.fill();
+  // 距離の輪(50 / 100 / 150m)
+  cx.strokeStyle = "rgba(59,42,26,.35)";
+  cx.lineWidth = 1 * S;
+  cx.setLineDash([3 * S, 4 * S]);
+  for (const m of [50, 100, 150]) {
+    cx.beginPath();
+    for (let a = -45; a <= 45; a += 3) (a === -45 ? cx.moveTo : cx.lineTo).call(cx, ...P(m, a));
+    cx.stroke();
+  }
+  cx.setLineDash([]);
+  cx.fillStyle = "rgba(59,42,26,.55)";
+  cx.font = font(8 * S, 700);
+  cx.textAlign = "center";
+  for (const m of [50, 100, 150]) cx.fillText(String(m), ...P(m, 0));
+  // フェンスとファウルライン
+  cx.strokeStyle = "#3B2A1A";
+  cx.lineWidth = 2.2 * S;
+  cx.beginPath();
+  for (let a = -45; a <= 45; a += 3) (a === -45 ? cx.moveTo : cx.lineTo).call(cx, ...P(fence(a), a));
+  cx.stroke();
+  cx.lineWidth = 1.6 * S;
+  cx.beginPath();
+  cx.moveTo(hx, hy);
+  cx.lineTo(...P(CARRY_R, -45));
+  cx.moveTo(hx, hy);
+  cx.lineTo(...P(CARRY_R, 45));
+  cx.stroke();
+  // これまでの打球
+  for (let i = 0; i < hits.length - 1; i++) {
+    const { r, c } = hits[i];
+    cx.fillStyle = r.res === "big" ? "#FFD84A" : r.res === "hr" ? "#33BDB2" : "#fff";
+    cx.beginPath();
+    cx.arc(hx + c.x * sc, hy - c.y * sc, 2.8 * S, 0, 7);
+    cx.fill();
+    cx.lineWidth = 1.2 * S;
+    cx.stroke();
+  }
+  // 最新の打球: ホームから飛んでいく
+  let shown = 0;
+  if (last) {
+    const age = pos - last.r.at;
+    const u = clamp(age / 900, 0, 1), e = 1 - (1 - u) * (1 - u) * (1 - u);
+    const lx = hx + last.c.x * sc * e, ly = hy - last.c.y * sc * e;
+    shown = last.c.dist * e;
+    cx.strokeStyle = "rgba(59,42,26,.7)";
+    cx.lineWidth = 1.6 * S;
+    cx.setLineDash([2 * S, 4 * S]);
+    cx.beginPath();
+    cx.moveTo(hx, hy);
+    cx.lineTo(lx, ly);
+    cx.stroke();
+    cx.setLineDash([]);
+    if (u >= 1 && age < 1600) {
+      cx.strokeStyle = `rgba(255,255,255,${1 - (age - 900) / 700})`;
+      cx.lineWidth = 3 * S;
+      cx.beginPath();
+      cx.arc(lx, ly, (6 + 14 * ((age - 900) / 700)) * S, 0, 7);
+      cx.stroke();
+    }
+    cx.fillStyle = last.r.res === "hit" ? "#fff" : "#FFD84A";
+    cx.strokeStyle = "#3B2A1A";
+    cx.lineWidth = 2.2 * S;
+    cx.beginPath();
+    cx.arc(lx, ly, 6 * S, 0, 7);
+    cx.fill();
+    cx.stroke();
+  }
+  cx.fillStyle = "#fff";
+  cx.strokeStyle = "#3B2A1A";
+  cx.lineWidth = 2 * S;
+  cx.beginPath();
+  cx.arc(hx, hy, 3.4 * S, 0, 7);
+  cx.fill();
+  cx.stroke();
+  cx.restore();
+  // 数字と場所
+  cx.textAlign = "center";
+  const fy = y + head + fh;
+  if (last) {
+    cx.font = font(21 * S, 900);
+    const hr = last.c.homerun;
+    outlined(`${Math.round(shown)} m`, x + w / 2, fy + foot * 0.36, hr ? "#1E8F86" : "#3B2A1A", "#FFF8E7", 4 * S);
+    cx.font = font(10 * S, 700);
+    cx.fillStyle = "#3B2A1A";
+    cx.fillText(last.c.place, x + w / 2, fy + foot * 0.8);
+  } else {
+    cx.font = font(10 * S, 700);
+    cx.fillStyle = "#7A6A55";
+    cx.fillText("うつと ここに", x + w / 2, fy + foot * 0.3);
+    cx.fillText("とんだ きょりが でるよ", x + w / 2, fy + foot * 0.7);
+  }
+}
+
 function frame() {
   requestAnimationFrame(frame); // 先に次を予約する(途中で例外や return があってもループが死なない)
   const playing = G.mode === "playing";
@@ -730,6 +959,7 @@ function frame() {
   if (playing && G.chart) update(pos);
   cx.clearRect(0, 0, W, H);
   drawBackground(playing ? pos : performance.now());
+  drawCrowd(playing || G.mode === "paused" || G.mode === "result" ? pos : performance.now());
   drawPitcher(pos);
   if (G.chart && G.song && G.mode !== "loading" && G.mode !== "ready") {
     drawBeat(pos);
@@ -737,6 +967,7 @@ function frame() {
     drawHud();
     drawBatter(pos);
     drawBalls(pos);
+    drawCarryWindow(pos);
     drawJudge(pos);
   } else drawBatter(0);
 }
