@@ -11,13 +11,20 @@ on:
       - "tools/artgen/**"
       - "tools/check_art_provenance.py"
       - ".github/workflows/pages-lyric-homerun.yml"
+  # PR ではテスト(と素材の検査)だけ走らせ、公開はしない(下の Deploy は push / 手動のときだけ)
+  pull_request:
+    paths:
+      - "lyric-homerun/**"
+      - "tools/artgen/**"
+      - "tools/check_art_provenance.py"
+      - ".github/workflows/pages-lyric-homerun.yml"
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: pages-lyric-homerun
+  group: pages-lyric-homerun-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -38,7 +45,7 @@ jobs:
         # 出どころ(art-src/provenance.json)が program / human / licensed 以外の素材があれば、公開しない。
         # キャラクターのバランス検査(docs/character-design-basics.md)も通ること。
         run: |
-          pip install numpy pillow resvg_py
+          pip install -r tools/artgen/requirements-ci.txt
           python tools/check_art_provenance.py
           python tools/artgen/proportion_check.py --all
           python -m unittest discover -s tools -p "test_check*.py"
@@ -52,6 +59,7 @@ jobs:
         # 全 import に ?v=<build> を付け、index.html と game.js の番号が食い違えばここで失敗させる。
         run: node lyric-homerun/tools/stamp-build.mjs _site
       - name: Deploy lyric-homerun
+        if: github.event_name != 'pull_request'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

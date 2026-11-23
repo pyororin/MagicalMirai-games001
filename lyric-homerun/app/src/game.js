@@ -537,6 +537,18 @@ function ballLabel(p) {
   return t.length > 5 ? t.slice(0, 4) + "…" : t;
 }
 
+/** 角丸の四角を path にする。古い Safari(16 未満)などには roundRect が無いので、arcTo で代わりに描く。 */
+function rrect(x, y, w, h, r) {
+  if (cx.roundRect) return cx.roundRect(x, y, w, h, r);
+  r = Math.min(r, w / 2, h / 2);
+  cx.moveTo(x + r, y);
+  cx.arcTo(x + w, y, x + w, y + h, r);
+  cx.arcTo(x + w, y + h, x, y + h, r);
+  cx.arcTo(x, y + h, x, y, r);
+  cx.arcTo(x, y, x + w, y, r);
+  cx.closePath();
+}
+
 function outlined(text, x, y, fill, stroke, lw) {
   cx.lineJoin = "round";
   cx.strokeStyle = stroke;
@@ -675,7 +687,7 @@ function drawBoard(pos) {
   cx.strokeStyle = "#3B2A1A";
   cx.lineWidth = 3 * S;
   cx.beginPath();
-  cx.roundRect(bx - bw / 2, by, bw, bh, 10 * S);
+  rrect(bx - bw / 2, by, bw, bh, 10 * S);
   cx.fill();
   cx.stroke();
   const phs = G.song.phrases;
@@ -814,7 +826,7 @@ function drawCarryWindow(pos) {
   cx.strokeStyle = "#3B2A1A";
   cx.lineWidth = 3 * S;
   cx.beginPath();
-  cx.roundRect(x, y, w, h, 12 * S);
+  rrect(x, y, w, h, 12 * S);
   cx.fill();
   cx.stroke();
   cx.textBaseline = "middle";

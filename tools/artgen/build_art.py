@@ -143,7 +143,7 @@ def install(name: str, built: dict, out: Path) -> None:
         shutil.copy(out / f"{name}.attempts.json", ROOT / "art-src" / f"{name}.attempts.json")
     prov_path = ROOT / "art-src" / "provenance.json"
     prov = json.loads(prov_path.read_text(encoding="utf-8"))
-    prov["assets"][cfg["asset"]] = {
+    prov["assets"]["assets/" + cfg["asset"]] = {
         "source": "program",
         "note": f"art-src/design/{name}.json(デザインデータ)を tools/artgen がコードで描き、tools/img2vector で手書き風にした。AI 不使用",
         "svg": f"art-src/{name}.svg",

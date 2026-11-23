@@ -1,17 +1,17 @@
 {
-  "_about": "app/assets の画像すべての出どころ。source は program(コードで描いた) / human(人が描いた) / licensed(正規に許諾、author 必須) のどれか。ai / ai-derived は応募版に入れられない(コンテスト規約。docs/ai-art-policy.md)。",
+  "_about": "app/ の下の画像すべて(キーは app/ からの相対パス)の出どころ。source は program(コードで描いた) / human(人が描いた) / licensed(正規に許諾、author 必須) のどれか。ai / ai-derived は応募版に入れられない(コンテスト規約。docs/ai-art-policy.md)。",
   "assets": {
-    "bg.png": {
+    "assets/bg.png": {
       "source": "program",
       "note": "art-src/design/background.json(デザインデータ)を tools/artgen がコードで描き、tools/img2vector で手書き風にした。AI 不使用",
       "svg": "art-src/background.svg"
     },
-    "miku.png": {
+    "assets/miku.png": {
       "source": "program",
       "note": "art-src/design/batter.json(デザインデータ)を tools/artgen がコードで描き、tools/img2vector で手書き風にした。AI 不使用",
       "svg": "art-src/batter.svg"
     },
-    "pitcher.png": {
+    "assets/pitcher.png": {
       "source": "program",
       "note": "art-src/design/pitcher.json(デザインデータ)を tools/artgen がコードで描き、tools/img2vector で手書き風にした。AI 不使用",
       "svg": "art-src/pitcher.svg"
