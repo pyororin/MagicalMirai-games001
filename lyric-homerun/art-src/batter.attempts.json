@@ -1,0 +1,27 @@
+{
+  "goal": {
+    "ssim": 0.9,
+    "delta_e": 3.0,
+    "edge_f1": 0.92,
+    "iou": 0.98
+  },
+  "chosen": 1,
+  "attempts": [
+    {
+      "try": 1,
+      "colors": 40,
+      "smooth": 1,
+      "merge": 2.5,
+      "sketch": 3.0,
+      "paths": 833,
+      "fidelity": {
+        "ssim": 0.9177,
+        "delta_e": 2.036,
+        "edge_f1": 0.9907,
+        "iou": 0.9891
+      },
+      "miss": 0.0,
+      "seconds": 73
+    }
+  ]
+}

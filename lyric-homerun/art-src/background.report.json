@@ -1,0 +1,96 @@
+{
+  "ssim": 0.9241,
+  "delta_e_mean": 2.276,
+  "delta_e_p95": 3.006,
+  "fidelity": {
+    "ssim": 0.9397,
+    "delta_e": 2.155,
+    "edge_f1": 0.9952,
+    "iou": null
+  },
+  "colors_requested": 34,
+  "colors_used": 33,
+  "paths": 402,
+  "svg_bytes": 214551,
+  "palette": [
+    "#f3d9af",
+    "#5e4033",
+    "#91c9a8",
+    "#bfe6f2",
+    "#6f757b",
+    "#95a7a6",
+    "#fdfefc",
+    "#d7ec98",
+    "#9c8566",
+    "#f7c3b9",
+    "#aad4c3",
+    "#b9bad0",
+    "#bcd0e8",
+    "#f8e59a",
+    "#8c9498",
+    "#665348",
+    "#e8c599",
+    "#bee0c8",
+    "#d5c7ed",
+    "#b8d275",
+    "#72a97f",
+    "#81847a",
+    "#4e3024",
+    "#b8a77d",
+    "#806f57",
+    "#8ac190",
+    "#f4d86c",
+    "#99a3aa",
+    "#9ab1b2",
+    "#eda9b0",
+    "#8fb8e7",
+    "#c8a7e8",
+    "#746158"
+  ],
+  "size": [
+    1080,
+    2100
+  ],
+  "crop": null,
+  "verify": {
+    "passed": true,
+    "amp_used": 2.5,
+    "plain": {
+      "edge_f1": 0.9959,
+      "chamfer": 0.115,
+      "iou": null
+    },
+    "rounds": [
+      {
+        "round": 1,
+        "amp": 2.5,
+        "edge_f1": 0.9952,
+        "chamfer": 0.303,
+        "iou": null,
+        "ok": true
+      }
+    ]
+  },
+  "options": {
+    "colors": 34,
+    "upscale": 0.75,
+    "smooth": 1,
+    "min_area": 12,
+    "merge_delta": 2.5,
+    "transparent_bg": false,
+    "bg_tolerance": 12.0,
+    "crop_margin": 6,
+    "sketch": 2.5,
+    "sketch_seed": 1,
+    "sketch_wave": 160,
+    "misregister": 1.0,
+    "verify_edge_f1": 0.92,
+    "verify_iou": 0.98,
+    "verify_rounds": 6,
+    "clear_at": [],
+    "corner_threshold": 60,
+    "length_threshold": 3.5,
+    "splice_threshold": 45,
+    "path_precision": 2
+  }
+}

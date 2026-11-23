@@ -502,3 +502,17 @@ pitfalls:
     verified: 2026-11-15 (bunyutto-miku build 10)
     refs: [bunyutto-miku/design/README.md, bunyutto-miku/app/data/design/miku-face-official.json]
 
+
+  - id: canvas-css-size-missing-on-high-dpr
+    symptom: >
+      高 DPR(スマホなど)で、ゲーム画面が2倍に拡大されて左上の一部しか見えない。DPR 1 の PC では正常に見える。
+    cause: >
+      canvas の width/height 属性を画素数(CSS 寸法 × DPR)にしているのに、CSS で寸法を指定していない。
+      canvas は置換要素なので、position:fixed; inset:0 だけでは引き伸ばされず、属性どおりの画素数が CSS px になる。
+    solution: >
+      canvas に CSS で width:100%; height:100%(または innerWidth/innerHeight)を指定する。
+      描画の座標系は setTransform(DPR) で CSS px に揃える。
+    detection: >
+      ブラウザの端末エミュレーション(DPR 2)で開き、canvas の getBoundingClientRect().width が innerWidth と一致するか見る。
+    verified: 2026-11-22 (lyric-homerun build 2)
+    refs: [lyric-homerun/app/index.html, lyric-homerun/app/src/game.js]

@@ -1,0 +1,116 @@
+{
+  "ssim": 0.9193,
+  "delta_e_mean": 1.521,
+  "delta_e_p95": 3.245,
+  "fidelity": {
+    "ssim": 0.9325,
+    "delta_e": 1.559,
+    "edge_f1": 0.9613,
+    "iou": 0.9895
+  },
+  "colors_requested": 40,
+  "colors_used": 35,
+  "paths": 299,
+  "svg_bytes": 94933,
+  "palette": [
+    "#fde6d3",
+    "#684328",
+    "#d6483c",
+    "#885a34",
+    "#493128",
+    "#e6b74c",
+    "#a56731",
+    "#c68a52",
+    "#32221a",
+    "#f5cab3",
+    "#ec796b",
+    "#a29088",
+    "#392e3c",
+    "#5f4134",
+    "#392a1c",
+    "#865122",
+    "#998275",
+    "#a67547",
+    "#ad9f99",
+    "#c5b6ae",
+    "#d2cdca",
+    "#856c61",
+    "#5d3b21",
+    "#fefefe",
+    "#b4645a",
+    "#ae9283",
+    "#8a3d32",
+    "#d8bdac",
+    "#fcc5b8",
+    "#b43429",
+    "#4c3839",
+    "#7c6051",
+    "#4b2f1b",
+    "#eedacd",
+    "#c3a696"
+  ],
+  "size": [
+    548,
+    1560
+  ],
+  "crop": [
+    93,
+    27,
+    641,
+    1587
+  ],
+  "verify": {
+    "passed": true,
+    "amp_used": 2.1,
+    "plain": {
+      "edge_f1": 0.9672,
+      "chamfer": 0.745,
+      "iou": 0.9955
+    },
+    "rounds": [
+      {
+        "round": 1,
+        "amp": 3.0,
+        "edge_f1": 0.9149,
+        "chamfer": 2.223,
+        "iou": 0.986,
+        "ok": false
+      },
+      {
+        "round": 2,
+        "amp": 2.1,
+        "edge_f1": 0.9613,
+        "chamfer": 0.734,
+        "iou": 0.9895,
+        "ok": true
+      }
+    ]
+  },
+  "options": {
+    "colors": 40,
+    "upscale": 1.0,
+    "smooth": 1,
+    "min_area": 12,
+    "merge_delta": 2.5,
+    "transparent_bg": true,
+    "bg_tolerance": 12.0,
+    "crop_margin": 6,
+    "sketch": 3.0,
+    "sketch_seed": 1,
+    "sketch_wave": 100,
+    "misregister": 1.0,
+    "verify_edge_f1": 0.92,
+    "verify_iou": 0.98,
+    "verify_rounds": 6,
+    "clear_at": [
+      [
+        296,
+        1240
+      ]
+    ],
+    "corner_threshold": 60,
+    "length_threshold": 3.5,
+    "splice_threshold": 45,
+    "path_precision": 2
+  }
+}

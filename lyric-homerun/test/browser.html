@@ -1,0 +1,51 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>lyric-homerun tests (browser)</title>
+<!--
+  node が無い環境で、node:test 形式のテストをブラウザで走らせる。
+    cd lyric-homerun && python -m http.server 8001   → http://localhost:8001/test/browser.html
+  対象: judge / carry / (任意)?files=a.test.mjs,b.test.mjs
+  chart.test.mjs は node:fs を使うので対象外(node --test で走らせる)。
+-->
+<pre id="out">running…</pre>
+<script type="module">
+const files = (new URLSearchParams(location.search).get("files") || "judge.test.mjs,carry.test.mjs").split(",");
+const out = [];
+let failed = 0;
+
+function makeAssert() {
+  const ok = (c, m) => { if (!c) throw new Error(m || "assert.ok failed"); };
+  return {
+    ok,
+    equal: (a, b, m) => ok(Object.is(a, b) || a === b, m || `equal: ${a} !== ${b}`),
+    notEqual: (a, b, m) => ok(a !== b, m || `notEqual: ${a}`),
+    deepEqual: (a, b, m) => ok(JSON.stringify(a) === JSON.stringify(b), m || "deepEqual"),
+    match: (s, re, m) => ok(re.test(s), m || `match: ${s} !~ ${re}`),
+    throws: (f, m) => { let t = false; try { f(); } catch (e) { t = true; } ok(t, m || "throws"); },
+  };
+}
+
+for (const f of files) {
+  const url = new URL(f, location.href);
+  let src = await (await fetch(url, { cache: "no-store" })).text();
+  src = src
+    .replace(/import\s*\{\s*test\s*\}\s*from\s*"node:test";?/, "const test = globalThis.__test;")
+    .replace(/import\s+test\s+from\s*"node:test";?/, "const test = globalThis.__test;")
+    .replace(/import\s+assert\s+from\s*"node:assert\/strict";?/, "const assert = globalThis.__assert;")
+    .replace(/from\s*"(\.[^"]+)"/g, (_, p) => `from "${new URL(p, url).href}"`);
+  const cases = [];
+  globalThis.__test = (name, fn) => cases.push([name, fn]);
+  globalThis.__assert = makeAssert();
+  try {
+    await import(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
+  } catch (e) {
+    out.push(`LOADFAIL ${f}: ${e.message}`); failed++; continue;
+  }
+  for (const [name, fn] of cases) {
+    try { await fn(); out.push(`ok   [${f}] ${name}`); } catch (e) { failed++; out.push(`FAIL [${f}] ${name}: ${e.message}`); }
+  }
+}
+out.push(failed ? `\n${failed} failed` : "\nall passed");
+document.getElementById("out").textContent = out.join("\n");
+document.title = failed ? "FAILED" : "PASSED";
+</script>

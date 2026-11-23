@@ -3,9 +3,17 @@
 飛んでくる「歌詞」を、ミクがネギで打ち返して会場のスタンドへ届けるリリックアプリ(打つ=歌う)。
 骨子は「くまのプーさんのホームランダービー!」(調査: `../docs/research/pooh-home-run-derby.md`)。
 
-- 設計: [docs/DESIGN.md](docs/DESIGN.md)
+- **基本設計(UI・キャラクター): [デザイン基本設計 Artifact](https://claude.ai/artifact/96kYsyYV2rF8xb4UFMaDa5)** — 変更依頼は、**先にここへ反映してから**コードを直す
+- 設計: [docs/DESIGN.md](docs/DESIGN.md)(ゲームの仕組み)
 - 全企画共通の大方針: [../docs/PRINCIPLES.md](../docs/PRINCIPLES.md)
-- 状態: **MVP**(build 1)。ストレートのみ・タイミング判定のみ・絵はコードで描いた仮のもの
+- 状態: **MVP**(build 6)。ストレートのみ・タイミング判定のみ。絵はすべてコードで描いた(`tools/artgen` → `tools/img2vector`、AI 不使用)。飛距離ウィンドウと観客あり
+
+## 進め方(必ず守る)
+
+1. 変更依頼(UI・キャラクター・配置・演出・素材)は、まず上の**基本設計 Artifact を更新**する(該当の節と「変更履歴」)。
+2. Artifact のとおりにコードを直す。食い違いは設計を先に直す。
+3. 画像は**すべてプログラム(`tools/img2vector` やコードの描画)で作る。AI 生成の画像は入力にも使わない**(規約)。
+   出どころは `art-src/provenance.json` に書き、`python tools/check_art_provenance.py` で検査する。
 
 ## 動かす
 
@@ -22,6 +30,8 @@ cd lyric-homerun/app && python3 -m http.server 8000
 ```bash
 node --test lyric-homerun/test/*.test.mjs
 ```
+
+node が無い環境では、`cd lyric-homerun && python -m http.server 8001` のあと `http://localhost:8001/test/browser.html` で judge / carry のテストをブラウザで走らせられる。
 
 ## MVP に入っているもの / いないもの
 

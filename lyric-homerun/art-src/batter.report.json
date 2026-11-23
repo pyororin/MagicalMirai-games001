@@ -1,0 +1,131 @@
+{
+  "ssim": 0.8893,
+  "delta_e_mean": 2.072,
+  "delta_e_p95": 7.92,
+  "fidelity": {
+    "ssim": 0.9177,
+    "delta_e": 2.036,
+    "edge_f1": 0.9907,
+    "iou": 0.9891
+  },
+  "colors_requested": 40,
+  "colors_used": 38,
+  "paths": 833,
+  "svg_bytes": 268278,
+  "palette": [
+    "#6bc2c0",
+    "#5c4135",
+    "#39474c",
+    "#3d908f",
+    "#4fa4a2",
+    "#93dad5",
+    "#9ca3ab",
+    "#2a3338",
+    "#536267",
+    "#e55380",
+    "#bbc2c8",
+    "#f6c9b3",
+    "#4ac3bb",
+    "#fefefe",
+    "#958279",
+    "#3a3a45",
+    "#736359",
+    "#596f66",
+    "#665145",
+    "#e1b7a1",
+    "#a8948a",
+    "#d5cecb",
+    "#788d86",
+    "#ad9f99",
+    "#827068",
+    "#fde7d5",
+    "#5bb8b9",
+    "#5a8078",
+    "#555852",
+    "#944765",
+    "#392a22",
+    "#87b3ae",
+    "#beb3ae",
+    "#dedddb",
+    "#3d454a",
+    "#74a09b",
+    "#b3655a",
+    "#83cbc9"
+  ],
+  "size": [
+    995,
+    1663
+  ],
+  "crop": [
+    160,
+    128,
+    1155,
+    1791
+  ],
+  "verify": {
+    "passed": true,
+    "amp_used": 3.0,
+    "plain": {
+      "edge_f1": 0.9953,
+      "chamfer": 0.205,
+      "iou": 0.9963
+    },
+    "rounds": [
+      {
+        "round": 1,
+        "amp": 3.0,
+        "edge_f1": 0.9907,
+        "chamfer": 0.524,
+        "iou": 0.9891,
+        "ok": true
+      }
+    ]
+  },
+  "options": {
+    "colors": 40,
+    "upscale": 1.0,
+    "smooth": 1,
+    "min_area": 12,
+    "merge_delta": 2.5,
+    "transparent_bg": true,
+    "bg_tolerance": 12.0,
+    "crop_margin": 6,
+    "sketch": 3.0,
+    "sketch_seed": 1,
+    "sketch_wave": 120,
+    "misregister": 1.0,
+    "verify_edge_f1": 0.92,
+    "verify_iou": 0.98,
+    "verify_rounds": 6,
+    "clear_at": [
+      [
+        831,
+        927
+      ],
+      [
+        795,
+        540
+      ],
+      [
+        666,
+        522
+      ],
+      [
+        540,
+        843
+      ],
+      [
+        861,
+        1200
+      ],
+      [
+        924,
+        1611
+      ]
+    ],
+    "corner_threshold": 60,
+    "length_threshold": 3.5,
+    "splice_threshold": 45,
+    "path_precision": 2
+  }
+}
