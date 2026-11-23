@@ -2,9 +2,9 @@
 //   ・曲データ(拍・コード・歌詞の時刻)は data/songs/*.json の実データ
 //   ・音源は無いので、コード進行のパッドと拍のクリックを合成して伴奏にする
 // 用途: 1) ネットワーク制限下での動作確認  2) 自動テスト  3) 譜面の聴き比べ
-import { expandSong } from "./chart.js?v=1";
-import { parseChord, midiToHz } from "./key.js?v=1";
-import { dataUrl } from "./songs.js?v=1";
+import { expandSong } from "./chart.js?v=6";
+import { parseChord, midiToHz } from "./key.js?v=6";
+import { dataUrl } from "./songs.js?v=6";
 
 export class DemoSource {
   constructor(build) {

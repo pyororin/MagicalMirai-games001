@@ -14,7 +14,7 @@
     -webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%}
   button,.btn,select,summary{touch-action:manipulation}
   [hidden]{display:none!important}
-  #stage{position:fixed;inset:0;touch-action:none;display:block}
+  #stage{position:fixed;inset:0;width:100%;height:100%;touch-action:none;display:block}
   #media{position:fixed;left:-9999px;top:0;width:320px;height:180px}
   #build{position:fixed;left:6px;bottom:3px;font-size:10px;color:#fff;opacity:.85;pointer-events:none;text-shadow:0 0 3px #000}
   #pauseBtn{position:fixed;left:8px;top:7px;width:38px;height:34px;border-radius:8px;border:2px solid var(--ink);
@@ -59,7 +59,7 @@
 
 <div id="overlay" class="overlay">
   <div class="card">
-    <h1><small>試作版(MVP)・絵は仮のものです</small>とどけ!リリックホームラン</h1>
+    <h1><small>試作版(MVP)</small>とどけ!リリックホームラン</h1>
     <p class="sub">飛んでくる歌詞を、ミクがネギで打ち返す</p>
     <p class="how">
       歌詞のことばが、<b>歌われる瞬間</b>にホームへ届きます。<br>
@@ -101,10 +101,10 @@
   </div>
 </div>
 
-<script>window.LH_BUILD = 1;</script>
+<script>window.LH_BUILD = 6;</script>
 <!-- CDN 依存を避けるため検証済みバージョンを同梱 -->
 <script src="./vendor/axios.min.js"></script>
 <script src="./vendor/textalive-app-api-0.5.2.js"></script>
-<script type="module" src="./src/game.js?v=1"></script>
+<script type="module" src="./src/game.js?v=6"></script>
 </body>
 </html>
